@@ -40,6 +40,7 @@ One decision per file, each stating what was rejected and why. New records start
 | [0019](decisions/0019-deployment-layout.md) | Install into system paths, with one environment file per binary | accepted |
 | [0020](decisions/0020-agent-reads-its-environment-file.md) | The agent reads its own environment file; no shell sources it | accepted |
 | [0021](decisions/0021-shell-is-linted-too.md) | The shell the project ships is linted like its Go | accepted |
+| [0022](decisions/0022-updates-are-pulled.md) | Updates are pulled by an updater of their own; the hub names the version | accepted |
 
 ## Behaviour specs
 
