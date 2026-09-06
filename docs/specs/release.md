@@ -78,7 +78,31 @@ the repository as `deploy/release-signing-key.pub`; the suffix is deliberate, si
 privacy hook refuses a staged `.pem` or `.key`
 ([0007](../decisions/0007-public-repository.md)).
 
-The pair is generated once, outside the tree, and only its public half is ever committed:
+The secret is the PEM itself, named `RELEASE_SIGNING_KEY`, in a GitHub environment called
+`release` — not a repository secret. That environment carries a deployment policy limiting
+it to `v*` tags, and without one the guarantee is not there: an environment secret with no
+policy is reachable from any ref that names the environment, so anyone who can push a branch
+could read the key. Half of this decision therefore lives in repository settings rather than
+in a file, which is why the commands that make it are written here.
+
+The environment and its policy are made once:
+
+```sh
+gh api --method PUT repos/pravbeseda/monitor/environments/release \
+    -F "deployment_branch_policy[protected_branches]=false" \
+    -F "deployment_branch_policy[custom_branch_policies]=true"
+gh api --method POST repos/pravbeseda/monitor/environments/release/deployment-branch-policies \
+    -f name='v*' -f type=tag
+```
+
+Required reviewers on top of that policy are available and deliberately not set: they would
+make every release wait for a click, and the tag policy is what closes the branch that could
+read the key. Turning them on is a settings change, not a code change.
+
+### Generating and rotating the key
+
+The same three commands make the first key and every replacement — a rotation is a new pair,
+not a repair:
 
 ```sh
 openssl ecparam -name prime256v1 -genkey -noout -out ~/release-signing-key.priv
@@ -86,12 +110,11 @@ openssl ec -in ~/release-signing-key.priv -pubout -out deploy/release-signing-ke
 gh secret set RELEASE_SIGNING_KEY --env release < ~/release-signing-key.priv
 ```
 
-The secret is the PEM itself, under that name, in a GitHub environment called `release` —
-not a repository secret. That environment carries required reviewers and a tag policy of
-`v*`, and without them the guarantee is not there: an environment secret with no policy is
-reachable from any ref that names the environment, so anyone who can push a branch could
-read the key. Half of this decision therefore lives in repository settings rather than in a
-file, which is why it is written down here.
+Then commit the new `deploy/release-signing-key.pub` and delete `~/release-signing-key.priv`:
+a run signs with the secret and verifies with the committed public half, so a mismatch
+between the two fails the run rather than publishing something no one can verify. Rotating
+is what answers a lost or leaked key, and a release published under the old key stays
+verifiable only with the `.pub` committed beside it at that tag.
 
 **There is no second copy of the private half.** The secret in that environment is the only
 one, and GitHub cannot read a secret back. That is a deliberate choice for as long as
@@ -192,10 +215,10 @@ what `/usr/bin/openssl` is on macOS, prints `Verified OK` on runs that fail.
   boundary is not a promise that today's `main` is green.
 - **The signing key is missing from the environment.** The run fails and publishes nothing,
   which to an observer is a failed run like any other: both leave no release.
-- **Key rotation.** Replacing `release-signing-key.pub` changes what future releases are
-  signed with; assets already published stay verifiable only with the key committed beside
-  them, which is why it is versioned. Rotating the copy a stub carries is hands on every
-  machine, over the manual path of [install.md](../install.md) — the updater's spec owns it.
+- **Key rotation** is the three commands under [Generating and rotating the
+  key](#generating-and-rotating-the-key); nothing else recovers a lost or leaked key.
+  Rotating the copy a stub carries, once one exists, is hands on every machine over the
+  manual path of [install.md](../install.md) — the updater's spec owns that.
 - **Verify before renaming.** An installation renames the binary to `monitor-agent`, and the
   manifest names the asset. Verification belongs to the downloaded file, under the name it
   was downloaded with.
