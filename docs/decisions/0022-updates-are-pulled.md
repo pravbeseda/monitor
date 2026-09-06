@@ -82,7 +82,8 @@ and the hub names the version the fleet should be running.**
    and the day that matters is the day a released hub crashes at startup, when nothing would
    answer and nothing would ever be repaired. The branch is drawn per binary and not per
    host: on a machine that runs both, the agent's installer asks the hub like any other
-   node's, over loopback, and only the hub's reads the local target. **A target is a release that carries an
+   node's, at whatever address that node is configured with, and only the hub's installer
+   reads the local target. **A target is a release that carries an
    installer**, which puts a floor under how far back the hub may point: the releases
    [#16](https://github.com/pravbeseda/monitor/issues/16) produces before the updater exists
    carry binaries alone, and naming one is not a rollback but a stop. A stub that fetches a
