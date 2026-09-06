@@ -664,8 +664,9 @@ func TestAReplaceableBinaryIsNotRunToReadItsVersion(t *testing.T) {
 	}
 }
 
-// spec: installer.md#fetching-and-checking-a-release — a version with three numeric parts is
-// read whatever its length, so a valid one never disables the guard by accident.
+// spec: installer.md#fetching-and-checking-a-release — a version whose parts a shell can
+// compare is read and compared, however many digits they have up to that limit: the ten-digit
+// cut-off is the grammar's, and 100.100.100 is well inside it.
 func TestALongVersionStillBlocksADowngrade(t *testing.T) {
 	o := newOrigin(t)
 	run := newBootstrapRun(t, o, "agent", "--hub", "https://hub.example.com", "--node", "laptop-a")

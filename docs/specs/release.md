@@ -154,6 +154,7 @@ grammar — is `deploy/tag-version.sh`, and it is tested here like anything else
 | a run for `v1.2.3` still in progress | no release for that tag is visible to such a client until all nine files are attached |
 | two tags pushed together, their runs finishing in either order | the higher version is the latest release, whichever run published last |
 | tag `v1.2` or `v1.2.3-rc1` pushed | no release; the run fails, naming the tag it refused |
+| tag `v9999999999.0.0` pushed | the same: a version is compared with another, so a part wider than a shell reads as a number is not one |
 | tag `1.2.3` pushed, without the leading `v` | no run and no release |
 | a tag on a commit that is not on `main` | no release; the run fails, naming the commit |
 | a tag on a commit that does not compile for one of the six binaries | no release, and no asset from the targets that did build |
@@ -233,7 +234,9 @@ what `/usr/bin/openssl` is on macOS, prints `Verified OK` on runs that fail.
 - **Verify before renaming.** An installation renames the binary to `monitor-agent`, and the
   manifest names the asset. Verification belongs to the downloaded file, under the name it
   was downloaded with.
-- **A prerelease.** There is no channel: the grammar is `MAJOR.MINOR.PATCH` and nothing else.
+- **A prerelease.** There is no channel: the grammar is `MAJOR.MINOR.PATCH`, each part a
+  number of at most nine digits — versions are compared with each other, and a part wider
+  than that is one no shell compares ([installer.md](installer.md)).
 - **Mutable tags and assets.** Nothing in a workflow can stop a write-scoped credential from
   moving a tag or replacing an asset; the invariants above bind runs, not people. A ruleset
   on `refs/tags/v*` that blocks deletion and force-pushes is what binds people, and it is a

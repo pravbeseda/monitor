@@ -201,7 +201,7 @@ check_staging() {
 }
 
 check_tools() {
-	for tool in curl openssl tar; do
+	for tool in curl openssl tar find; do
 		command -v "$tool" >/dev/null 2>&1 || refuse "$tool is not installed, and this needs it"
 	done
 }
@@ -326,11 +326,13 @@ check_not_a_downgrade() {
 	# Asking a binary its version means running it, so it is run only where nobody else could
 	# have put it there. Writability by group or other says that on any run; ownership says
 	# it only on a real one, where root is what "nobody else" means.
+	# A find that fails answers nothing, and under set -e a bare assignment would end the run
+	# on its status. Not knowing is treated as replaceable: the point is not to run it.
 	replaceable=$(find "$installed_binary" "${installed_binary%/*}" -maxdepth 0 \
-		\( -perm -g+w -o -perm -o+w \) 2>/dev/null)
+		\( -perm -g+w -o -perm -o+w \) 2>/dev/null) || replaceable=unknown
 	if [ -z "$destdir" ] && [ -z "$replaceable" ]; then
 		replaceable=$(find "$installed_binary" "${installed_binary%/*}" -maxdepth 0 \
-			! -user root 2>/dev/null)
+			! -user root 2>/dev/null) || replaceable=unknown
 	fi
 	if [ -n "$replaceable" ]; then
 		printf '%s: %s; another account can replace it\n' "$program" "$unreadable"

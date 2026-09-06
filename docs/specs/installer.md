@@ -31,8 +31,10 @@ broke. The installer calls it rather than replacing it.
 **`monitor-install.sh` is what the operator runs**, over `curl` or from a checkout. It
 downloads a release, checks it, unpacks it and hands over; it decides nothing else. It
 carries the release signing key, because a release cannot vouch for itself
-([0022](../decisions/0022-updates-are-pulled.md), point 2), and that copy is generated from
-`deploy/release-signing-key.pub` rather than typed a second time.
+([0022](../decisions/0022-updates-are-pulled.md), point 2). That copy is the one in
+`deploy/release-signing-key.pub` — nothing generates one from the other, and a test asserting
+they are the same bytes is what keeps them from drifting. Beyond the shell it needs `curl`,
+`openssl`, `tar` and `find`, and it names whichever is missing.
 
 **No machine keeps a copy of the key that a release cannot replace.** The script is fetched
 for each run; what a release leaves behind is the binary, the service definition and the
@@ -127,7 +129,7 @@ everything else in these tables is proved by the suite.
 | an installed binary that another account could have replaced — it or its directory writable by group or other, or on a real run owned by anyone but root | its version is not read at all, and the run says so and installs |
 | an option this run does not know, or one given without its value | the usage on stderr |
 | `--hub` or `--node` given to the `hub` role | the usage on stderr |
-| no `curl`, `openssl` or `tar` on `PATH` | the run names the one that is missing |
+| no `curl`, `openssl`, `tar` or `find` on `PATH` | the run names the one that is missing |
 | a script truncated in transit | nothing runs at all |
 | a machine whose shell runs under Rosetta | the `darwin-arm64` asset is what lands: the run reads `uname` and `sysctl.proc_translated` off `PATH` |
 | a run that installs anything | it prints the version it installed, every path it wrote, and the command that shows the service's state |
