@@ -77,10 +77,12 @@ and the hub names the version the fleet should be running.**
    names the version it needs and exits — whereupon the stub fetches that release, checks its
    signature the same way, and hands over to *its* installer. An installer that names nothing,
    because the hub did not answer, installs nothing: a hub that is down or unreachable leaves
-   the machine exactly as it was. **On the hub's own host the installer asks nothing** — it
-   reads the target point 5 puts there. Asking would mean asking the service it is upgrading,
+   the machine exactly as it was. **The hub's own installer asks nothing** — it reads the
+   target point 5 puts on that host. Asking would mean asking the service it is upgrading,
    and the day that matters is the day a released hub crashes at startup, when nothing would
-   answer and nothing would ever be repaired. **A target is a release that carries an
+   answer and nothing would ever be repaired. The branch is drawn per binary and not per
+   host: on a machine that runs both, the agent's installer asks the hub like any other
+   node's, over loopback, and only the hub's reads the local target. **A target is a release that carries an
    installer**, which puts a floor under how far back the hub may point: the releases
    [#16](https://github.com/pravbeseda/monitor/issues/16) produces before the updater exists
    carry binaries alone, and naming one is not a rollback but a stop. A stub that fetches a
@@ -111,10 +113,11 @@ and the hub names the version the fleet should be running.**
   then downloads that one too, two releases a day rather than one. It is a few megabytes
   against keeping the frozen half unable to choose anything, and against a downloaded release
   vouching for the next one.
-- On a node, the installer reads the token from `agent.env` when it asks the hub for the
-  target; it gets no environment file of its own. On the hub's own host it needs neither —
-  it reads the locally set target and makes no request — which is what keeps the mechanism
-  working on a host that is not a node at all ([install.md](../install.md)). One copy of the secret means one rotation procedure
+- The agent's installer reads the token from `agent.env` when it asks the hub for the
+  target; it gets no environment file of its own. The hub's installer needs neither, since it
+  makes no request. So a hub-only host needs no `agent.env` and a node-only host needs no
+  local target, and a machine that is both — the case [install.md](../install.md) supports —
+  simply has both, one per binary, as it already has two environment files. One copy of the secret means one rotation procedure
   — re-running `install-agent.sh`, which [0019](0019-deployment-layout.md) already defines —
   and nothing that can drift out of step with it. The one-file-per-binary rule of 0019 is
   untouched: what reads that file here is a transient root script, not a resident service.
