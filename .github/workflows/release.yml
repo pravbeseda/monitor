@@ -121,9 +121,9 @@ jobs:
   publish:
     needs: [guard, build-linux, build-darwin]
     runs-on: ubuntu-latest
-    # The signing key is a secret of this environment, not of the repository, so pushing a
-    # tag is not by itself authority to sign — as long as the environment carries required
-    # reviewers and a tag policy (docs/specs/release.md#the-key).
+    # The signing key is a secret of this environment, not of the repository, and the
+    # environment's policy admits `v*` tags alone: no workflow on a branch can read it. What
+    # signs is a v* tag on a commit the guard found on main (docs/specs/release.md#the-key).
     environment: release
     permissions:
       contents: write
@@ -203,4 +203,10 @@ jobs:
             dist/*
           attached=$(gh release view "$GITHUB_REF_NAME" --json assets --jq '.assets | length')
           [ "$attached" -eq 8 ] || { echo "the draft holds $attached assets, not 8" >&2; exit 1; }
-          gh release edit "$GITHUB_REF_NAME" --draft=false --latest
+          # make_latest=legacy rather than gh's --latest: runs for two tags pushed together
+          # can finish in either order, and "latest" must be the higher version rather than
+          # whichever run got here last. GitHub does that comparison itself.
+          id=$(gh api "repos/$GITHUB_REPOSITORY/releases" \
+            --jq "map(select(.tag_name == \"$GITHUB_REF_NAME\"))[0].id")
+          gh api --method PATCH "repos/$GITHUB_REPOSITORY/releases/$id" \
+            -F draft=false -f make_latest=legacy --jq .html_url

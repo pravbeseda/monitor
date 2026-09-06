@@ -25,14 +25,15 @@ key=$script_dir/release-signing-key.pub
 sums=
 artifact=
 
+# printf rather than a here-document: openssl is then the only command outside the shell
+# this script needs, and a stripped PATH says so instead of failing to print its own usage.
 usage() {
-	cat <<EOF
-usage: $program [--key <path>] [--sums <path>] <artifact>
-
-Checks one downloaded artifact against the release manifest that names it. The manifest
-defaults to SHA256SUMS beside the artifact, its signature to that name plus .sig, and the
-key to release-signing-key.pub beside this script.
-EOF
+	printf '%s\n' \
+		"usage: $program [--key <path>] [--sums <path>] <artifact>" \
+		"" \
+		"Checks one downloaded artifact against the release manifest that names it. The" \
+		"manifest defaults to SHA256SUMS beside the artifact, its signature to that name" \
+		"plus .sig, and the key to release-signing-key.pub beside this script."
 }
 
 refuse() {

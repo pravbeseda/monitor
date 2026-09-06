@@ -30,11 +30,16 @@ bytes, and leaves one thing to check rather than six.
 
 ## Where the key lives
 
-A repository secret was the first draft. Rejected: a tag push would then be authority to
-sign, and a tag can name any commit in the repository, including a fork's pull-request head.
-The key is an *environment* secret, the environment carries required reviewers and a tag
-policy, and the run refuses a commit that is not on `main`. None of that is in a file — it is
-repository settings — which is why the spec says so out loud.
+A repository secret was the first draft. Rejected: every workflow in the repository could
+then read it, so adding one on a branch would be enough, and a tag can name any commit in
+the repository including a fork's pull-request head. The key is an *environment* secret whose
+policy admits `v*` tags alone, and the run refuses a commit that is not on `main`: between
+them, what can sign is a tag on reviewed code and nothing else.
+
+**Required reviewers on top of that were considered and not taken.** They would close the
+remaining hole — a stolen write token can push such a tag and sign — at the price of a
+click on every release. Turning them on is a settings change and no code, so this stays
+reversible; the spec records the state rather than the aspiration.
 
 ## Smaller ones
 

@@ -96,8 +96,11 @@ gh api --method POST repos/pravbeseda/monitor/environments/release/deployment-br
 ```
 
 Required reviewers on top of that policy are available and deliberately not set: they would
-make every release wait for a click, and the tag policy is what closes the branch that could
-read the key. Turning them on is a settings change, not a code change.
+make every release wait for a click. So the guarantee is exactly this and no more — the key
+is unreachable from a branch, and what signs is a `v*` tag on a commit the run finds on
+`main`. A credential that can push such a tag can therefore sign; closing that is what
+required reviewers would be for, and turning them on is a settings change, not a code
+change.
 
 ### Generating and rotating the key
 
@@ -142,8 +145,9 @@ grammar — is `deploy/tag-version.sh`, and it is tested here like anything else
 |---|---|
 | tag `v1.2.3` pushed | a release named `v1.2.3` appears, carrying the six binaries, `SHA256SUMS` and `SHA256SUMS.sig` |
 | tag `v1.2.3` pushed | each binary is named `monitor-<command>-1.2.3-<os>-<arch>`, and the manifest lists exactly those six names |
-| tag `v1.2.3` pushed, older releases present | a client asking the repository for its latest release gets `v1.2.3` |
+| tag `v1.2.3` pushed, older releases present | a client asking the repository for its latest release gets the highest version published, which is `v1.2.3` |
 | a run for `v1.2.3` still in progress | no release for that tag is visible to such a client until all eight files are attached |
+| two tags pushed together, their runs finishing in either order | the higher version is the latest release, whichever run published last |
 | tag `v1.2` or `v1.2.3-rc1` pushed | no release; the run fails, naming the tag it refused |
 | tag `1.2.3` pushed, without the leading `v` | no run and no release |
 | a tag on a commit that is not on `main` | no release; the run fails, naming the commit |

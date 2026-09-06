@@ -184,6 +184,7 @@ func TestAVerificationThatMustFail(t *testing.T) {
 		name    string
 		prepare func(t *testing.T, r *release) []string // returns the arguments to run with
 		names   string                                  // what the message must name
+		usage   bool                                    // and whether it prints the usage
 	}{
 		{
 			name: "an asset changed by one byte",
@@ -273,6 +274,7 @@ func TestAVerificationThatMustFail(t *testing.T) {
 				return nil
 			},
 			names: "no artifact named",
+			usage: true,
 		},
 		{
 			name: "more than one artifact named",
@@ -280,6 +282,7 @@ func TestAVerificationThatMustFail(t *testing.T) {
 				return []string{r.asset, r.other}
 			},
 			names: "one artifact at a time",
+			usage: true,
 		},
 		{
 			name: "a directory named",
@@ -287,6 +290,7 @@ func TestAVerificationThatMustFail(t *testing.T) {
 				return []string{r.dir}
 			},
 			names: "is not a file",
+			usage: true,
 		},
 	}
 
@@ -301,6 +305,9 @@ func TestAVerificationThatMustFail(t *testing.T) {
 			}
 			if test.names != "" && !strings.Contains(stderr, test.names) {
 				t.Errorf("the message does not name %q:\n%s", test.names, stderr)
+			}
+			if test.usage != strings.Contains(stderr, "usage:") {
+				t.Errorf("usage printed = %v, want %v:\n%s", !test.usage, test.usage, stderr)
 			}
 		})
 	}
@@ -395,5 +402,21 @@ func TestTheShippedKeyIsAPublicKeyOpensslCanRead(t *testing.T) {
 	}
 	if out, err := exec.Command("openssl", "pkey", "-pubin", "-in", shipped, "-noout").CombinedOutput(); err != nil {
 		t.Errorf("%s is not a public key openssl can read: %v\n%s", shipped, err, out)
+	}
+}
+
+// spec: release.md#verifying-an-artifact — -h is a request: the usage goes to stdout and the
+// run succeeds. The PATH holds nothing, so this also pins openssl as the only command
+// outside the shell that the script needs.
+func TestHelpPrintsTheUsageOnStdoutAndSucceeds(t *testing.T) {
+	stdout, stderr, err := verify(t, verifierPath(t), t.TempDir(), "-h")
+	if err != nil {
+		t.Fatalf("-h failed: %v\n%s%s", err, stdout, stderr)
+	}
+	if !strings.Contains(stdout, "usage:") {
+		t.Errorf("the usage is not on stdout:\n%s", stdout)
+	}
+	if stderr != "" {
+		t.Errorf("-h wrote to stderr:\n%s", stderr)
 	}
 }
