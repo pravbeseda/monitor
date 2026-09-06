@@ -102,9 +102,10 @@ release served over loopback, using the seams below.
 Some rows a staged suite cannot reach, because staging is defined as not doing those things:
 creating the account and accepting an existing one, refusing one that can log in, telling
 systemd about the unit and starting the service, correcting an owner, refusing a host with no
-systemd, ignoring an inherited `TMPDIR`, and stripping an archive's owner and setuid bits,
-which an unprivileged tar would not have restored anyway. They are proved on a real host;
-everything else in these tables is proved by the suite.
+systemd, ignoring an inherited `TMPDIR`, treating an installed binary owned by anyone but
+root as replaceable, and stripping an archive's owner and setuid bits, which an unprivileged
+tar would not have restored anyway. They are proved on a real host; everything else in these
+tables is proved by the suite.
 
 `monitor-install.sh <role> [options]`, where `<role>` is `hub` or `agent`.
 

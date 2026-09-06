@@ -472,24 +472,50 @@ func TestTheSeamsAreRefusedByARunThatIsNotStaged(t *testing.T) {
 	}
 }
 
-// spec: installer.md#fetching-and-checking-a-release — openssl, curl and tar are the tools
-// the run needs, and a machine without one is told which.
+// spec: installer.md#fetching-and-checking-a-release — curl, openssl, tar and find are the
+// tools the run needs, and a machine without one is told which one it is. Each tool gets its
+// own run, because a PATH missing all four only ever proves the first.
 func TestABootstrapRunNamesTheToolItIsMissing(t *testing.T) {
-	o := newOrigin(t)
-	run := newBootstrapRun(t, o, "hub")
-	run.pathDir = t.TempDir()
+	tools := []string{"curl", "openssl", "tar", "find"}
+	for _, missing := range tools {
+		t.Run(missing, func(t *testing.T) {
+			o := newOrigin(t)
+			run := newBootstrapRun(t, o, "hub")
+			run.pathDir = pathWithout(t, tools, missing)
 
-	stdout, stderr, err := run.start(t)
+			stdout, stderr, err := run.start(t)
 
-	if err == nil {
-		t.Fatalf("the run succeeded; an empty PATH had to stop it\n%s%s", stdout, stderr)
+			if err == nil {
+				t.Fatalf("the run succeeded; a PATH without %s had to stop it\n%s%s", missing, stdout, stderr)
+			}
+			if want := missing + " is not installed, and this needs it"; !strings.Contains(stderr, want) {
+				t.Errorf("the refusal does not name %s:\n%s", missing, stderr)
+			}
+			if asked := o.requests(); len(asked) != 0 {
+				t.Errorf("a run without %s still fetched %v", missing, asked)
+			}
+		})
 	}
-	if !strings.Contains(stderr, "is not installed, and this needs it") {
-		t.Errorf("the refusal is not this script's own:\n%s", stderr)
+}
+
+// pathWithout is a single-directory PATH holding every tool but one, so a run on it reaches
+// check_tools and refuses at exactly that one.
+func pathWithout(t *testing.T, tools []string, missing string) string {
+	t.Helper()
+	dir := t.TempDir()
+	for _, tool := range tools {
+		if tool == missing {
+			continue
+		}
+		real, err := exec.LookPath(tool)
+		if err != nil {
+			t.Skipf("%s is not on this machine's PATH: %v", tool, err)
+		}
+		if err := os.Symlink(real, filepath.Join(dir, tool)); err != nil {
+			t.Fatalf("cannot stage %s: %v", tool, err)
+		}
 	}
-	if asked := o.requests(); len(asked) != 0 {
-		t.Errorf("a run without its tools still fetched %v", asked)
-	}
+	return dir
 }
 
 // spec: installer.md#fetching-and-checking-a-release — a release older than what is installed

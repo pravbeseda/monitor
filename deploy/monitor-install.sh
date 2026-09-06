@@ -21,9 +21,9 @@ main() {
 
 	program=${0##*/}
 
-	# The public half of the release signing key. Generated from
-	# deploy/release-signing-key.pub, and asserted equal to it by a test: two copies that
-	# could drift are worse than one.
+	# The public half of the release signing key. A second copy of
+	# deploy/release-signing-key.pub — nothing generates one from the other, and a test
+	# asserts they are the same bytes: two copies that could drift are worse than one.
 	release_key='-----BEGIN PUBLIC KEY-----
 MFkwEwYHKoZIzj0CAQYIKoZIzj0DAQcDQgAEabB6p+jY9j7naasjBxF13XHafcaP
 85hw7hBNsW6rKlL9WWTo77AkvSUsHk3FZ3/BOixI7M1fFKrjsY6Hxj/rUA==
