@@ -24,9 +24,10 @@ swapped for another. It says the release was assembled by whoever holds the priv
 is not a defence against that key or the account holding it being taken
 ([0007](../decisions/0007-public-repository.md), rule 5).
 
-A release here carries binaries alone, which is the rollback floor
-[0022](../decisions/0022-updates-are-pulled.md) names: it carries no installer, so a stub
-pointed at it installs nothing and says so — naming it is a stop, not a rollback.
+A release carries the installer that installs it ([installer.md](installer.md) owns what is
+inside that archive). The releases published before it did not, and they are the rollback
+floor [0022](../decisions/0022-updates-are-pulled.md) names: a run pointed at one installs
+nothing and says so — naming it is a stop, not a rollback.
 
 Verification today is done from a checkout of this repository, which is where the verifier
 and the public key live. The updater's resident half will carry its own copy of that key
@@ -34,8 +35,8 @@ and the public key live. The updater's resident half will carry its own copy of 
 
 ## What a release contains
 
-The version is the tag without its leading `v`. Six binaries, one manifest listing them, and
-one signature over that manifest — eight files.
+The version is the tag without its leading `v`. Six binaries and the installer archive, one
+manifest listing all seven, and one signature over that manifest — nine files.
 
 | Asset | Why |
 |---|---|
@@ -45,7 +46,8 @@ one signature over that manifest — eight files.
 | `monitor-agent-<version>-darwin-amd64` | Intel nodes |
 | `monitor-hub-<version>-linux-amd64` | the hub host |
 | `monitor-hub-<version>-linux-arm64` | the hub host |
-| `SHA256SUMS` | one `<sha256>  <asset name>` line per binary, in `sha256sum` format |
+| `monitor-installer-<version>.tar.gz` | the installer that release installs itself with ([installer.md](installer.md)) |
+| `SHA256SUMS` | one `<sha256>  <asset name>` line per asset above, in `sha256sum` format |
 | `SHA256SUMS.sig` | the signature over that manifest |
 
 The darwin agents are built on macOS because the disk sensor is cgo there
@@ -54,9 +56,9 @@ a Debian service only ([0005](../decisions/0005-poc-stack.md)), so no darwin hub
 The hub is not in [issue #16](https://github.com/pravbeseda/monitor/issues/16)'s list and is
 here because [0022](../decisions/0022-updates-are-pulled.md) point 5 upgrades it the same way.
 
-The assets are raw binaries rather than archives: what installs them takes a path to a
-binary. Whether a release that carries an installer is an archive
-([0022](../decisions/0022-updates-are-pulled.md), point 6) is that unit of work's to decide.
+The binaries are published raw rather than archived, because what installs one takes a path
+to a file; the installer is a `tar.gz` because it is a directory of scripts and service
+definitions.
 
 ### Why the manifest is what is signed
 
@@ -104,8 +106,10 @@ change.
 
 ### Generating and rotating the key
 
-The same three commands make the first key and every replacement — a rotation is a new pair,
-not a repair:
+These three commands make the first key and every replacement — a rotation is a new pair, not
+a repair. Since [installer.md](installer.md) landed, two more copies follow the public half:
+the one inside `deploy/monitor-install.sh` and the fingerprint `install.md` publishes, both
+held in step by tests.
 
 ```sh
 openssl ecparam -name prime256v1 -genkey -noout -out ~/release-signing-key.priv
@@ -123,10 +127,11 @@ verifiable only with the `.pub` committed beside it at that tag.
 one, and GitHub cannot read a secret back. That is a deliberate choice for as long as
 releases are the only thing trusting the key: losing it costs a rotation — a new pair, a new
 `.pub` committed, a new secret — and only already-published releases become unverifiable.
-It stops being cheap when the updater of [0022](../decisions/0022-updates-are-pulled.md)
-ships, because a node then carries the public half in its frozen part and a rotation is
-hands on every machine. Where an offline copy lives is therefore a question that belongs to
-that unit of work, and it has to be answered before it, not after.
+It stops being cheap when a machine starts carrying the public half in a part no release can
+replace, because a rotation is then hands on every machine. The installer of
+[installer.md](installer.md) deliberately leaves nothing on a machine, so it is not that
+moment; the timer that makes it resident is, and where an offline copy lives has to be
+answered before that unit of work, not after.
 
 The shell this adds — `verify-release.sh` and `tag-version.sh` — is POSIX `sh` and stands
 under the same lint gate as the rest of the shell this project ships
@@ -143,15 +148,15 @@ grammar — is `deploy/tag-version.sh`, and it is tested here like anything else
 
 | Event | Outcome |
 |---|---|
-| tag `v1.2.3` pushed | a release named `v1.2.3` appears, carrying the six binaries, `SHA256SUMS` and `SHA256SUMS.sig` |
-| tag `v1.2.3` pushed | each binary is named `monitor-<command>-1.2.3-<os>-<arch>`, and the manifest lists exactly those six names |
+| tag `v1.2.3` pushed | a release named `v1.2.3` appears, carrying the six binaries, the installer archive, `SHA256SUMS` and `SHA256SUMS.sig` |
+| tag `v1.2.3` pushed | each binary is named `monitor-<command>-1.2.3-<os>-<arch>`, the archive `monitor-installer-1.2.3.tar.gz`, and the manifest lists exactly those seven names |
 | tag `v1.2.3` pushed, older releases present | a client asking the repository for its latest release gets the highest version published, which is `v1.2.3` |
-| a run for `v1.2.3` still in progress | no release for that tag is visible to such a client until all eight files are attached |
+| a run for `v1.2.3` still in progress | no release for that tag is visible to such a client until all nine files are attached |
 | two tags pushed together, their runs finishing in either order | the higher version is the latest release, whichever run published last |
 | tag `v1.2` or `v1.2.3-rc1` pushed | no release; the run fails, naming the tag it refused |
 | tag `1.2.3` pushed, without the leading `v` | no run and no release |
 | a tag on a commit that is not on `main` | no release; the run fails, naming the commit |
-| a tag on a commit that does not compile for one of the six targets | no release, and no asset from the targets that did build |
+| a tag on a commit that does not compile for one of the six binaries | no release, and no asset from the targets that did build |
 | a tag on a commit whose tests fail on either operating system | no release |
 | a tag deleted, re-created on another commit and pushed, its release already published | the published release keeps every asset it had; the run fails |
 | a draft left by an earlier run that died before publishing | it is deleted, and this run publishes its own |
@@ -207,8 +212,10 @@ what `/usr/bin/openssl` is on macOS, prints `Verified OK` on runs that fail.
   draft, which owns no tag and which no client can see, is a run's to discard.
 - A release carries no configuration, node name, host or secret
   ([0007](../decisions/0007-public-repository.md)).
-- Until the installer of [0022](../decisions/0022-updates-are-pulled.md) point 6 exists, a
-  release carries binaries, a manifest and a signature and nothing else.
+- A release carries the six binaries, the installer archive, a manifest and a signature, and
+  nothing else.
+- The archive is packed reproducibly: the same commit gives the same bytes, so a digest that
+  changed means the contents did.
 
 ## Edge cases
 
@@ -234,8 +241,9 @@ what `/usr/bin/openssl` is on macOS, prints `Verified OK` on runs that fail.
 
 ## Out of scope
 
-- The stub, the timer, the installer inside a release and the hub's target version — all of
-  [0022](../decisions/0022-updates-are-pulled.md) beyond point 1, each its own unit of work.
+- The timer, the resident half it needs and the hub's target version — the rest of
+  [0022](../decisions/0022-updates-are-pulled.md), each its own unit of work. What is inside
+  the installer archive, and what installing does, is [installer.md](installer.md)'s.
 - Installing an artifact once it is downloaded: [deployment.md](deployment.md) owns what an
   installation looks like, and [install.md](../install.md) the operator's steps for
   downloading, verifying and installing one.

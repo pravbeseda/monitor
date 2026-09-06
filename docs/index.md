@@ -9,7 +9,7 @@ entry point to every document in the project.
 |---|---|
 | [concept.md](concept.md) | Idea, architectural principles, planned skins, domains, roadmap |
 | [poc.md](poc.md) | POC spec: scope, terminology, wire format, work plan, answered questions |
-| [install.md](install.md) | Install guide: download and verify a release, set up the hub host, install and verify a node, upgrade, uninstall |
+| [install.md](install.md) | Install guide: one command, then the manual path — the hub host, install and verify a node, upgrade, uninstall |
 | [plans/stage-1-skeleton.md](plans/stage-1-skeleton.md) | Step plan for POC stage 1, kept as a record; plans now live in the task and the pull request ([0017](decisions/0017-one-spec-and-decision-gates.md)) |
 
 ## Architecture decisions
@@ -59,6 +59,7 @@ can see ([ADR 0017](decisions/0017-one-spec-and-decision-gates.md)). New specs s
 | [evaluation.md](specs/evaluation.md) | Levels, hysteresis, the event log, silence, digests and the notifier boundary | approved |
 | [history.md](specs/history.md) | The history series, `/api/v1/series`, `/api/v1/history` and the drill-down page | approved |
 | [release.md](specs/release.md) | What a tag publishes, how a release is signed, and how an artifact is checked | approved |
+| [installer.md](specs/installer.md) | One command that installs or upgrades a hub or an agent from a signed release | approved |
 | [deployment.md](specs/deployment.md) | The install layout, the units and what `install-agent.sh` does to a node | approved |
 
 ## Design notes

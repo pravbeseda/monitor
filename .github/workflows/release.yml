@@ -1,5 +1,5 @@
 # Publishing rules from docs/specs/release.md. A tag is the only trigger, and a run either
-# publishes eight files or publishes nothing.
+# publishes nine files or publishes nothing.
 name: Release
 
 on:
@@ -139,7 +139,22 @@ jobs:
           path: dist/
           merge-multiple: true
 
-      - name: The six assets are all here
+      # The installer the release carries, packed reproducibly: the same commit must give the
+      # same bytes, or the digest in the manifest changes for no reason. It is laid out as
+      # deploy/ is, because install-agent.sh finds its service definitions beside itself.
+      - name: Pack the installer
+        run: |
+          staging=$RUNNER_TEMP/monitor-installer
+          mkdir -p "$staging"
+          cp deploy/install.sh deploy/install-hub.sh deploy/install-agent.sh "$staging/"
+          cp -r deploy/systemd deploy/launchd "$staging/"
+          cp deploy/hub.env.example deploy/agent.env.example "$staging/"
+          cp config.example.yaml "$staging/hub.yaml.example"
+          tar -czf "dist/monitor-installer-$VERSION.tar.gz" \
+            --sort=name --mtime=@0 --owner=0 --group=0 --numeric-owner \
+            -C "$RUNNER_TEMP" monitor-installer
+
+      - name: The seven assets are all here
         run: |
           cd dist
           for asset in \
@@ -148,10 +163,11 @@ jobs:
             "monitor-agent-$VERSION-darwin-amd64" \
             "monitor-agent-$VERSION-darwin-arm64" \
             "monitor-hub-$VERSION-linux-amd64" \
-            "monitor-hub-$VERSION-linux-arm64"; do
+            "monitor-hub-$VERSION-linux-arm64" \
+            "monitor-installer-$VERSION.tar.gz"; do
             [ -f "$asset" ] || { echo "missing $asset" >&2; exit 1; }
           done
-          [ "$(ls | wc -l)" -eq 6 ] || { echo "dist holds more than the six assets" >&2; ls >&2; exit 1; }
+          [ "$(ls | wc -l)" -eq 7 ] || { echo "dist holds more than the seven assets" >&2; ls >&2; exit 1; }
 
       # A draft owns no tag, so one left by a run that died mid-upload would make the tag
       # ambiguous and could be published in place of this run's.
@@ -194,7 +210,7 @@ jobs:
             deploy/verify-release.sh --key deploy/release-signing-key.pub "$asset"
           done
 
-      # Created as a draft and published in one call at the end, once all eight files are
+      # Created as a draft and published in one call at the end, once all nine files are
       # attached: no client sees a release holding half of them.
       - name: Publish the release
         run: |
@@ -202,7 +218,7 @@ jobs:
             --draft --title "$GITHUB_REF_NAME" --generate-notes \
             dist/*
           attached=$(gh release view "$GITHUB_REF_NAME" --json assets --jq '.assets | length')
-          [ "$attached" -eq 8 ] || { echo "the draft holds $attached assets, not 8" >&2; exit 1; }
+          [ "$attached" -eq 9 ] || { echo "the draft holds $attached assets, not 9" >&2; exit 1; }
           # make_latest=legacy rather than gh's --latest: runs for two tags pushed together
           # can finish in either order, and "latest" must be the higher version rather than
           # whichever run got here last. GitHub does that comparison itself.

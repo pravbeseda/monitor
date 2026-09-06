@@ -34,7 +34,11 @@ per installation, which is what lets the unit files be constants.
 | hub binary | `/usr/local/bin/monitor-hub` | — | root, 0755 |
 | hub settings and secrets | `/etc/monitor/hub.env` | — | `monitor`, 0600 |
 | hub configuration | `/etc/monitor/hub.yaml` | — | `monitor`, 0640 |
+| hub configuration example | `/etc/monitor/hub.yaml.example` | — | root, 0644 |
+| hub settings example | `/etc/monitor/hub.env.example` | — | root, 0600 |
 | hub database | `/var/lib/monitor/monitor.db` | — | `monitor`, 0600 |
+| hub data directory | `/var/lib/monitor` | — | `monitor`, 0700 |
+| configuration directory | `/etc/monitor` | `/usr/local/etc/monitor` | root, 0755 |
 | hub service | `/etc/systemd/system/monitor-hub.service` | — | root, 0644 |
 
 The hub is a Debian service only ([0005](../decisions/0005-poc-stack.md)); the agent runs on
@@ -42,8 +46,9 @@ both.
 
 **The agent runs as root** — it stats every mounted volume, and a launchd daemon is a root
 process by definition. **The hub runs as the unprivileged `monitor` account**: it listens on
-a socket and needs nothing root can give it. The account is created once, by hand, when the
-host is set up; the install guide has the command.
+a socket and needs nothing root can give it. The account is created by `install-hub.sh`
+([installer.md](installer.md)), which refuses one that can log in; on the manual path it is
+created by hand, and the install guide has the command.
 
 ## The environment files
 
@@ -192,8 +197,9 @@ makes the behaviour above testable without touching the machine running the test
 - Building, publishing or verifying the binary: the script takes one that exists, and
   [release.md](release.md) owns where it comes from.
 - Uninstalling: two documented commands in the install guide, not a mode of the script.
-- Installing the hub. Its unit ships here and its behaviour is specified above, but a host
-  that runs the hub is set up once and by hand; there is no hub install script.
+- Installing as an act — what a run downloads, checks and calls:
+  [installer.md](installer.md). This spec owns the result on disk, for the hub as for the
+  agent.
 
 ## Open questions
 
