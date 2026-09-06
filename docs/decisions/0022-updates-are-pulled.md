@@ -1,6 +1,9 @@
 # 0022. Updates are pulled by an updater of their own; the hub names the version
 
 - **Status:** accepted
+- **Amends:** the "no second endpoint, no second credential" clause of
+  [0010](0010-agent-configuration.md), for the target version alone; everything that ADR says
+  about the agent's own configuration, and about the hub never initiating, stands
 - **Date:** 2026-09-06
 - **Source:** [POC](../poc.md) stage 3, the manual upgrade path in
   [install.md](../install.md), and [issue #16](https://github.com/pravbeseda/monitor/issues/16)
@@ -67,10 +70,14 @@ and the hub names the version the fleet should be running.**
    upgraded first. The hub must accept measurements from an agent older than itself
    regardless — a laptop can be asleep for a week — so the fleet is never required to move
    in step.
-6. **Nothing on the machine updates itself.** What lives there permanently is a stub: fetch
-   the newest release, verify its signature, hand over to the installer *inside that release*
-   — which then asks the hub for the target and installs that instead when the target is an
-   older version.
+6. **Nothing on the machine updates itself.** What lives there permanently is a stub, and it
+   is the only thing that downloads and verifies: fetch the newest release, check its
+   signature, hand over to the installer *inside that release*. That installer asks the hub
+   for the target and either installs itself, when the target is the version it came from, or
+   names the version it needs and exits — whereupon the stub fetches that release, checks its
+   signature the same way, and hands over to *its* installer. An installer that names nothing,
+   because the hub did not answer, installs nothing: a hub that is down or unreachable leaves
+   the machine exactly as it was.
    Everything that changes — how a version is chosen, where files go, how a service is
    restarted — travels in the signed release and is therefore current at every run. The stub
    is deliberately frozen, and when it does have to change it changes over the manual path
@@ -91,22 +98,32 @@ and the hub names the version the fleet should be running.**
   host, and none of the secrets in `hub.env` or `agent.env`
   ([0007](0007-public-repository.md)).
 - Every run downloads the newest release even when the target is an older version, because
-  the code that knows the target travels in that download. It is a few megabytes once a day
-  against keeping the frozen half unable to choose anything.
+  the code that knows the target travels in that download; a node held on an older target
+  then downloads that one too, two releases a day rather than one. It is a few megabytes
+  against keeping the frozen half unable to choose anything, and against a downloaded release
+  vouching for the next one.
 - The installer reads the node's token from `agent.env` when it asks the hub for the target;
   it gets no environment file of its own. One copy of the secret means one rotation procedure
   — re-running `install-agent.sh`, which [0019](0019-deployment-layout.md) already defines —
   and nothing that can drift out of step with it. The one-file-per-binary rule of 0019 is
   untouched: what reads that file here is a transient root script, not a resident service.
+- Reading that file means reading it by [0020](0020-agent-reads-its-environment-file.md)'s
+  rules and never sourcing it — the installer is a third reader after the agent and
+  `install-agent.sh`, and it runs as root out of a downloaded archive, which is precisely the
+  shape 0020 was written against. "One file, one parser" is therefore one file and one set of
+  rules: a value the agent reads as `abc=` cannot be a value the updater reads as `"abc="`,
+  or a rotated token leaves the updater authenticating nowhere while the node looks healthy.
+  The parser travels in the release like the rest of the installer.
 - The private half of the signing key becomes a secret of the project — the one secret whose
   loss would let someone else's binary install itself as root on every node.
 - The updater is a third thing to build, ship and test, on two supervisors
   ([0019](0019-deployment-layout.md) owns where it lands). Until it exists, the manual path
   in [install.md](../install.md) stays the only one, and it stays supported afterwards: it
   is what recovers a machine the updater cannot.
-- The stub's interface — where it looks for a release and what it executes out of one —
-  becomes a contract that every future release has to keep, because old stubs stay in the
-  field. Breaking it is the one change that costs hands on every machine.
+- The stub's interface — where it looks for a release, what it executes out of one, and how
+  an installer names a version instead of installing — becomes a contract that every future
+  release has to keep, because old stubs stay in the field. Breaking it is the one change
+  that costs hands on every machine.
 - The release carries an installer, not only binaries, and that installer runs as root from
   a downloaded archive. It is the same trust as running a downloaded binary and rests on the
   same signature; it is not an additional one.
