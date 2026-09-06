@@ -123,7 +123,8 @@ everything else in these tables is proved by the suite.
 | the release cannot be reached, or the download is cut short | nothing is installed and the machine is left as it was |
 | a version older than the one the installed binary of that role reports | nothing is installed, and the run says so; `--allow-downgrade` installs it |
 | `1.10.0` against an installed `1.9.0` | it installs: versions compare number by number, not as text |
-| nothing installed, or a binary that will not run or reports no version | it installs, and says it could not tell what was there |
+| nothing installed, or a binary that will not run or reports something that is not a version | it installs, and says it could not tell what was there |
+| an installed binary that another account could have replaced — it or its directory writable by anyone but root | its version is not read at all, and the run says so and installs |
 | an option this run does not know, or one given without its value | the usage on stderr |
 | `--hub` or `--node` given to the `hub` role | the usage on stderr |
 | no `curl`, `openssl` or `tar` on `PATH` | the run names the one that is missing |
@@ -205,7 +206,8 @@ The verdict on a signature is `openssl`'s exit status and never its output, for 
   are mutable, as [release.md](release.md) records.
 - The downgrade guard is protection against an operator's slip, never against an attack: the
   version it compares against is reported by the very binary it is protecting, so a run that
-  cannot read one installs rather than refusing.
+  cannot read one installs rather than refusing. Reading it means running that binary as
+  root, which is done only where nobody but root could have put it there.
 
 ## Edge cases
 

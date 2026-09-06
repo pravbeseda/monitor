@@ -134,9 +134,13 @@ parse_arguments() {
 	done
 }
 
-# A version names a release, and it reaches a URL and a file name, so its grammar is checked
-# before it is used and is the one deploy/tag-version.sh enforces on the way in.
-check_version() {
+# The grammar deploy/tag-version.sh enforces on the way in, asked as a question: a release
+# refuses what fails it, and the downgrade guard steps aside instead.
+is_version() {
+	# Splitting on dots drops a trailing empty field, so the dots are judged before it.
+	case $1 in
+	.* | *. | *..*) return 1 ;;
+	esac
 	oldifs=$IFS
 	IFS=.
 	set -f
@@ -144,12 +148,19 @@ check_version() {
 	set -- $1
 	set +f
 	IFS=$oldifs
-	[ $# -eq 3 ] || refuse "not a version: $version"
+	[ $# -eq 3 ] || return 1
 	for part in "$@"; do
 		case $part in
-		'' | *[!0-9]* | 0?*) refuse "not a version: $version" ;;
+		'' | *[!0-9]* | 0?*) return 1 ;;
 		esac
 	done
+	return 0
+}
+
+# A version names a release, and it reaches a URL and a file name, so it is checked before it
+# is used.
+check_version() {
+	is_version "$1" || refuse "not a version: $version"
 }
 
 # DESTDIR stages everything under a prefix, and the seams below exist for those runs alone: a
@@ -310,17 +321,23 @@ check_not_a_downgrade() {
 		return 0
 	fi
 	unreadable="could not tell which version is installed; installing $version over it"
+	# Asking a binary its version means running it, so it is run only where nobody but root
+	# could have put it there: neither the file nor its directory may be writable by anyone
+	# else. A staged run stages both itself, so the check is a real run's.
+	if [ -z "$destdir" ] && [ -n "$(find "$installed_binary" "${installed_binary%/*}" \
+		-maxdepth 0 \( ! -user root -o -perm -g+w -o -perm -o+w \) 2>/dev/null)" ]; then
+		printf '%s: %s; another account can replace it\n' "$program" "$unreadable"
+		return 0
+	fi
 	installed=$("$installed_binary" --version 2>/dev/null) || {
 		printf '%s: %s\n' "$program" "$unreadable"
 		return 0
 	}
 	installed=${installed##* }
-	case $installed in
-	'' | *[!0-9.]* | ??????????*)
+	if ! is_version "$installed"; then
 		printf '%s: %s\n' "$program" "$unreadable"
 		return 0
-		;;
-	esac
+	fi
 	newer_or_same "$version" "$installed" ||
 		refuse "release $version is older than the installed $installed; --allow-downgrade installs it anyway"
 }

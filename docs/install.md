@@ -63,8 +63,10 @@ sudo sed -n '/BEGIN PUBLIC KEY/,/END PUBLIC KEY/p' "$home/monitor/install.sh" \
     | sed "s/^[[:space:]]*//; s/^release_key='//; s/'$//" \
     | openssl pkey -pubin -outform DER | openssl dgst -sha256
 
+read -rs token                              # paste the node's token; it is not echoed
 printf %s "$token" | sudo sh "$home/monitor/install.sh" agent \
     --hub https://hub.example.com --node server-b
+unset token
 sudo rm -r "$home/monitor"
 ```
 

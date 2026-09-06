@@ -607,7 +607,8 @@ func hostPlatform() string {
 }
 
 // spec: installer.md#fetching-and-checking-a-release — an installed binary that cannot say
-// which version it is does not block the run, and the run says why it went ahead.
+// which version it is does not block the run, and the run says why it went ahead. A binary
+// whose version is not one this project publishes is the same case.
 func TestABinaryThatCannotSayItsVersionDoesNotBlockTheRun(t *testing.T) {
 	o := newOrigin(t)
 	run := newBootstrapRun(t, o, "agent", "--hub", "https://hub.example.com", "--node", "laptop-a")
@@ -615,16 +616,46 @@ func TestABinaryThatCannotSayItsVersionDoesNotBlockTheRun(t *testing.T) {
 	if err := os.MkdirAll(installed, 0o755); err != nil {
 		t.Fatal(err)
 	}
-	if err := os.WriteFile(filepath.Join(installed, "monitor-agent"), []byte("#!/bin/sh\nexit 1\n"), 0o755); err != nil {
+	for _, body := range []string{
+		"#!/bin/sh\nexit 1\n",
+		"#!/bin/sh\necho monitor-agent not-a-version\n",
+		"#!/bin/sh\necho monitor-agent 1.2\n",
+	} {
+		if err := os.WriteFile(filepath.Join(installed, "monitor-agent"), []byte(body), 0o755); err != nil {
+			t.Fatal(err)
+		}
+
+		stdout, stderr, err := run.start(t)
+		if err != nil {
+			t.Fatalf("the run failed: %v\n%s%s", err, stdout, stderr)
+		}
+		if !strings.Contains(stdout, "could not tell") {
+			t.Errorf("the run does not say it could not read the installed version:\n%s", stdout)
+		}
+	}
+}
+
+// spec: installer.md#fetching-and-checking-a-release — a version with three numeric parts is
+// read whatever its length, so a valid one never disables the guard by accident.
+func TestALongVersionStillBlocksADowngrade(t *testing.T) {
+	o := newOrigin(t)
+	run := newBootstrapRun(t, o, "agent", "--hub", "https://hub.example.com", "--node", "laptop-a")
+	installed := filepath.Join(run.destDir, "usr", "local", "bin")
+	if err := os.MkdirAll(installed, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(installed, "monitor-agent"),
+		[]byte("#!/bin/sh\necho monitor-agent 100.100.100\n"), 0o755); err != nil {
 		t.Fatal(err)
 	}
 
 	stdout, stderr, err := run.start(t)
-	if err != nil {
-		t.Fatalf("the run failed: %v\n%s%s", err, stdout, stderr)
+
+	if err == nil {
+		t.Fatalf("1.2.3 was installed over 100.100.100\n%s%s", stdout, stderr)
 	}
-	if !strings.Contains(stdout, "could not tell") {
-		t.Errorf("the run does not say it could not read the installed version:\n%s", stdout)
+	if !strings.Contains(stderr, "100.100.100") {
+		t.Errorf("the refusal does not name the installed version:\n%s", stderr)
 	}
 }
 
@@ -645,6 +676,8 @@ func TestABootstrapRunRefusesItsArguments(t *testing.T) {
 		{"--node given to the hub role", []string{"hub", "--node", "laptop-a"}, "--node"},
 		{"a role given twice", []string{"agent", "agent"}, "unknown option"},
 		{"an empty --node", []string{"agent", "--node", ""}, "--node"},
+		{"a version with a trailing dot", []string{"agent", "--version", "1.2.3."}, "not a version"},
+		{"a version with a doubled dot", []string{"agent", "--version", "1..3"}, "not a version"},
 	}
 
 	for _, test := range tests {

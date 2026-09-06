@@ -191,10 +191,12 @@ mkdir -p "$destdir$config_dir" "$destdir$data_dir"
 # and the chown below is what gives it away.
 check_dir "$destdir$config_dir" root
 check_dir "$destdir$data_dir" ""
-if [ -z "$destdir" ]; then
-	chown "$account:$account" "$destdir$data_dir"
-	chmod 0700 "$destdir$data_dir"
-fi
+# The modes are the layout's on every run, staged or not: they need neither root nor the
+# account, and a directory anyone may write to hands over the files inside it whatever their
+# own modes say. The owner is the part only a real run can set.
+chmod 0755 "$destdir$config_dir"
+chmod 0700 "$destdir$data_dir"
+[ -n "$destdir" ] || chown "$account:$account" "$destdir$data_dir"
 
 install_file "$binary" 0755 "$destdir$binary_file"
 install_file "$service_source" 0644 "$destdir$service_file"

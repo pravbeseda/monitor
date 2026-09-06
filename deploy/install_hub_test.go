@@ -305,19 +305,52 @@ func TestAHubInstallOverwritesTheExamples(t *testing.T) {
 	}
 }
 
-// spec: installer.md#installing-the-hub — the directories the layout names are created, and
-// the database's is one of them.
-func TestAHubInstallCreatesTheDataDirectory(t *testing.T) {
+// spec: deployment.md#where-things-live — the directories the layout names are created with
+// the modes it gives them, on a staged run as on a real one: a directory anyone may write to
+// hands over the files inside it whatever their own modes say.
+func TestAHubInstallCreatesTheDirectoriesWithTheirModes(t *testing.T) {
 	destDir := t.TempDir()
 
 	installHub(t, destDir)
 
-	info, err := os.Stat(filepath.Join(destDir, "var/lib/monitor"))
-	if err != nil {
-		t.Fatalf("the data directory is missing: %v", err)
+	for path, want := range map[string]os.FileMode{
+		"var/lib/monitor": 0o700,
+		"etc/monitor":     0o755,
+	} {
+		info, err := os.Stat(filepath.Join(destDir, path))
+		if err != nil {
+			t.Errorf("%s is missing: %v", path, err)
+			continue
+		}
+		if !info.IsDir() {
+			t.Errorf("%s is not a directory", path)
+		}
+		if info.Mode().Perm() != want {
+			t.Errorf("%s has mode %o, want %o", path, info.Mode().Perm(), want)
+		}
 	}
-	if !info.IsDir() {
-		t.Error("the data directory is not a directory")
+}
+
+// spec: deployment.md#where-things-live — a directory that is already there, and wide open,
+// is narrowed rather than accepted.
+func TestAHubInstallNarrowsADirectoryLeftWideOpen(t *testing.T) {
+	destDir := t.TempDir()
+	wide := filepath.Join(destDir, "etc", "monitor")
+	if err := os.MkdirAll(wide, 0o777); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Chmod(wide, 0o777); err != nil {
+		t.Fatal(err)
+	}
+
+	installHub(t, destDir)
+
+	info, err := os.Stat(wide)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if info.Mode().Perm() != 0o755 {
+		t.Errorf("etc/monitor kept mode %o, want 755", info.Mode().Perm())
 	}
 }
 
