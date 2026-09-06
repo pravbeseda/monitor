@@ -111,12 +111,16 @@ parse_arguments() {
 	while [ $# -gt 0 ]; do
 		case $1 in
 		--version)
-			[ $# -ge 2 ] && [ -n "$2" ] || refuse_with_usage "$1 needs a value"
+			if [ $# -lt 2 ] || [ -z "$2" ]; then
+				refuse_with_usage "$1 needs a value"
+			fi
 			version=$2
 			shift 2
 			;;
 		--hub | --node)
-			[ $# -ge 2 ] && [ -n "$2" ] || refuse_with_usage "$1 needs a value"
+			if [ $# -lt 2 ] || [ -z "$2" ]; then
+				refuse_with_usage "$1 needs a value"
+			fi
 			[ "$role" = agent ] || refuse_with_usage "$1 is the agent's; the hub takes none"
 			if [ "$1" = --hub ]; then hub=$2; else node=$2; fi
 			shift 2
