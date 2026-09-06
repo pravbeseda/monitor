@@ -1,0 +1,134 @@
+# 0022. Updates are pulled by an updater of their own; the hub names the version
+
+- **Status:** accepted
+- **Date:** 2026-09-06
+- **Source:** [POC](../poc.md) stage 3, the manual upgrade path in
+  [install.md](../install.md), and [issue #16](https://github.com/pravbeseda/monitor/issues/16)
+
+## Context
+
+A binary reaches a machine today by hand: build it, `scp` it, re-run `install-agent.sh` for
+a node or `install` plus a restart for the hub ([install.md](../install.md)). That is one
+command per machine per change, and during development the change comes several times a
+day. The macOS agent cannot even be built from the same machine as the others: its disk
+sensor is cgo ([0014](0014-macos-available-space.md)), so it needs a Mac.
+
+Three facts constrain how that can be automated.
+
+**Nothing can reach a node.** [0002](0002-push-not-pull.md) has the agent connect to the
+hub because a laptop sits behind NAT, sleeps, and changes networks. That reasoning does not
+stop at measurements: an update pushed from CI over SSH, or from the hub over SSH, reaches
+the servers and silently never reaches the laptops. A scheme that works for half the fleet
+is not a scheme.
+
+**An agent that updates itself can brick its own node.** The agent runs as a supervised
+system service ([0019](0019-deployment-layout.md)): if a released version fails at startup,
+systemd and launchd restart it forever. Were the update logic inside that binary, the only
+code able to fetch the fix is the code that cannot run, and the node is recoverable by hand
+only — which is exactly the cost this decision exists to remove.
+
+**That argument does not stop at the agent.** Whatever installs the agent has the same
+problem one level up, and there it is worse: a broken agent is repaired by the next release,
+while a broken installer is repaired by nothing, because it is the thing that fetches
+repairs. The regress ends only where something on the machine is small enough, and changes
+rarely enough, that recovering it by hand is an event rather than a routine.
+
+**An update is root fetching code from the internet.** Today the only path to
+`/usr/local/bin` on a node is the operator's SSH session. Automation opens a second path
+and leaves it open. A checksum published beside the artifact does not defend it: whoever
+can replace the binary can replace the sums next to it.
+
+## Decision
+
+**Every machine pulls its own updates, an updater separate from the agent installs them,
+and the hub names the version the fleet should be running.**
+
+1. **CI publishes releases.** A tag builds every target — `linux/amd64`, `linux/arm64` and
+   `darwin` on a macOS runner, because of [0014](0014-macos-available-space.md) — and
+   publishes them as GitHub Release assets. This is
+   [issue #16](https://github.com/pravbeseda/monitor/issues/16), and it is the prerequisite
+   for everything below.
+2. **A release is trusted by its signature**, verified against a public key that ships in
+   the resident part of the updater — the half that was not just downloaded, since a release
+   cannot vouch for itself. Which signing tool does that is an implementation choice for the
+   spec, not for this ADR; publishing checksums alone is not one of the options.
+3. **The updater is its own unit** — its own timer on Debian and macOS, its own binary or
+   script, installed beside the agent and supervised independently of it. It survives an
+   agent that will not start, which is the whole reason it is separate.
+4. **The hub names the target version**, in its configuration, and a node learns it through
+   the channel that already carries the node's configuration: the ingest response
+   ([0010](0010-agent-configuration.md)). The hub already receives every node's
+   `agent_version` in the ingest payload, so it can also report who is behind.
+5. **The hub's own target is set on the hub's host**, not by the hub itself, and it is
+   upgraded first. The hub must accept measurements from an agent older than itself
+   regardless — a laptop can be asleep for a week — so the fleet is never required to move
+   in step.
+6. **Nothing on the machine updates itself.** What lives there permanently is a stub: fetch
+   the release, verify its signature, hand over to the installer *inside that release*.
+   Everything that changes — how a version is chosen, where files go, how a service is
+   restarted — travels in the signed release and is therefore current at every run. The stub
+   is deliberately frozen, and when it does have to change it changes over the manual path
+   of [install.md](../install.md), which this decision keeps supported for exactly this.
+7. **The stub runs on a timer**, daily, catching up after a machine was asleep, and spread
+   over a window so a fleet does not arrive at the hub in one second. Which unit expresses
+   that on each supervisor belongs to [0019](0019-deployment-layout.md) and the spec.
+
+## Consequences
+
+- The rollout is controllable without cutting a release: pinning one node to a version,
+  canarying a new one, and rolling back are edits to the hub's configuration.
+- The hub gains a fleet view it did not have: which nodes run which version, and which
+  have not taken the target yet.
+- Nodes still need no inbound port, no public address and no account CI can log into.
+  Nothing in this decision reaches toward a node.
+- CI gains publishing rights on the repository's releases. It gains no credential to any
+  host, and none of the secrets in `hub.env` or `agent.env`
+  ([0007](0007-public-repository.md)).
+- The private half of the signing key becomes a secret of the project — the one secret whose
+  loss would let someone else's binary install itself as root on every node.
+- The updater is a third thing to build, ship and test, on two supervisors
+  ([0019](0019-deployment-layout.md) owns where it lands). Until it exists, the manual path
+  in [install.md](../install.md) stays the only one, and it stays supported afterwards: it
+  is what recovers a machine the updater cannot.
+- The stub's interface — where it looks for a release and what it executes out of one —
+  becomes a contract that every future release has to keep, because old stubs stay in the
+  field. Breaking it is the one change that costs hands on every machine.
+- The release carries an installer, not only binaries, and that installer runs as root from
+  a downloaded archive. It is the same trust as running a downloaded binary and rests on the
+  same signature; it is not an additional one.
+- Rolling out is no longer the same act as building, so a release that was never installed
+  anywhere becomes a normal state. "Latest release" stops being a synonym for "what is
+  running".
+
+## Alternatives
+
+- **GitHub Actions deploys over SSH** — rejected: it reaches the hub's host and no laptop,
+  for the reason [0002](0002-push-not-pull.md) already recorded, so the nodes would need a
+  second mechanism anyway. It would also give a public repository's CI a standing root path
+  onto the host that holds the database and every node token.
+- **The hub orchestrates its nodes over SSH** — rejected: it inverts
+  [0002](0002-push-not-pull.md) and needs every node to be reachable and to trust a key the
+  hub holds. The hub would become the one machine whose compromise is the whole fleet's.
+- **The agent updates itself in process** — rejected: a bad release that crashes at startup
+  takes the update path down with it, and every node it reached needs hands.
+- **The updater updates itself** — rejected: it reproduces the failure it was introduced to
+  prevent, one level up and without a remedy. A bad agent is repaired by the next release; a
+  bad updater that cannot start is repaired only on site.
+- **The agent updates the updater and the updater updates the agent** — rejected, though it
+  does answer the regress: each repairs the other, and only two bad releases at once are
+  fatal. It gives the agent installation logic and write access to `/usr/local/bin`, which
+  doubles the code trusted with root and puts back what point 3 took out.
+- **A frozen updater, changed by hand alone** — not rejected so much as absorbed. It is the
+  right answer for something small enough, which is why point 6 shrinks the resident part
+  until it qualifies instead of freezing the whole updater and hoping it never has to move.
+- **Each node follows the latest release on its own, with no hub involvement** — the same
+  shape as the decision, minus point 4. Rejected because it gives away rollout control for
+  nothing: a bad version reaches the whole fleet at once and the only remedy is another
+  release, while the channel that would have held it back already exists
+  ([0010](0010-agent-configuration.md)).
+- **Distribution as OS packages** — an apt repository for Debian, Homebrew for macOS, with
+  the system's own unattended upgrades doing the work. Rejected for now: it is two
+  mechanisms rather than one, it needs a signed repository to be hosted somewhere, and the
+  macOS half fits a per-user package manager badly when the thing being updated is a root
+  daemon. It stays the sane destination if this project ever ships to machines that are not
+  the author's.
