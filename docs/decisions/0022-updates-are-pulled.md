@@ -55,10 +55,12 @@ and the hub names the version the fleet should be running.**
 3. **The updater is its own unit** — its own timer on Debian and macOS, its own binary or
    script, installed beside the agent and supervised independently of it. It survives an
    agent that will not start, which is the whole reason it is separate.
-4. **The hub names the target version**, in its configuration, and a node learns it through
-   the channel that already carries the node's configuration: the ingest response
-   ([0010](0010-agent-configuration.md)). The hub already receives every node's
-   `agent_version` in the ingest payload, so it can also report who is behind.
+4. **The hub names the target version**, in its configuration, and the updater asks the hub
+   for it directly, with the node's token. Deliberately not through the ingest response that
+   carries the rest of the node's configuration ([0010](0010-agent-configuration.md)): only a
+   running agent makes that request, and the node that most needs a corrected target is the
+   one whose agent will not start. The hub already receives every node's `agent_version` in
+   the ingest payload, so it can report who is behind without the updater saying anything.
 5. **The hub's own target is set on the hub's host**, not by the hub itself, and it is
    upgraded first. The hub must accept measurements from an agent older than itself
    regardless — a laptop can be asleep for a week — so the fleet is never required to move
@@ -84,6 +86,9 @@ and the hub names the version the fleet should be running.**
 - CI gains publishing rights on the repository's releases. It gains no credential to any
   host, and none of the secrets in `hub.env` or `agent.env`
   ([0007](0007-public-repository.md)).
+- The resident stub holds the node's token, because it asks the hub for the target itself.
+  It is the token the machine already has, and the endpoint it reaches answers with a version
+  string and nothing else.
 - The private half of the signing key becomes a secret of the project — the one secret whose
   loss would let someone else's binary install itself as root on every node.
 - The updater is a third thing to build, ship and test, on two supervisors
@@ -121,6 +126,10 @@ and the hub names the version the fleet should be running.**
 - **A frozen updater, changed by hand alone** — not rejected so much as absorbed. It is the
   right answer for something small enough, which is why point 6 shrinks the resident part
   until it qualifies instead of freezing the whole updater and hoping it never has to move.
+- **The target rides the ingest response** — rejected: it is one channel fewer, but only a
+  running agent makes that request, so a release that crashes the agent at startup cuts the
+  node off from the corrected target and from the rollback under Consequences. That is the
+  case point 3 exists to remove, so the mechanism that answers it cannot depend on the agent.
 - **Each node follows the latest release on its own, with no hub involvement** — the same
   shape as the decision, minus point 4. Rejected because it gives away rollout control for
   nothing: a bad version reaches the whole fleet at once and the only remedy is another
