@@ -8,6 +8,7 @@ config.*.yaml
 *.token
 *.pem
 *.key
+*.priv
 
 # Measurements and their backups
 *.db

@@ -49,4 +49,6 @@ jobs:
       # on the macOS one — installing it there would spend a brew download on a duplicate.
       - name: shellcheck
         if: matrix.os == 'ubuntu-latest'
-        run: shellcheck -s sh deploy/install-agent.sh .githooks/pre-commit
+        run: |
+          shellcheck -s sh deploy/install-agent.sh deploy/verify-release.sh \
+            deploy/tag-version.sh .githooks/pre-commit

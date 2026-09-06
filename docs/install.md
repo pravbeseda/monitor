@@ -11,20 +11,72 @@ Every name below is synthetic ([ADR 0007](decisions/0007-public-repository.md)):
 `hub.example.com` is the hub, `server-b` a Debian node, `laptop-a` a macOS one. Substitute
 your own — and keep them out of this repository.
 
-What you need: a checkout of this repository and the Go toolchain `go.mod` names on the
-machine you build on, plus `ssh`/`sudo` access to each node. One Debian host runs the hub;
-every node, Debian or macOS, runs the agent.
+What you need: a checkout of this repository — it carries the verifier and the key a
+release is checked with — plus `ssh`/`sudo` access to each node, and the Go toolchain
+`go.mod` names only if you build the binaries yourself. One Debian host runs the hub; every
+node, Debian or macOS, runs the agent.
 
-## 1. Build the binaries
+## 1. Get the binaries
 
-No binaries are published yet — [issue #16](https://github.com/pravbeseda/monitor/issues/16)
-tracks that — so this is a manual step for now.
-
-From the checkout, cross-compile for a Debian node:
+A tag publishes them, signed; what a release contains and how it is checked is
+[specs/release.md](specs/release.md). Download what a machine needs into a scratch directory
+— not into this checkout, which is a git working tree — together with the manifest and its
+signature:
 
 ```sh
-GOOS=linux GOARCH=amd64 CGO_ENABLED=0 go build -o monitor-agent ./cmd/agent
-GOOS=linux GOARCH=amd64 CGO_ENABLED=0 go build -o monitor-hub ./cmd/hub
+version=1.2.3
+base=https://github.com/pravbeseda/monitor/releases/download/v$version
+mkdir -p ~/monitor-release && cd ~/monitor-release
+curl -fLO "$base/monitor-agent-$version-linux-amd64"
+curl -fLO "$base/monitor-hub-$version-linux-amd64"
+curl -fLO "$base/SHA256SUMS"
+curl -fLO "$base/SHA256SUMS.sig"
+```
+
+The agent comes as `linux-amd64`, `linux-arm64`, `darwin-amd64` and `darwin-arm64`, the hub
+as `linux-amd64` and `linux-arm64`; download the ones your machines need.
+
+Check every binary **before renaming it**, since the manifest names the asset it published.
+The verifier and the key live in this checkout:
+
+```sh
+cd /path/to/monitor
+./deploy/verify-release.sh ~/monitor-release/monitor-agent-$version-linux-amd64
+./deploy/verify-release.sh ~/monitor-release/monitor-hub-$version-linux-amd64
+```
+
+The exit status is the verdict. A binary that does not verify is not installed, whatever the
+reason: the signature covers the manifest, and the manifest covers each asset's name and its
+digest.
+
+Only then give them the names the rest of this guide uses. `dist/` in the checkout is
+ignored by git, so a verified binary can wait there without dirtying the tree:
+
+```sh
+mkdir -p /path/to/monitor/dist
+mv ~/monitor-release/monitor-agent-$version-linux-amd64 /path/to/monitor/dist/monitor-agent
+mv ~/monitor-release/monitor-hub-$version-linux-amd64 /path/to/monitor/dist/monitor-hub
+chmod +x /path/to/monitor/dist/monitor-agent /path/to/monitor/dist/monitor-hub
+```
+
+A downloaded file arrives without its executable bit; the installs below set the mode they
+need, but `--version` and `scp` want it set here.
+
+`--version` answers which version a binary is, if it is one for this machine's platform:
+
+```sh
+./dist/monitor-hub --version    # monitor-hub 1.2.3
+```
+
+### Building by hand instead
+
+Still supported, and it is what recovers a machine when a release cannot be reached
+([ADR 0022](decisions/0022-updates-are-pulled.md)). From the checkout, cross-compile for a
+Debian node:
+
+```sh
+GOOS=linux GOARCH=amd64 CGO_ENABLED=0 go build -o dist/monitor-agent ./cmd/agent
+GOOS=linux GOARCH=amd64 CGO_ENABLED=0 go build -o dist/monitor-hub ./cmd/hub
 ```
 
 Use `GOARCH=arm64` for an arm server. The hub cross-compiles because its SQLite driver needs
@@ -35,8 +87,11 @@ no cgo ([ADR 0005](decisions/0005-poc-stack.md)).
 option:
 
 ```sh
-go build -o monitor-agent ./cmd/agent
+go build -o dist/monitor-agent ./cmd/agent
 ```
+
+A binary built this way reports the development version rather than a release version —
+`./dist/monitor-agent --version` says so, and so does the hub for a node running it.
 
 ## 2. Set up the hub host
 
@@ -44,7 +99,7 @@ The hub host is set up once, by hand: there is no hub install script
 ([specs/deployment.md](specs/deployment.md#out-of-scope)). Copy what the host needs:
 
 ```sh
-scp monitor-hub config.example.yaml deploy/hub.env.example \
+scp dist/monitor-hub config.example.yaml deploy/hub.env.example \
     deploy/systemd/monitor-hub.service hub.example.com:
 ```
 
@@ -103,7 +158,7 @@ so nothing reaches it from outside until the nginx vhost exists (see
 `deploy/` directory along with the binary:
 
 ```sh
-scp -r monitor-agent deploy server-b:
+scp -r dist/monitor-agent deploy server-b:
 ```
 
 The token goes in on **stdin**, because `sudo` resets the environment by default and
@@ -122,7 +177,9 @@ Copy the binary and `deploy/` together: the service definitions pass `--env-file
 agent built before them does not know, and the install would report success on a service that
 exits every time it starts.
 
-The macOS node is the same command with its own name (`--node laptop-a`); the script picks
+The macOS node is the same command with its own name (`--node laptop-a`) and its own
+binary — a `darwin-arm64` or `darwin-amd64` asset, verified and renamed the same way. The
+script picks
 systemd or launchd from the system it is running on. It prints every path it wrote and the
 command that shows the service's state.
 
@@ -169,7 +226,8 @@ Two failures look different from a service problem and are worth knowing:
 
 Both are a re-run of the same script, and `--hub` and `--node` are given every time.
 
-An upgrade — build a new binary, copy it over, and run without a token:
+An upgrade — download and verify a new binary as in step 1 (or build one), copy it over, and
+run without a token:
 
 ```sh
 sudo ./deploy/install-agent.sh \
@@ -193,6 +251,21 @@ variable there and restart it too.
 ```sh
 sudo systemctl restart monitor-hub.service
 ```
+
+### Upgrading the hub
+
+There is no script for it, and no configuration to change — a new binary in place, and a
+restart. Verify it first as in step 1, then, from the checkout:
+
+```sh
+scp dist/monitor-hub hub.example.com:
+ssh hub.example.com
+sudo install -o root -g root -m 0755 monitor-hub /usr/local/bin/monitor-hub
+sudo systemctl restart monitor-hub.service
+```
+
+The hub accepts measurements from an agent older than itself, so it can be upgraded on its
+own ([ADR 0022](decisions/0022-updates-are-pulled.md)).
 
 ## 6. Uninstall
 
@@ -235,5 +308,6 @@ above works around it: the nginx vhost and TLS in front of the hub, per-node tok
 and authentication on the web page. Until they land, the hub is reachable on its own host
 only, over loopback.
 
-Published binaries are [issue #16](https://github.com/pravbeseda/monitor/issues/16); until
-then step 1 is a manual build.
+Nothing updates a node yet either: a new version is the upgrade in step 5, run by hand.
+The updater that does it by itself is [ADR 0022](decisions/0022-updates-are-pulled.md), and
+it is not built.

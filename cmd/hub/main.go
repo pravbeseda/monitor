@@ -31,10 +31,13 @@ const readHeaderTimeout = 10 * time.Second
 // shutdownTimeout bounds how long a stop waits for requests in flight.
 const shutdownTimeout = 10 * time.Second
 
+// errVersionRequested is --version answered on stdout: a request, like -h, not a failure.
+var errVersionRequested = errors.New("version requested")
+
 func main() {
 	if err := run(os.Args[1:], os.Stdout); err != nil {
-		// -h has already printed the flags; it is a request, not a failure.
-		if errors.Is(err, flag.ErrHelp) {
+		// -h and --version have already printed their answer; both are requests.
+		if errors.Is(err, flag.ErrHelp) || errors.Is(err, errVersionRequested) {
 			return
 		}
 		fmt.Fprintf(os.Stderr, "hub: %v\n", err)
@@ -135,6 +138,8 @@ func parseFlags(args []string, out io.Writer) (options, error) {
 	flags := flag.NewFlagSet("hub", flag.ContinueOnError)
 	flags.SetOutput(io.Discard)
 	var opts options
+	var showVersion bool
+	flags.BoolVar(&showVersion, "version", false, "print the version and exit")
 	flags.StringVar(&opts.config, "config", "", "path to the hub's YAML configuration")
 	flags.StringVar(&opts.db, "db", "", "path to the SQLite database")
 	flags.StringVar(&opts.listen, "listen", "127.0.0.1:8080", "address to serve on")
@@ -145,6 +150,14 @@ func parseFlags(args []string, out io.Writer) (options, error) {
 			return options{}, err
 		}
 		return options{}, fmt.Errorf("parse flags: %w", err)
+	}
+	// Answered before anything is required, so a freshly downloaded binary can be asked
+	// which version it is (docs/specs/release.md).
+	if showVersion {
+		if _, err := fmt.Fprintf(out, "monitor-hub %s\n", version.Current); err != nil {
+			return options{}, fmt.Errorf("write to stdout: %w", err)
+		}
+		return options{}, errVersionRequested
 	}
 	if opts.config == "" {
 		return options{}, errors.New("--config is required: the configuration path has no default")
