@@ -151,7 +151,9 @@ is_version() {
 	[ $# -eq 3 ] || return 1
 	for part in "$@"; do
 		case $part in
-		'' | *[!0-9]* | 0?*) return 1 ;;
+		# The length cap is what keeps newer_or_same comparing rather than erroring: a
+		# component wider than the shell's integers is not a version anyone releases.
+		'' | *[!0-9]* | 0?* | ??????????*) return 1 ;;
 		esac
 	done
 	return 0
@@ -321,11 +323,16 @@ check_not_a_downgrade() {
 		return 0
 	fi
 	unreadable="could not tell which version is installed; installing $version over it"
-	# Asking a binary its version means running it, so it is run only where nobody but root
-	# could have put it there: neither the file nor its directory may be writable by anyone
-	# else. A staged run stages both itself, so the check is a real run's.
-	if [ -z "$destdir" ] && [ -n "$(find "$installed_binary" "${installed_binary%/*}" \
-		-maxdepth 0 \( ! -user root -o -perm -g+w -o -perm -o+w \) 2>/dev/null)" ]; then
+	# Asking a binary its version means running it, so it is run only where nobody else could
+	# have put it there. Writability by group or other says that on any run; ownership says
+	# it only on a real one, where root is what "nobody else" means.
+	replaceable=$(find "$installed_binary" "${installed_binary%/*}" -maxdepth 0 \
+		\( -perm -g+w -o -perm -o+w \) 2>/dev/null)
+	if [ -z "$destdir" ] && [ -z "$replaceable" ]; then
+		replaceable=$(find "$installed_binary" "${installed_binary%/*}" -maxdepth 0 \
+			! -user root 2>/dev/null)
+	fi
+	if [ -n "$replaceable" ]; then
 		printf '%s: %s; another account can replace it\n' "$program" "$unreadable"
 		return 0
 	fi

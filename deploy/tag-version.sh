@@ -39,6 +39,8 @@ for part in "$@"; do
 	'' | *[!0-9]*) refuse "$tag is not a release tag: $part is not a number" ;;
 	# 01 and 1 would be two names for one version, and only one of them is asked for.
 	0?*) refuse "$tag is not a release tag: $part has a leading zero" ;;
+	# Wider than any shell compares as an integer, which is what reads versions in order.
+	??????????*) refuse "$tag is not a release tag: $part is too long to be a version" ;;
 	esac
 done
 

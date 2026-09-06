@@ -620,6 +620,7 @@ func TestABinaryThatCannotSayItsVersionDoesNotBlockTheRun(t *testing.T) {
 		"#!/bin/sh\nexit 1\n",
 		"#!/bin/sh\necho monitor-agent not-a-version\n",
 		"#!/bin/sh\necho monitor-agent 1.2\n",
+		"#!/bin/sh\necho monitor-agent 999999999999999999999999999.0.0\n",
 	} {
 		if err := os.WriteFile(filepath.Join(installed, "monitor-agent"), []byte(body), 0o755); err != nil {
 			t.Fatal(err)
@@ -632,6 +633,34 @@ func TestABinaryThatCannotSayItsVersionDoesNotBlockTheRun(t *testing.T) {
 		if !strings.Contains(stdout, "could not tell") {
 			t.Errorf("the run does not say it could not read the installed version:\n%s", stdout)
 		}
+	}
+}
+
+// spec: installer.md#fetching-and-checking-a-release — an installed binary another account
+// could have replaced is not run at all: its version is worth less than the risk of asking.
+func TestAReplaceableBinaryIsNotRunToReadItsVersion(t *testing.T) {
+	o := newOrigin(t)
+	run := newBootstrapRun(t, o, "agent", "--hub", "https://hub.example.com", "--node", "laptop-a")
+	installed := filepath.Join(run.destDir, "usr", "local", "bin")
+	if err := os.MkdirAll(installed, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	binary := filepath.Join(installed, "monitor-agent")
+	// It would refuse the run if it were read: it reports a version newer than the release.
+	if err := os.WriteFile(binary, []byte("#!/bin/sh\necho monitor-agent 9.9.9\n"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	// Explicitly, because WriteFile takes the umask off the mode it is given.
+	if err := os.Chmod(binary, 0o777); err != nil {
+		t.Fatal(err)
+	}
+
+	stdout, stderr, err := run.start(t)
+	if err != nil {
+		t.Fatalf("the run failed: %v\n%s%s", err, stdout, stderr)
+	}
+	if !strings.Contains(stdout, "another account can replace it") {
+		t.Errorf("the run does not say why it did not read the version:\n%s", stdout)
 	}
 }
 
@@ -678,6 +707,7 @@ func TestABootstrapRunRefusesItsArguments(t *testing.T) {
 		{"an empty --node", []string{"agent", "--node", ""}, "--node"},
 		{"a version with a trailing dot", []string{"agent", "--version", "1.2.3."}, "not a version"},
 		{"a version with a doubled dot", []string{"agent", "--version", "1..3"}, "not a version"},
+		{"a component no shell compares as a number", []string{"agent", "--version", "9999999999.0.0"}, "not a version"},
 	}
 
 	for _, test := range tests {

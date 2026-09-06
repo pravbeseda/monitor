@@ -112,7 +112,7 @@ everything else in these tables is proved by the suite.
 |---|---|
 | a run for `hub` or for `agent` | the binary in place is the one the newest release names for that role and this platform, and its version is that release's |
 | `--version 1.2.3` | that release is used instead of the newest |
-| `--version` that is not `MAJOR.MINOR.PATCH` | nothing is fetched, and the run names the value it refused |
+| `--version` that is not `MAJOR.MINOR.PATCH`, or whose component is wider than a shell compares as a number | nothing is fetched, and the run names the value it refused |
 | `--version` naming a release that does not exist | nothing is installed, and the run names the version |
 | a manifest whose signature does not verify | nothing is unpacked and nothing is installed |
 | a manifest signed by another key | the same |
@@ -124,7 +124,7 @@ everything else in these tables is proved by the suite.
 | a version older than the one the installed binary of that role reports | nothing is installed, and the run says so; `--allow-downgrade` installs it |
 | `1.10.0` against an installed `1.9.0` | it installs: versions compare number by number, not as text |
 | nothing installed, or a binary that will not run or reports something that is not a version | it installs, and says it could not tell what was there |
-| an installed binary that another account could have replaced — it or its directory writable by anyone but root | its version is not read at all, and the run says so and installs |
+| an installed binary that another account could have replaced — it or its directory writable by group or other, or on a real run owned by anyone but root | its version is not read at all, and the run says so and installs |
 | an option this run does not know, or one given without its value | the usage on stderr |
 | `--hub` or `--node` given to the `hub` role | the usage on stderr |
 | no `curl`, `openssl` or `tar` on `PATH` | the run names the one that is missing |
