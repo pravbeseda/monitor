@@ -55,18 +55,22 @@ and the hub names the version the fleet should be running.**
 3. **The updater is its own unit** — its own timer on Debian and macOS, its own binary or
    script, installed beside the agent and supervised independently of it. It survives an
    agent that will not start, which is the whole reason it is separate.
-4. **The hub names the target version**, in its configuration, and the updater asks the hub
-   for it directly, with the node's token. Deliberately not through the ingest response that
-   carries the rest of the node's configuration ([0010](0010-agent-configuration.md)): only a
-   running agent makes that request, and the node that most needs a corrected target is the
-   one whose agent will not start. The hub already receives every node's `agent_version` in
-   the ingest payload, so it can report who is behind without the updater saying anything.
+4. **The hub names the target version**, in its configuration, and the node asks the hub for
+   it. Deliberately not through the ingest response that carries the rest of the node's
+   configuration ([0010](0010-agent-configuration.md)): only a running agent makes that
+   request, and the node that most needs a corrected target is the one whose agent will not
+   start. Asking is the installer's job rather than the stub's — point 6 keeps the choice of
+   a version inside the release, so the hub's address, the token and the shape of that answer
+   stay out of the frozen half. The hub already receives every node's `agent_version` in the
+   ingest payload, so it can report who is behind without the updater saying anything.
 5. **The hub's own target is set on the hub's host**, not by the hub itself, and it is
    upgraded first. The hub must accept measurements from an agent older than itself
    regardless — a laptop can be asleep for a week — so the fleet is never required to move
    in step.
 6. **Nothing on the machine updates itself.** What lives there permanently is a stub: fetch
-   the release, verify its signature, hand over to the installer *inside that release*.
+   the newest release, verify its signature, hand over to the installer *inside that release*
+   — which then asks the hub for the target and installs that instead when the target is an
+   older version.
    Everything that changes — how a version is chosen, where files go, how a service is
    restarted — travels in the signed release and is therefore current at every run. The stub
    is deliberately frozen, and when it does have to change it changes over the manual path
@@ -86,9 +90,14 @@ and the hub names the version the fleet should be running.**
 - CI gains publishing rights on the repository's releases. It gains no credential to any
   host, and none of the secrets in `hub.env` or `agent.env`
   ([0007](0007-public-repository.md)).
-- The resident stub holds the node's token, because it asks the hub for the target itself.
-  It is the token the machine already has, and the endpoint it reaches answers with a version
-  string and nothing else.
+- Every run downloads the newest release even when the target is an older version, because
+  the code that knows the target travels in that download. It is a few megabytes once a day
+  against keeping the frozen half unable to choose anything.
+- The installer reads the node's token from `agent.env` when it asks the hub for the target;
+  it gets no environment file of its own. One copy of the secret means one rotation procedure
+  — re-running `install-agent.sh`, which [0019](0019-deployment-layout.md) already defines —
+  and nothing that can drift out of step with it. The one-file-per-binary rule of 0019 is
+  untouched: what reads that file here is a transient root script, not a resident service.
 - The private half of the signing key becomes a secret of the project — the one secret whose
   loss would let someone else's binary install itself as root on every node.
 - The updater is a third thing to build, ship and test, on two supervisors
@@ -130,6 +139,11 @@ and the hub names the version the fleet should be running.**
   running agent makes that request, so a release that crashes the agent at startup cuts the
   node off from the corrected target and from the rollback under Consequences. That is the
   case point 3 exists to remove, so the mechanism that answers it cannot depend on the agent.
+- **The stub asks the hub for the target itself** — rejected: it saves downloading a release
+  the node may not install, and costs the hub's address, the node's token and the shape of
+  that answer their place in the frozen half, plus a second contract old stubs depend on — on
+  the side that point 5 upgrades first. Point 6 exists to keep the resident part unable to
+  choose anything.
 - **Each node follows the latest release on its own, with no hub involvement** — the same
   shape as the decision, minus point 4. Rejected because it gives away rollout control for
   nothing: a bad version reaches the whole fleet at once and the only remedy is another
