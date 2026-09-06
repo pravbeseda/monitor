@@ -111,6 +111,8 @@ nodes:
 **Stage 3 — operation**
 - [x] systemd and launchd units, agent install script
       ([deployment spec](specs/deployment.md), [install guide](install.md))
+- [x] Signed releases published by CI on a tag, and a verifier for what they publish
+      ([release spec](specs/release.md))
 - [ ] nginx vhost for the hub, per-node tokens, authentication on the web page and a
       credential a program can send to the read endpoints
 - [x] Decide how history graphs are served, before any charting is built by hand:

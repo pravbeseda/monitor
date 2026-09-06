@@ -11,6 +11,8 @@ import (
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/pravbeseda/monitor/internal/version"
 )
 
 // spec: hub-config.md#startup — the deployment paths have no defaults.
@@ -43,6 +45,22 @@ func TestParseFlagsDefaultsToLocalhost(t *testing.T) {
 
 	if !strings.HasPrefix(opts.listen, "127.0.0.1:") {
 		t.Errorf("listen = %q, want the hub bound to localhost (ADR 0005)", opts.listen)
+	}
+}
+
+// spec: release.md#the-version-a-binary-reports — a downloaded binary can be asked which
+// version it is, before it has a configuration or a database.
+func TestParseFlagsAnswerVersionBeforeAnythingIsConfigured(t *testing.T) {
+	var out bytes.Buffer
+
+	_, err := parseFlags([]string{"--version"}, &out)
+
+	if !errors.Is(err, errVersionRequested) {
+		t.Fatalf("error = %v, want errVersionRequested", err)
+	}
+	want := "monitor-hub " + version.Current
+	if got := strings.TrimSpace(out.String()); got != want {
+		t.Errorf("printed %q, want %q", got, want)
 	}
 }
 

@@ -30,10 +30,13 @@ const (
 // requestTimeout keeps one unanswered request from swallowing a whole tick.
 const requestTimeout = 30 * time.Second
 
+// errVersionRequested is --version answered on stdout: a request, like -h, not a failure.
+var errVersionRequested = errors.New("version requested")
+
 func main() {
 	if err := start(); err != nil {
-		// -h has already printed the flags; it is a request, not a failure.
-		if errors.Is(err, flag.ErrHelp) {
+		// -h and --version have already printed their answer; both are requests.
+		if errors.Is(err, flag.ErrHelp) || errors.Is(err, errVersionRequested) {
 			return
 		}
 		fmt.Fprintf(os.Stderr, "agent: %v\n", err)
@@ -93,6 +96,8 @@ func settings(args []string, out io.Writer) (options, error) {
 	flags.SetOutput(io.Discard)
 	var opts options
 	var envFile string
+	var showVersion bool
+	flags.BoolVar(&showVersion, "version", false, "print the version and exit")
 	flags.StringVar(&opts.hub, "hub", "", "base URL of the hub")
 	flags.StringVar(&opts.node, "node", "", "this node's name, as the hub knows it")
 	flags.StringVar(&envFile, "env-file", "",
@@ -104,6 +109,14 @@ func settings(args []string, out io.Writer) (options, error) {
 			return options{}, err
 		}
 		return options{}, fmt.Errorf("parse flags: %w", err)
+	}
+	// Answered before anything is required, so a freshly downloaded binary can be asked
+	// which version it is (docs/specs/release.md).
+	if showVersion {
+		if _, err := fmt.Fprintf(out, "monitor-agent %s\n", version.Current); err != nil {
+			return options{}, fmt.Errorf("write to stdout: %w", err)
+		}
+		return options{}, errVersionRequested
 	}
 	opts.token = os.Getenv(tokenVariable)
 	if envFile != "" {

@@ -29,6 +29,9 @@ that a node is configured once and never edited again
 | token | `MONITOR_TOKEN`, or that key in that file | none: a secret never lives in a file in the tree |
 | bootstrap tick | compiled in | 5m, until the first configuration arrives |
 
+`--version` is answered before any of this is required, so a downloaded binary can be asked
+which version it is ([release.md](release.md#the-version-a-binary-reports)).
+
 Anything given explicitly wins over the file: a flag over its key, and `MONITOR_TOKEN` in
 the process environment over the file's token. The file is `KEY=VALUE` data the agent reads
 and never executes ([0020](../decisions/0020-agent-reads-its-environment-file.md)): a value

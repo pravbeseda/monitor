@@ -14,7 +14,7 @@ staged=$(git diff --cached --name-only --diff-filter=ACMR)
 
 # Files that must never be committed, even with 'git add -f'.
 forbidden=$(echo "$staged" | grep -E \
-	'(^|/)config\.ya?ml$|(^|/)\.env|\.(db|sqlite3?|pem|key|token)$|(^|/)(data|backups)/' || true)
+	'(^|/)config\.ya?ml$|(^|/)\.env|\.(db|sqlite3?|pem|key|priv|token)$|(^|/)(data|backups)/' || true)
 if [ -n "$forbidden" ]; then
 	echo "pre-commit: these files hold configuration, secrets or measurements:" >&2
 	echo "$forbidden" | sed 's/^/  /' >&2

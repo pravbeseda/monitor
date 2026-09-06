@@ -82,6 +82,7 @@ One row = one test. Anchors: `spec: hub-config.md#<heading>`.
 
 | Configuration | Result |
 |---|---|
+| `--version` given | the version on stdout and exit 0, before any setting is required ([release.md](release.md#the-version-a-binary-reports)) |
 | `--config` not given | startup error: the path is a deployment setting and has no default |
 | `--db` not given | startup error: the database path is a deployment setting too |
 | `--listen` not given | the hub binds to `127.0.0.1:8080`, a product default that names no installation |

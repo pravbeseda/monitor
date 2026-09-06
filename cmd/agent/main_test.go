@@ -9,6 +9,8 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+
+	"github.com/pravbeseda/monitor/internal/version"
 )
 
 // spec: agent.md#local-configuration — all three values are deployment settings.
@@ -50,6 +52,23 @@ func TestSettingsAnswersHelpWithTheFlagList(t *testing.T) {
 		if !strings.Contains(out.String(), flagName) {
 			t.Errorf("usage = %q, want it to list %s", out.String(), flagName)
 		}
+	}
+}
+
+// spec: release.md#the-version-a-binary-reports — a downloaded binary can be asked which
+// version it is, before it has a hub, a node or a token to be configured with.
+func TestSettingsAnswerVersionBeforeAnythingIsConfigured(t *testing.T) {
+	t.Setenv(tokenVariable, "")
+	var out bytes.Buffer
+
+	_, err := settings([]string{"--version"}, &out)
+
+	if !errors.Is(err, errVersionRequested) {
+		t.Fatalf("error = %v, want errVersionRequested", err)
+	}
+	want := "monitor-agent " + version.Current
+	if got := strings.TrimSpace(out.String()); got != want {
+		t.Errorf("printed %q, want %q", got, want)
 	}
 }
 

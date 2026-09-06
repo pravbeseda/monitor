@@ -1,8 +1,8 @@
 # Spec: Deployment
 
 - **Status:** approved
-- **Owns:** `deploy/`: the systemd units, the launchd daemon, the environment files and
-  `install-agent.sh`
+- **Owns:** in `deploy/`: the systemd units, the launchd daemon, the environment files and
+  `install-agent.sh` — the release verifier beside them is [release.md](release.md)'s
 - **Decisions:** [0005](../decisions/0005-poc-stack.md),
   [0007](../decisions/0007-public-repository.md),
   [0010](../decisions/0010-agent-configuration.md),
@@ -189,8 +189,8 @@ makes the behaviour above testable without touching the machine running the test
 
 - The nginx vhost, TLS, web authentication and per-node token issuance — the other half of
   the stage-3 bullet in [poc.md](../poc.md).
-- Building or shipping the binary: the script takes one that exists
-  ([issue #16](https://github.com/pravbeseda/monitor/issues/16) tracks published artifacts).
+- Building, publishing or verifying the binary: the script takes one that exists, and
+  [release.md](release.md) owns where it comes from.
 - Uninstalling: two documented commands in the install guide, not a mode of the script.
 - Installing the hub. Its unit ships here and its behaviour is specified above, but a host
   that runs the hub is set up once and by hand; there is no hub install script.
