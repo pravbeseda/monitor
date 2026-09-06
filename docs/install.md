@@ -11,10 +11,70 @@ Every name below is synthetic ([ADR 0007](decisions/0007-public-repository.md)):
 `hub.example.com` is the hub, `server-b` a Debian node, `laptop-a` a macOS one. Substitute
 your own — and keep them out of this repository.
 
-What you need: a checkout of this repository — it carries the verifier and the key a
-release is checked with — plus `ssh`/`sudo` access to each node, and the Go toolchain
-`go.mod` names only if you build the binaries yourself. One Debian host runs the hub; every
-node, Debian or macOS, runs the agent.
+What you need: `ssh`/`sudo` access to each machine. Section 0 needs nothing else. The manual
+path below also needs a checkout of this repository — it carries the verifier and the key a
+release is checked with — and the Go toolchain `go.mod` names if you build the binaries
+yourself. One Debian host runs the hub; every node, Debian or macOS, runs the agent.
+
+## 0. The short way: one command
+
+A tagged release carries its own installer, so a machine that can reach GitHub needs neither
+this checkout nor a Go toolchain ([specs/installer.md](specs/installer.md)):
+
+```sh
+# the hub host
+curl -fsSL https://raw.githubusercontent.com/pravbeseda/monitor/main/deploy/monitor-install.sh \
+    | sudo sh -s -- hub
+
+# a node, upgrading one that is already installed
+curl -fsSL https://raw.githubusercontent.com/pravbeseda/monitor/main/deploy/monitor-install.sh \
+    | sudo sh -s -- agent --hub https://hub.example.com --node server-b
+```
+
+The run downloads the newest release, checks its signature against the key it carries, and
+hands over to the installer inside that release. Re-running it is how a machine is upgraded.
+
+**A hub's first run stops before starting the service.** `hub.yaml` and `hub.env` describe
+one installation and have no defaults, so the run installs everything else, writes
+`/etc/monitor/hub.yaml.example` and `hub.env.example` beside where they belong, and prints
+the two `install` commands that turn them into the real files. Fill those in — step 2 below
+says what goes in them — and run the same command again.
+
+**A first install of a node needs its token, and the one-line form cannot carry one**: piping
+the script into `sh` uses up stdin, which is the only route a token may take. Download the
+script instead, check the key it carries, and run it with the token piped in.
+
+The key must be this project's:
+
+```
+c3f2428af516bf02bb789d78d139b0e135faae2ef715cb32f0865bdf3a11f122
+```
+
+That fingerprint changes only when the key is rotated, which is why it is worth checking and
+a hash of the script itself is not. Everything below rests on it: whoever serves the script
+chooses the key inside it, so a value that does not match means stopping, not retrying.
+
+```sh
+home=$(sudo -H sh -c 'printf %s "$HOME"')   # /root on Debian, /var/root on macOS
+sudo install -d -m 0700 "$home/monitor"
+sudo curl -fsSLo "$home/monitor/install.sh" \
+    https://raw.githubusercontent.com/pravbeseda/monitor/main/deploy/monitor-install.sh
+sudo sed -n '/BEGIN PUBLIC KEY/,/END PUBLIC KEY/p' "$home/monitor/install.sh" \
+    | sed "s/^[[:space:]]*//; s/^release_key='//; s/'$//" \
+    | openssl pkey -pubin -outform DER | openssl dgst -sha256
+
+read -rs token                              # paste the node's token; it is not echoed
+printf %s "$token" | sudo sh "$home/monitor/install.sh" agent \
+    --hub https://hub.example.com --node server-b
+unset token
+sudo rm -r "$home/monitor"
+```
+
+A directory only root can write is deliberate: a script downloaded into a shared one can be
+replaced between the check and the `sudo` that runs it.
+
+The rest of this guide is the manual path: it needs no release, and it is what recovers a
+machine the installer cannot ([ADR 0022](decisions/0022-updates-are-pulled.md)).
 
 ## 1. Get the binaries
 
@@ -95,8 +155,8 @@ A binary built this way reports the development version rather than a release ve
 
 ## 2. Set up the hub host
 
-The hub host is set up once, by hand: there is no hub install script
-([specs/deployment.md](specs/deployment.md#out-of-scope)). Copy what the host needs:
+These are the steps `install-hub.sh` takes for you in section 0; done by hand they are the
+recovery path. Copy what the host needs:
 
 ```sh
 scp dist/monitor-hub config.example.yaml deploy/hub.env.example \
@@ -109,7 +169,7 @@ Then, on the host, create the unprivileged account the hub runs as and its direc
 sudo adduser --system --group --no-create-home monitor
 sudo mkdir -p /etc/monitor /var/lib/monitor
 sudo chown monitor:monitor /var/lib/monitor
-sudo chmod 0750 /var/lib/monitor
+sudo chmod 0700 /var/lib/monitor
 ```
 
 `/etc/monitor` stays owned by root — if this host is also a node, `install-agent.sh` refuses
@@ -254,8 +314,8 @@ sudo systemctl restart monitor-hub.service
 
 ### Upgrading the hub
 
-There is no script for it, and no configuration to change — a new binary in place, and a
-restart. Verify it first as in step 1, then, from the checkout:
+Section 0 is one command for this. By hand it is a new binary in place and a restart, with no
+configuration to change. Verify it first as in step 1, then, from the checkout:
 
 ```sh
 scp dist/monitor-hub hub.example.com:
@@ -308,6 +368,6 @@ above works around it: the nginx vhost and TLS in front of the hub, per-node tok
 and authentication on the web page. Until they land, the hub is reachable on its own host
 only, over loopback.
 
-Nothing updates a node yet either: a new version is the upgrade in step 5, run by hand.
-The updater that does it by itself is [ADR 0022](decisions/0022-updates-are-pulled.md), and
-it is not built.
+Nothing updates a machine unattended: a new version is section 0's command or step 5's, both
+run by hand. The timer that would do it by itself is
+[ADR 0022](decisions/0022-updates-are-pulled.md), and it is not built.

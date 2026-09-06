@@ -27,6 +27,7 @@ func TestATagNamesAVersionOrIsRefused(t *testing.T) {
 		{name: "a part that is not a number", args: []string{"v1.a.3"}},
 		{name: "a leading zero", args: []string{"v01.2.3"}},
 		{name: "a leading zero in the patch", args: []string{"v1.2.03"}},
+		{name: "a component too wide to compare", args: []string{"v9999999999.0.0"}},
 		{name: "an empty tag", args: []string{""}},
 		{name: "no tag at all", args: nil},
 		{name: "two tags", args: []string{"v1.2.3", "v1.2.4"}},

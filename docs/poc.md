@@ -113,6 +113,9 @@ nodes:
       ([deployment spec](specs/deployment.md), [install guide](install.md))
 - [x] Signed releases published by CI on a tag, and a verifier for what they publish
       ([release spec](specs/release.md))
+- [x] One command that installs or upgrades a hub or an agent from a signed release
+      ([installer spec](specs/installer.md)); the timer that would do it unattended is
+      [0022](decisions/0022-updates-are-pulled.md) and is not built
 - [ ] nginx vhost for the hub, per-node tokens, authentication on the web page and a
       credential a program can send to the read endpoints
 - [x] Decide how history graphs are served, before any charting is built by hand:
