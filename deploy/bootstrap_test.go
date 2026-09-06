@@ -507,11 +507,11 @@ func pathWithout(t *testing.T, tools []string, missing string) string {
 		if tool == missing {
 			continue
 		}
-		real, err := exec.LookPath(tool)
+		found, err := exec.LookPath(tool)
 		if err != nil {
 			t.Skipf("%s is not on this machine's PATH: %v", tool, err)
 		}
-		if err := os.Symlink(real, filepath.Join(dir, tool)); err != nil {
+		if err := os.Symlink(found, filepath.Join(dir, tool)); err != nil {
 			t.Fatalf("cannot stage %s: %v", tool, err)
 		}
 	}
