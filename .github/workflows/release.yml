@@ -206,7 +206,6 @@ jobs:
           # make_latest=legacy rather than gh's --latest: runs for two tags pushed together
           # can finish in either order, and "latest" must be the higher version rather than
           # whichever run got here last. GitHub does that comparison itself.
-          id=$(gh api "repos/$GITHUB_REPOSITORY/releases" \
-            --jq "map(select(.tag_name == \"$GITHUB_REF_NAME\"))[0].id")
+          id=$(gh release view "$GITHUB_REF_NAME" --json databaseId --jq .databaseId)
           gh api --method PATCH "repos/$GITHUB_REPOSITORY/releases/$id" \
             -F draft=false -f make_latest=legacy --jq .html_url
