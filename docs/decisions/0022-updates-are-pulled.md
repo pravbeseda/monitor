@@ -1,9 +1,9 @@
 # 0022. Updates are pulled by an updater of their own; the hub names the version
 
 - **Status:** accepted
-- **Amends:** the "no second endpoint, no second credential" clause of
-  [0010](0010-agent-configuration.md), for the target version alone; everything that ADR says
-  about the agent's own configuration, and about the hub never initiating, stands
+- **Amends:** the "no second endpoint" clause of [0010](0010-agent-configuration.md), for the
+  target version alone; everything that ADR says about the agent's own configuration, about
+  the second credential it refuses, and about the hub never initiating, stands
 - **Date:** 2026-09-06
 - **Source:** [POC](../poc.md) stage 3, the manual upgrade path in
   [install.md](../install.md), and [issue #16](https://github.com/pravbeseda/monitor/issues/16)
@@ -77,7 +77,16 @@ and the hub names the version the fleet should be running.**
    names the version it needs and exits — whereupon the stub fetches that release, checks its
    signature the same way, and hands over to *its* installer. An installer that names nothing,
    because the hub did not answer, installs nothing: a hub that is down or unreachable leaves
-   the machine exactly as it was.
+   the machine exactly as it was. **On the hub's own host the installer asks nothing** — it
+   reads the target point 5 puts there. Asking would mean asking the service it is upgrading,
+   and the day that matters is the day a released hub crashes at startup, when nothing would
+   answer and nothing would ever be repaired. **A target is a release that carries an
+   installer**, which puts a floor under how far back the hub may point: the releases
+   [#16](https://github.com/pravbeseda/monitor/issues/16) produces before the updater exists
+   carry binaries alone, and naming one is not a rollback but a stop. A stub that fetches a
+   release with nothing to hand over to installs nothing and says so in its log; going below
+   the floor is the manual path of [install.md](../install.md), which is what that path is
+   for.
    Everything that changes — how a version is chosen, where files go, how a service is
    restarted — travels in the signed release and is therefore current at every run. The stub
    is deliberately frozen, and when it does have to change it changes over the manual path
@@ -102,8 +111,10 @@ and the hub names the version the fleet should be running.**
   then downloads that one too, two releases a day rather than one. It is a few megabytes
   against keeping the frozen half unable to choose anything, and against a downloaded release
   vouching for the next one.
-- The installer reads the node's token from `agent.env` when it asks the hub for the target;
-  it gets no environment file of its own. One copy of the secret means one rotation procedure
+- On a node, the installer reads the token from `agent.env` when it asks the hub for the
+  target; it gets no environment file of its own. On the hub's own host it needs neither —
+  it reads the locally set target and makes no request — which is what keeps the mechanism
+  working on a host that is not a node at all ([install.md](../install.md)). One copy of the secret means one rotation procedure
   — re-running `install-agent.sh`, which [0019](0019-deployment-layout.md) already defines —
   and nothing that can drift out of step with it. The one-file-per-binary rule of 0019 is
   untouched: what reads that file here is a transient root script, not a resident service.
