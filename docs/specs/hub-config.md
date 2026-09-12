@@ -85,7 +85,11 @@ One row = one test. Anchors: `spec: hub-config.md#<heading>`.
 | `--version` given | the version on stdout and exit 0, before any setting is required ([release.md](release.md#the-version-a-binary-reports)) |
 | `--config` not given | startup error: the path is a deployment setting and has no default |
 | `--db` not given | startup error: the database path is a deployment setting too |
-| `--listen` not given | the hub binds to `127.0.0.1:8080`, a product default that names no installation |
+| neither `--listen` nor `MONITOR_LISTEN` given, or `MONITOR_LISTEN` set empty | the hub binds to `127.0.0.1:8080`, a product default that names no installation |
+| `MONITOR_LISTEN` set, `--listen` not given | the hub binds to that address, and the line it logs at startup names the address it acquired |
+| the address is already taken | startup error naming it, and no line claiming the hub is listening: a journal that announces an address it never got is what an operator reads while hunting the port |
+| both given | `--listen` wins, so a run by hand can reach a port the service does not use |
+| either of them names an address that is not loopback | startup error naming the address: the hub is reached through a reverse proxy ([0023](../decisions/0023-proxy-holds-the-web-perimeter.md)), and a hub on a public interface serves the pages and the read API to anyone |
 | file missing or unreadable | startup error naming the path |
 | not valid YAML | startup error naming the path and the position |
 | a key the hub does not know, at any level | startup error naming the key |

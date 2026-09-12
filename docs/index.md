@@ -10,6 +10,7 @@ entry point to every document in the project.
 | [concept.md](concept.md) | Idea, architectural principles, planned skins, domains, roadmap |
 | [poc.md](poc.md) | POC spec: scope, terminology, wire format, work plan, answered questions |
 | [install.md](install.md) | Install guide: one command, then the manual path — the hub host, install and verify a node, upgrade, uninstall |
+| [nginx-requirements.md](nginx-requirements.md) | What the hub needs from the reverse proxy in front of it, handed to the Ansible repository that owns that host |
 | [plans/stage-1-skeleton.md](plans/stage-1-skeleton.md) | Step plan for POC stage 1, kept as a record; plans now live in the task and the pull request ([0017](decisions/0017-one-spec-and-decision-gates.md)) |
 
 ## Architecture decisions
@@ -41,6 +42,7 @@ One decision per file, each stating what was rejected and why. New records start
 | [0020](decisions/0020-agent-reads-its-environment-file.md) | The agent reads its own environment file; no shell sources it | accepted |
 | [0021](decisions/0021-shell-is-linted-too.md) | The shell the project ships is linted like its Go | accepted |
 | [0022](decisions/0022-updates-are-pulled.md) | Updates are pulled by an updater of their own; the hub names the version | accepted |
+| [0023](decisions/0023-proxy-holds-the-web-perimeter.md) | The proxy authenticates the web; the hub authenticates only ingest | accepted |
 
 ## Behaviour specs
 

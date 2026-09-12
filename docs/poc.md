@@ -117,7 +117,10 @@ nodes:
       ([installer spec](specs/installer.md)); the timer that would do it unattended is
       [0022](decisions/0022-updates-are-pulled.md) and is not built
 - [ ] nginx vhost for the hub, per-node tokens, authentication on the web page and a
-      credential a program can send to the read endpoints
+      credential a program can send to the read endpoints. The proxy holds that credential
+      ([0023](decisions/0023-proxy-holds-the-web-perimeter.md)) and what it has to do is
+      [nginx-requirements.md](nginx-requirements.md); the vhost itself is applied from the
+      repository that provisions the hub host
 - [x] Decide how history graphs are served, before any charting is built by hand:
       the hub serves the series and a renderer consumes them
       ([0018](decisions/0018-history-through-the-api.md)), against the
