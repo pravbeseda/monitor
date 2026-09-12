@@ -170,21 +170,22 @@ Requirement 3 — from another machine, with the hub's own port:
 curl -s --connect-timeout 5 http://hub-host:8090/   # no connection, not a page
 ```
 
-Requirement 10 — while the hub is restarting. One status code cannot show a transition, so
-poll from another machine and restart the service underneath it:
+Requirement 10 — with the hub down, and with it back. A restart is over in well under a
+second, so stop and start the service instead of restarting it: that holds the outage still
+long enough to be observed rather than hoping a poll lands inside it.
 
 ```sh
-while :; do                                     # leave this running
-  curl -s -o /dev/null -w '%{http_code} ' -u "$cred" https://hub.example.com/
-  sleep 1
-done
+sudo systemctl stop monitor-hub                 # on the hub host
+curl -s -o /dev/null -w '%{http_code}\n' -u "$cred" https://hub.example.com/   # 502
 
-sudo systemctl restart monitor-hub              # meanwhile, on the hub host
+sudo systemctl start monitor-hub                # on the hub host, nginx untouched
+curl -s -o /dev/null -w '%{http_code}\n' -u "$cred" https://hub.example.com/   # 200
 ```
 
-The stream shows `200`, a `502` or two while the process is down, and `200` again — with no
-nginx reload in between. A stream that never leaves `502` means the proxy needs one, which is
-the half of the requirement a single request cannot see.
+Both halves matter and neither is optional. Anything other than `502` while the hub is down —
+a connection refused, a timeout, an nginx that has died with its upstream — is the proxy
+depending on the hub. Anything other than `200` after it is back, until nginx is reloaded, is
+the same requirement failing from the other side.
 
 The end-to-end proof is a node: with an agent installed against `https://hub.example.com`,
 the journal on that node shows an accepted push and the page shows its volumes with a fresh
