@@ -80,9 +80,9 @@ path list grows; do not enumerate paths where a prefix rule will do.
    them may be a node's ingest token, and none of them belongs in this repository.
 
 7. **A 1 MiB request body passes; a larger one is rejected with `413`.** That is the hub's own
-   cap on an ingest body, so the two agree. The proxy is what makes the rejection cheap: the
-   hub authenticates before it reads a body, so without this an unauthenticated flood is
-   answered — a `401` per request — only after the process has been made to work for it.
+   cap on an ingest body, so the two agree on the size. Refusing it *by size* is something
+   only the proxy can do: the hub authenticates before it looks at a body, so an oversized
+   body carrying a bad token is answered `401`, never `413`.
 
 8. **Rate limiting on the public name**, since ingest is reachable unauthenticated by design.
    At least 120 requests a minute per source address with a burst of 20, and over that the
@@ -170,12 +170,21 @@ Requirement 3 — from another machine, with the hub's own port:
 curl -s --connect-timeout 5 http://hub-host:8090/   # no connection, not a page
 ```
 
-Requirement 10 — while the hub is restarting:
+Requirement 10 — while the hub is restarting. One status code cannot show a transition, so
+poll from another machine and restart the service underneath it:
 
 ```sh
-sudo systemctl restart monitor-hub    # on the hub host
-curl -s -o /dev/null -w '%{http_code}\n' -u "$cred" https://hub.example.com/   # 502, then 200
+while :; do                                     # leave this running
+  curl -s -o /dev/null -w '%{http_code} ' -u "$cred" https://hub.example.com/
+  sleep 1
+done
+
+sudo systemctl restart monitor-hub              # meanwhile, on the hub host
 ```
+
+The stream shows `200`, a `502` or two while the process is down, and `200` again — with no
+nginx reload in between. A stream that never leaves `502` means the proxy needs one, which is
+the half of the requirement a single request cannot see.
 
 The end-to-end proof is a node: with an agent installed against `https://hub.example.com`,
 the journal on that node shows an accepted push and the page shows its volumes with a fresh

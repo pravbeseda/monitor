@@ -9,6 +9,8 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"sync"
+	"syscall"
 	"testing"
 	"time"
 
@@ -119,10 +121,11 @@ func TestRunReportsAListenerItCannotBind(t *testing.T) {
 		if err == nil || !strings.Contains(err.Error(), "serve on") {
 			t.Fatalf("error = %v, want it to name the address it could not serve on", err)
 		}
-		// spec: hub-config.md#startup — the line it logs names the address in force, which
-		// is the only way an operator sees which of the two settings won.
-		if want := "listening on " + taken.Addr().String(); !strings.Contains(out.String(), want) {
-			t.Errorf("startup line = %q, want it to contain %q", out.String(), want)
+		// spec: hub-config.md#startup — nothing may claim the hub is listening on an
+		// address it never acquired: that line is what an operator reads while hunting
+		// for the port a service failed to take.
+		if strings.Contains(out.String(), "listening on") {
+			t.Errorf("startup output = %q, want no claim that it listens", out.String())
 		}
 	case <-time.After(10 * time.Second):
 		t.Fatal("run did not return: the stop is waiting on something it never cancels")
@@ -217,4 +220,79 @@ func TestParseFlagsAcceptsLoopbackByName(t *testing.T) {
 	if opts.listen != "localhost:8090" {
 		t.Errorf("listen = %q, want the address kept as written", opts.listen)
 	}
+}
+
+// spec: hub-config.md#startup — the logged line names the address the hub acquired, which
+// is the only way an operator sees which of the two settings won. Port 0 proves it names
+// what was bound rather than what was asked for.
+func TestRunAnnouncesTheAddressItAcquired(t *testing.T) {
+	dir := t.TempDir()
+	configPath := filepath.Join(dir, "config.yaml")
+	config := "nodes:\n  laptop-a:\n    class: laptop\n    token_env: MONITOR_TOKEN_LAPTOP_A\n"
+	if err := os.WriteFile(configPath, []byte(config), 0o600); err != nil {
+		t.Fatalf("write config: %v", err)
+	}
+	t.Setenv("MONITOR_TOKEN_LAPTOP_A", strings.Repeat("a", 40))
+
+	out := &syncBuffer{}
+	done := make(chan error, 1)
+	go func() {
+		done <- run([]string{
+			"--config", configPath,
+			"--db", filepath.Join(dir, "monitor.db"),
+			"--listen", "127.0.0.1:0",
+		}, out)
+	}()
+
+	line := waitFor(t, out, "listening on 127.0.0.1:")
+	if strings.Contains(line, "listening on 127.0.0.1:0 ") {
+		t.Errorf("startup line = %q, want the port it was given, not the one it asked for", line)
+	}
+
+	// The line is printed after the signal handler is installed, so by now this cannot
+	// reach the default disposition and take the test binary with it.
+	if err := syscall.Kill(os.Getpid(), syscall.SIGTERM); err != nil {
+		t.Fatalf("signal the hub: %v", err)
+	}
+
+	select {
+	case err := <-done:
+		if err != nil {
+			t.Fatalf("run: %v", err)
+		}
+	case <-time.After(10 * time.Second):
+		t.Fatal("run did not return after SIGTERM")
+	}
+}
+
+// waitFor returns the buffer's contents once they hold want, or fails the test.
+func waitFor(t *testing.T, buf *syncBuffer, want string) string {
+	t.Helper()
+	deadline := time.Now().Add(10 * time.Second)
+	for time.Now().Before(deadline) {
+		if got := buf.String(); strings.Contains(got, want) {
+			return got
+		}
+		time.Sleep(10 * time.Millisecond)
+	}
+	t.Fatalf("output = %q, want it to contain %q", buf.String(), want)
+	return ""
+}
+
+// syncBuffer is a bytes.Buffer the test may read while the hub is still writing to it.
+type syncBuffer struct {
+	mu  sync.Mutex
+	buf bytes.Buffer
+}
+
+func (b *syncBuffer) Write(p []byte) (int, error) {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	return b.buf.Write(p)
+}
+
+func (b *syncBuffer) String() string {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	return b.buf.String()
 }

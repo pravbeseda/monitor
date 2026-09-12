@@ -86,17 +86,24 @@ func run(args []string, out io.Writer) error {
 		return err
 	}
 
-	if _, err := fmt.Fprintf(out, "monitor-hub %s listening on %s (nodes: %d, notify: %s)\n",
-		version.Current, opts.listen, len(cfg.Nodes()), cfg.Notify().Channel); err != nil {
-		return fmt.Errorf("write to stdout: %w", err)
+	// The address is taken before it is announced: a journal that claims a port the hub
+	// never got is read by whoever is hunting for the one it could not take.
+	listener, err := net.Listen("tcp", opts.listen)
+	if err != nil {
+		return fmt.Errorf("serve on %s: %w", opts.listen, err)
 	}
 
 	// A signal cancels the context, which stops the evaluation pass and the server
 	// together: a change already recorded stays recorded, an in-flight send is abandoned.
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 
+	if _, err := fmt.Fprintf(out, "monitor-hub %s listening on %s (nodes: %d, notify: %s)\n",
+		version.Current, listener.Addr(), len(cfg.Nodes()), cfg.Notify().Channel); err != nil {
+		stop()
+		return errors.Join(fmt.Errorf("write to stdout: %w", err), listener.Close())
+	}
+
 	server := &http.Server{
-		Addr:              opts.listen,
 		Handler:           hub.Routes(cfg, store, time.Now),
 		ReadHeaderTimeout: readHeaderTimeout,
 	}
@@ -135,7 +142,7 @@ func run(args []string, out io.Writer) error {
 		}
 	}()
 
-	if err := server.ListenAndServe(); err != nil && !errors.Is(err, http.ErrServerClosed) {
+	if err := server.Serve(listener); err != nil && !errors.Is(err, http.ErrServerClosed) {
 		return fmt.Errorf("serve on %s: %w", opts.listen, err)
 	}
 	return nil
