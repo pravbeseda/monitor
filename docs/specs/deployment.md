@@ -62,14 +62,17 @@ with `--env-file` and nothing from inside it. The hub keeps systemd's own
 `EnvironmentFile=`.
 
 For the agent that file is the whole of its local configuration: its three keys are the
-three values [agent.md](agent.md) allows a node to hold. The hub keeps its *secrets* there
-and its product configuration in `hub.yaml` ([hub-config.md](hub-config.md)).
+three values [agent.md](agent.md) allows a node to hold. The hub keeps its *secrets* and the
+address it listens on there, and its product configuration in `hub.yaml`
+([hub-config.md](hub-config.md)). The listen address belongs with them because a free port is
+a fact about one host, not about the product.
 
 | Key | In | Meaning |
 |---|---|---|
 | `MONITOR_HUB` | `agent.env` | base URL of the hub |
 | `MONITOR_NODE` | `agent.env` | this node's name, as the hub knows it |
 | `MONITOR_TOKEN` | `agent.env` | this node's token |
+| `MONITOR_LISTEN` | `hub.env` | the loopback address the hub serves on, when the host's free port is not the default ([hub-config.md](hub-config.md#startup)) |
 | `MONITOR_TELEGRAM_TOKEN`, `MONITOR_TELEGRAM_CHAT_ID` | `hub.env` | notifier credentials, when the channel is Telegram |
 | the variables `hub.yaml` names in each node's `token_env` | `hub.env` | the token each node presents |
 

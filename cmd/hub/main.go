@@ -11,6 +11,7 @@ import (
 	"flag"
 	"fmt"
 	"io"
+	"net"
 	"net/http"
 	"os"
 	"os/signal"
@@ -30,6 +31,14 @@ const readHeaderTimeout = 10 * time.Second
 
 // shutdownTimeout bounds how long a stop waits for requests in flight.
 const shutdownTimeout = 10 * time.Second
+
+// defaultListen keeps the hub on loopback: it is reached through a reverse proxy
+// (docs/nginx-requirements.md), never directly.
+const defaultListen = "127.0.0.1:8080"
+
+// listenEnv names the address in the hub's environment file, which is where a per-host
+// setting belongs — the unit that starts the service stays a constant (ADR 0019).
+const listenEnv = "MONITOR_LISTEN"
 
 // errVersionRequested is --version answered on stdout: a request, like -h, not a failure.
 var errVersionRequested = errors.New("version requested")
@@ -132,6 +141,16 @@ func run(args []string, out io.Writer) error {
 	return nil
 }
 
+// listenAddress is the environment's address, or the product default. An empty variable is
+// a variable nobody set: systemd keeps a bare `MONITOR_LISTEN=` line, and an empty address
+// would serve port 80 on every interface.
+func listenAddress() string {
+	if addr := os.Getenv(listenEnv); addr != "" {
+		return addr
+	}
+	return defaultListen
+}
+
 // parseFlags reads the deployment paths. Its own errors are printed by the caller, so the
 // flag package stays quiet — except for -h, which is answered with the flag list on out.
 func parseFlags(args []string, out io.Writer) (options, error) {
@@ -142,7 +161,7 @@ func parseFlags(args []string, out io.Writer) (options, error) {
 	flags.BoolVar(&showVersion, "version", false, "print the version and exit")
 	flags.StringVar(&opts.config, "config", "", "path to the hub's YAML configuration")
 	flags.StringVar(&opts.db, "db", "", "path to the SQLite database")
-	flags.StringVar(&opts.listen, "listen", "127.0.0.1:8080", "address to serve on")
+	flags.StringVar(&opts.listen, "listen", listenAddress(), "address to serve on ("+listenEnv+" sets it for a service)")
 	if err := flags.Parse(args); err != nil {
 		if errors.Is(err, flag.ErrHelp) {
 			flags.SetOutput(out)
@@ -165,5 +184,26 @@ func parseFlags(args []string, out io.Writer) (options, error) {
 	if opts.db == "" {
 		return options{}, errors.New("--db is required: the database path has no default")
 	}
+	if err := requireLoopback(opts.listen); err != nil {
+		return options{}, err
+	}
 	return opts, nil
+}
+
+// requireLoopback refuses an address that faces the network. What guards the pages and the
+// read API is the reverse proxy in front of the hub (ADR 0023), so a hub reachable on a
+// public interface serves both to anyone who finds the port.
+func requireLoopback(addr string) error {
+	host, _, err := net.SplitHostPort(addr)
+	if err != nil {
+		return fmt.Errorf("listen address %q: %w", addr, err)
+	}
+	if host == "localhost" {
+		return nil
+	}
+	if ip := net.ParseIP(host); ip != nil && ip.IsLoopback() {
+		return nil
+	}
+	return fmt.Errorf("listen address %q is not loopback: the hub is reached through a reverse proxy, "+
+		"which is what authenticates its pages", addr)
 }
