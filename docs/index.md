@@ -11,6 +11,7 @@ entry point to every document in the project.
 | [poc.md](poc.md) | POC spec: scope, terminology, wire format, work plan, answered questions |
 | [install.md](install.md) | Install guide: one command, then the manual path — the hub host, install and verify a node, upgrade, uninstall |
 | [nginx-requirements.md](nginx-requirements.md) | What the hub needs from the reverse proxy in front of it, handed to the Ansible repository that owns that host |
+| [hub-host-node-requirements.md](hub-host-node-requirements.md) | What the Ansible play must do to install the agent on the hub host too, and how to check it |
 | [plans/stage-1-skeleton.md](plans/stage-1-skeleton.md) | Step plan for POC stage 1, kept as a record; plans now live in the task and the pull request ([0017](decisions/0017-one-spec-and-decision-gates.md)) |
 
 ## Architecture decisions
@@ -75,6 +76,7 @@ Reasoning from working sessions, including options that were rejected.
 | [2026-08-29](log/2026-08-29-munin-hub-plugin.md) | Proposal: a munin plugin on the hub host for off-the-shelf history graphs |
 | [2026-08-29](log/2026-08-29-stage-2-decisions.md) | Stage 2: what the evaluation design rejected, and what three review rounds changed |
 | [2026-09-06](log/2026-09-06-release-signing.md) | Release signing: the tools, the manifest and the key placement that lost |
+| [2026-09-13](log/2026-09-13-hub-host-node.md) | The agent on the hub host: loopback, and why every play restarts rather than detecting a change |
 
 ## Not written yet
 
