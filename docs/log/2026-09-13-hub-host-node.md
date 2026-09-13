@@ -31,7 +31,9 @@ Four review rounds tried to make a second play report no change. Each fix moved 
   gap: a binary replaced under a running service that was never restarted. Closing it needs
   `/proc/<pid>/exe` reading "(deleted)", and adds more tasks that carry the token.
 
-Chosen: every play enables and restarts the hub, waits for its listen address, and runs the
-agent's installer. The play is run by hand and rarely; a hub restart is a moment of `502` the
+Chosen: every play enables and restarts the hub, waits until the hub's own process holds its
+listen address, and runs the agent's installer. Waiting for the address to accept a
+connection was rejected in review: on an address another process already holds, the hub
+restart-loops while that process answers. The play is run by hand and rarely; a hub restart is a moment of `502` the
 proxy recovers from, and the agent's first tick runs as soon as it starts. The cost is a play
 that always reports a change for both services.

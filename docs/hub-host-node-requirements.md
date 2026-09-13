@@ -50,10 +50,12 @@ Nothing about the hub, the proxy or the firewall changes.
    good. So, unconditionally:
    - `systemctl enable` and restart `monitor-hub.service` — a first installer run without
      configuration leaves the service disabled;
-   - then wait until the listen address (requirement 4) accepts a connection, and fail the
-     play if it does not. The unit restarts on every exit, so `systemctl restart` succeeds
-     even for a hub that dies at once on a bad configuration; a hub that never listens is how
-     that shows.
+   - then wait until the listen address (requirement 4) is held by the service's own
+     process — the PID `ss -Hltnp` shows on that address equals
+     `systemctl show -p MainPID --value monitor-hub.service` — and fail the play if it never
+     is. The unit restarts on every exit, so `systemctl restart` succeeds even for a hub that
+     dies at once on a bad configuration or on an address already taken; a connection alone
+     proves nothing then, because whatever holds the address accepts it.
 
    The restart costs a moment of `502` behind the proxy, which the proxy recovers from by
    itself ([nginx-requirements.md](nginx-requirements.md), requirement 10), and a missed tick
