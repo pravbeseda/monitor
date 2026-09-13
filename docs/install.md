@@ -151,7 +151,8 @@ go build -o dist/monitor-agent ./cmd/agent
 ```
 
 A binary built this way reports the development version rather than a release version —
-`./dist/monitor-agent --version` says so, and so does the hub for a node running it.
+`./dist/monitor-agent --version` says so, and so does the hub's page `/`, beside the name of
+a node running it.
 
 ## 2. Set up the hub host
 

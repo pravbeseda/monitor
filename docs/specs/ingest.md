@@ -40,6 +40,8 @@ Authorization: Bearer <per-node token>
 ```
 
 - `node` — must match the node the token belongs to.
+- `agent_version` — the version the agent binary reports; the hub keeps the one from the
+  node's latest request and shows it on its page.
 - `config_version` — the configuration the agent currently holds; empty string on first
   run. Opaque to the agent: it compares for equality, never for order.
 - `ts` — request time by the agent's clock, RFC 3339 UTC.
@@ -109,7 +111,7 @@ One row = one test. Anchors: `spec: ingest.md#<heading>`.
 
 | Request | Response | Side effect |
 |---|---|---|
-| valid request | 200 | all measurements stored; node's last-seen set to hub receipt time |
+| valid request | 200 | all measurements stored; node's last-seen set to hub receipt time; node's agent version replaced by the request's |
 | valid request, `measurements` empty | 200 | last-seen updated, nothing else |
 | measurement with a metric id the hub's config does not declare | 200 | stored; evaluation ignores it (out of scope here) |
 | measurement identical to a stored one (same node, metric, labels, ts to the millisecond) | 200 | duplicate silently skipped |

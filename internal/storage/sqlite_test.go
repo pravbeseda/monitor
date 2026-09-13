@@ -210,6 +210,29 @@ func TestStatesReturnsTheLatestValueOfEachSeries(t *testing.T) {
 	}
 }
 
+// spec: ingest.md#storage — valid request: node's agent version replaced by the request's.
+func TestStatesReturnsTheAgentVersionOfTheLatestRequest(t *testing.T) {
+	db := open(t)
+	received := time.Date(2026, 8, 28, 10, 0, 5, 0, time.UTC)
+	older := ingest("laptop-a", received)
+	newer := ingest("laptop-a", received.Add(5*time.Minute))
+	newer.AgentVersion = "0.2.0"
+
+	for _, in := range []Ingest{older, newer} {
+		if err := db.SaveIngest(context.Background(), in); err != nil {
+			t.Fatalf("SaveIngest: %v", err)
+		}
+	}
+
+	states, err := db.States(context.Background())
+	if err != nil {
+		t.Fatalf("States: %v", err)
+	}
+	if len(states) != 1 || states[0].AgentVersion != "0.2.0" {
+		t.Errorf("states = %+v, want the version the upgraded agent reported", states)
+	}
+}
+
 func TestStatesIncludesANodeThatSentNoMeasurements(t *testing.T) {
 	db := open(t)
 	received := time.Date(2026, 8, 28, 10, 0, 5, 0, time.UTC)

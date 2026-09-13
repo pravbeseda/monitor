@@ -11,6 +11,7 @@ import (
 
 	"github.com/pravbeseda/monitor/internal/hub"
 	"github.com/pravbeseda/monitor/internal/storage"
+	"github.com/pravbeseda/monitor/internal/version"
 )
 
 var lastSeen = time.Date(2026, 8, 28, 10, 5, 0, 0, time.UTC)
@@ -77,6 +78,30 @@ func TestPageShowsEveryNodeWithItsLatestValues(t *testing.T) {
 		if !strings.Contains(body, want) {
 			t.Errorf("page does not show %q", want)
 		}
+	}
+}
+
+func TestPageShowsTheHubVersionBesideTheTitle(t *testing.T) {
+	rec := show(t, stored{states: []storage.NodeState{laptop}}, "/", "")
+
+	want := "<h1>Monitor <small>" + version.Current + "</small></h1>"
+	if !strings.Contains(rec.Body.String(), want) {
+		t.Errorf("page = %q, want the heading %q", rec.Body.String(), want)
+	}
+}
+
+func TestPageShowsEachNodesAgentVersionBesideItsName(t *testing.T) {
+	upgraded := laptop
+	upgraded.AgentVersion = "0.2.0"
+	unknown := storage.NodeState{Node: "server-b", LastSeen: lastSeen}
+
+	body := show(t, stored{states: []storage.NodeState{upgraded, unknown}}, "/", "").Body.String()
+
+	if want := "<h2>laptop-a <small>0.2.0</small></h2>"; !strings.Contains(body, want) {
+		t.Errorf("page = %q, want the heading %q", body, want)
+	}
+	if want := "<h2>server-b</h2>"; !strings.Contains(body, want) {
+		t.Errorf("page = %q, want a node with no reported version headed %q", body, want)
 	}
 }
 

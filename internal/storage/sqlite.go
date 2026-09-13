@@ -236,7 +236,7 @@ func states(ctx context.Context, from querier) ([]NodeState, error) {
 }
 
 func nodeStates(ctx context.Context, from querier) (map[string]*NodeState, []string, error) {
-	rows, err := from.QueryContext(ctx, `SELECT node, last_seen FROM nodes ORDER BY node`)
+	rows, err := from.QueryContext(ctx, `SELECT node, last_seen, agent_version FROM nodes ORDER BY node`)
 	if err != nil {
 		return nil, nil, fmt.Errorf("read nodes: %w", err)
 	}
@@ -245,15 +245,15 @@ func nodeStates(ctx context.Context, from querier) (map[string]*NodeState, []str
 	states := map[string]*NodeState{}
 	var order []string
 	for rows.Next() {
-		var node, lastSeen string
-		if err := rows.Scan(&node, &lastSeen); err != nil {
+		var node, lastSeen, agentVersion string
+		if err := rows.Scan(&node, &lastSeen, &agentVersion); err != nil {
 			return nil, nil, fmt.Errorf("read nodes: %w", err)
 		}
 		seen, err := parseTime(lastSeen)
 		if err != nil {
 			return nil, nil, fmt.Errorf("node %s: %w", node, err)
 		}
-		states[node] = &NodeState{Node: node, LastSeen: seen}
+		states[node] = &NodeState{Node: node, LastSeen: seen, AgentVersion: agentVersion}
 		order = append(order, node)
 	}
 	if err := rows.Err(); err != nil {
