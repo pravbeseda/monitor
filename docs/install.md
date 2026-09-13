@@ -208,7 +208,10 @@ systemctl status monitor-hub.service
 
 A healthy start writes one line to the journal —
 `monitor-hub <version> listening on 127.0.0.1:8080 (nodes: 2, notify: log)` — and the page
-answers on the host itself: `curl -s localhost:8080/ | head`. The hub binds to loopback only,
+answers on the host itself: `curl -s localhost:8080/ | head`. When that port is already taken
+on the host, set `MONITOR_LISTEN` in `hub.env` to another loopback address, for example
+`MONITOR_LISTEN=127.0.0.1:8090`, and restart the service: the logged line names the address
+in force, and the reverse proxy has to be pointed at the same one. The hub binds to loopback only,
 so nothing reaches it from outside until the nginx vhost exists (see
 [What is not covered yet](#what-is-not-covered-yet)).
 
@@ -366,7 +369,9 @@ deliberate step: the database is the whole history.
 The other half of the stage-3 bullet in [poc.md](poc.md) does not exist yet, and nothing
 above works around it: the nginx vhost and TLS in front of the hub, per-node token issuance,
 and authentication on the web page. Until they land, the hub is reachable on its own host
-only, over loopback.
+only, over loopback. What that proxy has to do is written down in
+[nginx-requirements.md](nginx-requirements.md) and applied from the Ansible repository that
+owns the hub host ([ADR 0023](decisions/0023-proxy-holds-the-web-perimeter.md)).
 
 Nothing updates a machine unattended: a new version is section 0's command or step 5's, both
 run by hand. The timer that would do it by itself is

@@ -1,5 +1,6 @@
 # The hub, as a system service. Every path is fixed by docs/specs/deployment.md; the listen
-# address is not passed, because binding to loopback is the binary's own default.
+# address is not passed, because the binary defaults to loopback and reads MONITOR_LISTEN
+# from the environment file below when a host needs another port.
 
 [Unit]
 Description=Monitor hub
