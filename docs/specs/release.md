@@ -1,9 +1,9 @@
 # Spec: Release
 
 - **Status:** approved
-- **Owns:** `.github/workflows/release.yml`, `deploy/verify-release.sh`,
-  `deploy/tag-version.sh`, `deploy/release-signing-key.pub`, and the version string both
-  binaries report — its use on
+- **Owns:** `.github/workflows/release.yml`, `.github/workflows/auto-tag.yml`,
+  `deploy/verify-release.sh`, `deploy/tag-version.sh`, `deploy/next-tag.sh`,
+  `deploy/release-signing-key.pub`, and the version string both binaries report — its use on
   the wire stays [ingest.md](ingest.md)
 - **Decisions:** [0005](../decisions/0005-poc-stack.md),
   [0007](../decisions/0007-public-repository.md),
@@ -18,6 +18,11 @@ A tag turns a commit into binaries a machine can install without a Go toolchain,
 signature that says which binaries this repository released under that version. This spec
 owns what a release contains, when one appears, and how anyone checks an artifact against
 that signature.
+
+A merge into `main` tags itself: the next version is chosen from the tags already there and
+the merged pull request's labels, and the tag is what releases, exactly as a tag pushed by
+hand does. Tagging by hand stays the other way in, and the only one left once the tagging
+workflow is disabled.
 
 What the signature defends is transport: a mirror, a proxy, a corrupted download, an asset
 swapped for another. It says the release was assembled by whoever holds the private key; it
@@ -98,11 +103,12 @@ gh api --method POST repos/pravbeseda/monitor/environments/release/deployment-br
 ```
 
 Required reviewers on top of that policy are available and deliberately not set: they would
-make every release wait for a click. So the guarantee is exactly this and no more — the key
+make every release wait for a click, and a merge releases by default
+([Tagging a merge](#tagging-a-merge)). So the guarantee is exactly this and no more — the key
 is unreachable from a branch, and what signs is a `v*` tag on a commit the run finds on
-`main`. A credential that can push such a tag can therefore sign; closing that is what
-required reviewers would be for, and turning them on is a settings change, not a code
-change.
+`main`. A credential that can push such a tag can therefore sign, and so can anyone who can
+merge into `main`, since a merge tags itself; closing that is what required reviewers would
+be for, and turning them on is a settings change, not a code change.
 
 ### Generating and rotating the key
 
@@ -133,18 +139,22 @@ replace, because a rotation is then hands on every machine. The installer of
 moment; the timer that makes it resident is, and where an offline copy lives has to be
 answered before that unit of work, not after.
 
-The shell this adds — `verify-release.sh` and `tag-version.sh` — is POSIX `sh` and stands
-under the same lint gate as the rest of the shell this project ships
+The shell this adds — `verify-release.sh`, `tag-version.sh` and `next-tag.sh` — is POSIX
+`sh` and stands under the same lint gate as the rest of the shell this project ships
 ([0021](../decisions/0021-shell-is-linted-too.md)).
 
 ## Behaviour
 
-One row = one test. Anchors: `spec: release.md#<heading>`. The publishing rows are the
-exception the project's own rule allows for infrastructure: they describe what a run does on
-GitHub and are proved by a run. The one piece of that with logic of its own — the tag
-grammar — is `deploy/tag-version.sh`, and it is tested here like anything else.
+One row = one test. Anchors: `spec: release.md#<heading>`. The publishing rows and the rows
+of the tagging workflow are the exception the project's own rule allows for infrastructure:
+they describe what a run does on GitHub and are proved by a run. The pieces of that with logic of their own — the tag grammar
+in `deploy/tag-version.sh` and the choice of the next tag in `deploy/next-tag.sh` — are
+tested here like anything else.
 
 ### Publishing
+
+A tag pushed and the release workflow started for a tag are the same event here: every row
+below holds for both, and [Tagging a merge](#tagging-a-merge) is what starts it for a tag.
 
 | Event | Outcome |
 |---|---|
@@ -162,6 +172,70 @@ grammar — is `deploy/tag-version.sh`, and it is tested here like anything else
 | a tag deleted, re-created on another commit and pushed, its release already published | the published release keeps every asset it had; the run fails |
 | a draft left by an earlier run that died before publishing | it is deleted, and this run publishes its own |
 | the committed public key stops matching the signing secret | no release: the run verifies its own manifest with the committed key before publishing anything |
+| the release workflow started on a ref that is not a tag, such as a branch named `v1.2.3` | no release; the run fails, naming the ref it refused |
+
+### Tagging a merge
+
+A push to `main` — in practice the merge of a pull request — is tagged by
+`.github/workflows/auto-tag.yml`, which then starts the release workflow for that tag. A tag
+the workflow creates with the run's own token starts no other workflow, which is why it
+starts the release explicitly rather than relying on the tag push.
+
+A pull request chooses how far the version moves with at most one label; without one, a
+merge is a patch release. The labels are repository settings, made once:
+
+```sh
+gh label create release:minor --description "Merging releases the next minor version"
+gh label create release:major --description "Merging releases the next major version"
+gh label create release:none --description "Merging releases nothing"
+```
+
+**Switching to releasing by hand** is `gh workflow disable auto-tag.yml`, and
+`gh workflow enable auto-tag.yml` switches back. Nothing in the tree changes, and a tag
+pushed by hand releases either way.
+
+| Event | Outcome |
+|---|---|
+| a pull request without a `release:` label merged, highest tag `v1.2.3` | tag `v1.2.4` on the merge commit, and a release named `v1.2.4` appears |
+| the same, labelled `release:minor` | tag `v1.3.0`, and its release |
+| the same, labelled `release:major` | tag `v2.0.0`, and its release |
+| the same, labelled `release:none` | no tag and no release |
+| the same, carrying two different `release:` labels | no tag and no release; the run fails, naming both labels, and releasing that merge is a tag pushed by hand |
+| a commit pushed to `main` with no pull request behind it | no tag and no release; the run fails, naming the commit |
+| several pull requests merged in quick succession | each merge commit gets its own tag, in the order merged, each moved by its own labels |
+| a merge that changes only files under `docs/` or files ending in `.md` | no tag and no release, and a `release:` label on it is not applied |
+| a merge that changes documentation and anything else | tagged and released like any other merge |
+| a stray tag `v9.0.0` on a commit not on `main`, then a pull request merged | tag `v9.0.1`: every release tag in the repository counts toward the highest |
+| the tag a run chose pushed by someone else before the run creates it | no tag from that run; it fails, naming the tag, and re-running it takes the next version |
+| the labels changed after the merge, before its run reads them | the labels as the run reads them decide |
+| a tag created, and starting its release then fails | the tagging run fails; re-running it starts the release for that tag |
+| the tagging run re-run for a merge it already tagged, that tag with no published release | no second tag; a release run for that tag is started, and it publishes unless an earlier one already did |
+| the tagging run re-run for a merge whose tag has a published release | no second tag and no release run |
+| the tagging workflow disabled, a pull request merged | no tag and no release |
+| the tagging workflow disabled, tag `v1.2.4` pushed by hand | a release named `v1.2.4` appears |
+| a tag the tagging workflow created, whose release run then fails | the tag stays; the next merge takes the version after it |
+
+`deploy/next-tag.sh [label...]` reads the repository's tags on stdin, one per line, and
+prints the tag the next release takes. **The exit status is the verdict**; on refusal what is
+printed on stderr is diagnostic.
+
+| Given | Outcome |
+|---|---|
+| tags `v1.2.3` and `v1.10.0`, no labels | prints `v1.10.1`: versions are compared part by part as numbers, not as text |
+| tag `v1.2.3`, label `release:minor` | prints `v1.3.0` |
+| tag `v1.2.3`, label `release:major` | prints `v2.0.0` |
+| tag `v1.2.3`, label `release:none` | prints nothing and exits 0 |
+| tag `v1.2.3`, labels that do not start with `release:` beside `release:minor` | prints `v1.3.0`: other labels are ignored |
+| tag `v1.2.3`, label `Release:Minor` | prints `v1.3.0`: labels are matched regardless of case, as GitHub names them |
+| tag `v1.2.3`, `release:minor` given twice | prints `v1.3.0` |
+| tag `v1.2.3`, labels `release:minor` and `release:major` | exits non-zero, naming both |
+| tag `v1.2.3`, label `release:patch` or `release:` | exits non-zero, naming the label |
+| no tags, no labels | prints `v0.0.1` |
+| no tags, label `release:minor` | prints `v0.1.0` |
+| no tags, label `release:major` | prints `v1.0.0` |
+| lines that name no version — `v1.2`, `latest`, `v1.2.3-rc1`, `v01.2.3`, `v2.0.0` followed by a space, a blank line — beside `v1.0.0` | ignored: prints `v1.0.1` |
+| tag `v1.2.999999999`, no labels | exits non-zero, naming the tag it could not make: its patch would be too wide to be a version |
+| tag `v999999999.0.0`, label `release:major` | exits non-zero, naming the tag it could not make |
 
 ### The version a binary reports
 
@@ -215,6 +289,8 @@ what `/usr/bin/openssl` is on macOS, prints `Verified OK` on runs that fail.
   ([0007](../decisions/0007-public-repository.md)).
 - A release carries the six binaries, the installer archive, a manifest and a signature, and
   nothing else.
+- The tagging job holds no secret, runs no action but `actions/checkout` pinned by commit,
+  and leaves no credential in the checkout it makes.
 - The archive is packed reproducibly: the same commit gives the same bytes, so a digest that
   changed means the contents did.
 
@@ -237,10 +313,21 @@ what `/usr/bin/openssl` is on macOS, prints `Verified OK` on runs that fail.
 - **A prerelease.** There is no channel: the grammar is `MAJOR.MINOR.PATCH`, each part a
   number of at most nine digits — versions are compared with each other, and a part wider
   than that is one no shell compares ([installer.md](installer.md)).
+- **A documentation-only push that runs anyway.** GitHub skips its path filter when it cannot
+  compute a push's diff, as for a push of more than a thousand commits; such a push is tagged
+  like any other.
+- **Tagging moves who signs, not what can**: merging into `main` now signs with no step of
+  its own, and the key stays behind the `v*` tag policy — [The key](#the-key) says both.
+- **Every merge ships the installer.** Under [0022](../decisions/0022-updates-are-pulled.md)
+  point 6 every machine runs the installer of the newest release whatever the hub's target,
+  so that target holds back the binaries and not the installer. A merge that should not reach
+  the fleet yet carries `release:none`.
 - **Mutable tags and assets.** Nothing in a workflow can stop a write-scoped credential from
   moving a tag or replacing an asset; the invariants above bind runs, not people. A ruleset
   on `refs/tags/v*` that blocks deletion and force-pushes is what binds people, and it is a
-  repository setting rather than a file in the tree.
+  repository setting rather than a file in the tree. A ruleset that also restricts who may
+  *create* a `v*` tag refuses the tagging run as well, and turning one on means revisiting
+  [Tagging a merge](#tagging-a-merge).
 
 ## Out of scope
 
