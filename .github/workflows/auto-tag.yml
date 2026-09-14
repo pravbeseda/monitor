@@ -58,9 +58,10 @@ jobs:
           done
 
           # GitHub does not promise the queue keeps merge order, and a failed run can be re-run
-          # after later merges: a commit a later tag already contains shipped in that release,
-          # and tagging it now would give older code the higher version.
-          for candidate in $(git tag --contains "$GITHUB_SHA" --list 'v*'); do
+          # after later merges: a commit a later tag on main already contains shipped in that
+          # release, and tagging it now would give older code the higher version. A tag off main
+          # counts for nothing here, since release.yml refuses to release it.
+          for candidate in $(git tag --contains "$GITHUB_SHA" --merged origin/main --list 'v*'); do
             if deploy/tag-version.sh "$candidate" >/dev/null 2>&1; then
               echo "$GITHUB_SHA already shipped in $candidate: nothing to tag"
               exit 0

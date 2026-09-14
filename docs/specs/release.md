@@ -202,11 +202,12 @@ pushed by hand releases either way.
 | the same, labelled `release:none` | no tag and no release |
 | the same, carrying two different `release:` labels | no tag and no release; the run fails, naming both labels, and releasing that merge is a tag pushed by hand |
 | a commit pushed to `main` with no pull request behind it | no tag and no release; the run fails, naming the commit |
-| several pull requests merged in quick succession | each merge commit gets its own tag, each moved by its own labels, and a later merge never gets a lower version than an earlier one |
+| several pull requests merged in quick succession | a later merge never gets a lower version than an earlier one; each merge gets its own tag, moved by its own labels, unless the next row applies to it |
 | a merge whose run tags only after a later merge was already tagged, whether its run waited longer or was re-run | no tag and no release: its commits shipped in the later release, and its label is not applied |
 | a merge that changes only files under `docs/` or files ending in `.md` | no tag and no release, and a `release:` label on it is not applied |
 | a merge that changes documentation and anything else | tagged and released like any other merge |
 | a stray tag `v9.0.0` on a commit not on `main`, then a pull request merged | tag `v9.0.1`: every release tag in the repository counts toward the highest |
+| a stray release tag on a branch commit built on top of a merge, then that merge's untagged run re-run | the merge is tagged and released as usual: only a tag on `main` counts as having shipped it |
 | the tag a run chose pushed by someone else before the run creates it | no tag from that run; it fails, naming the tag, and re-running it takes the next version |
 | the labels changed after the merge, before its run reads them | the labels as the run reads them decide |
 | a tag created, and starting its release then fails | the tagging run fails; re-running it starts the release for that tag |
