@@ -23,12 +23,12 @@ import (
 
 const bootstrap = "./monitor-install.sh"
 
-// origin is a synthetic release: the assets a run may ask for, the manifest that names them
-// and the signature over it.
+// origin is a synthetic set of releases: the assets a run may ask for, the manifest that
+// names them and the signature over it, per version. version is the newest.
 type origin struct {
 	dir     string            // where the assets live on disk
-	assets  map[string][]byte // by asset name, guarded by mu: the server reads it
-	version string
+	assets  map[string][]byte // by "<version>/<asset name>", guarded by mu: the server reads it
+	version string            // guarded by mu too
 	pub     string
 	priv    string
 	url     string
@@ -37,23 +37,52 @@ type origin struct {
 }
 
 // set, remove and requests are the only ways the test touches what the server serves, so the
-// handler's goroutine and the test's never reach the map unsynchronised.
+// handler's goroutine and the test's never reach the map unsynchronised. They act on the
+// newest release.
 func (o *origin) set(name string, body []byte) {
 	o.mu.Lock()
 	defer o.mu.Unlock()
-	o.assets[name] = body
+	o.assets[o.version+"/"+name] = body
 }
 
 func (o *origin) get(name string) []byte {
 	o.mu.Lock()
 	defer o.mu.Unlock()
-	return o.assets[name]
+	return o.assets[o.version+"/"+name]
 }
 
 func (o *origin) remove(name string) {
 	o.mu.Lock()
 	defer o.mu.Unlock()
-	delete(o.assets, name)
+	delete(o.assets, o.version+"/"+name)
+}
+
+// tamper replaces one asset of any release, leaving its manifest and signature as they were.
+func (o *origin) tamper(version, name string, body []byte) {
+	o.mu.Lock()
+	defer o.mu.Unlock()
+	o.assets[version+"/"+name] = body
+}
+
+func (o *origin) setNewest(version string) {
+	o.mu.Lock()
+	defer o.mu.Unlock()
+	o.version = version
+}
+
+// publish adds an older release beside the newest: both binaries reporting that version, the
+// given installer archive, and a manifest signed with the origin's key.
+func (o *origin) publish(t *testing.T, version string, archive []byte) {
+	t.Helper()
+	o.mu.Lock()
+	for _, role := range []string{"agent", "hub"} {
+		o.assets[version+"/"+binaryName(role, version)] = []byte("#!/bin/sh\necho monitor-" + role + " " + version + "\n")
+	}
+	if archive != nil {
+		o.assets[version+"/monitor-installer-"+version+".tar.gz"] = archive
+	}
+	o.mu.Unlock()
+	o.signRelease(t, version)
 }
 
 func (o *origin) requests() []string {
@@ -67,27 +96,28 @@ func newOrigin(t *testing.T) *origin {
 	dir := t.TempDir()
 	o := &origin{dir: dir, assets: map[string][]byte{}, version: "1.2.3"}
 	o.priv, o.pub = keyPair(t, dir, "origin")
-	o.assets[o.binaryName("agent")] = []byte("#!/bin/sh\necho monitor-agent 1.2.3\n")
-	o.assets[o.binaryName("hub")] = []byte("#!/bin/sh\necho monitor-hub 1.2.3\n")
-	o.assets["monitor-installer-"+o.version+".tar.gz"] = installerArchive(t, nil)
+	o.set(o.binaryName("agent"), []byte("#!/bin/sh\necho monitor-agent 1.2.3\n"))
+	o.set(o.binaryName("hub"), []byte("#!/bin/sh\necho monitor-hub 1.2.3\n"))
+	o.set("monitor-installer-"+o.version+".tar.gz", installerArchive(t, nil))
 	o.sign(t)
 
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		o.mu.Lock()
 		o.asked = append(o.asked, r.URL.Path)
+		newest := o.version
 		o.mu.Unlock()
 		switch {
 		case r.URL.Path == "/releases/latest":
-			http.Redirect(w, r, "/releases/tag/v"+o.version, http.StatusFound)
+			http.Redirect(w, r, "/releases/tag/v"+newest, http.StatusFound)
 		case strings.HasPrefix(r.URL.Path, "/releases/tag/"):
 			_, _ = w.Write([]byte("the release page"))
-		case strings.HasPrefix(r.URL.Path, "/releases/download/"):
+		case strings.HasPrefix(r.URL.Path, "/releases/download/v"):
 			name := filepath.Base(r.URL.Path)
 			tag := filepath.Base(filepath.Dir(r.URL.Path))
 			o.mu.Lock()
-			body, ok := o.assets[name]
+			body, ok := o.assets[strings.TrimPrefix(tag, "v")+"/"+name]
 			o.mu.Unlock()
-			if !ok || tag != "v"+o.version {
+			if !ok {
 				http.Error(w, "no such asset", http.StatusNotFound)
 				return
 			}
@@ -103,32 +133,48 @@ func newOrigin(t *testing.T) *origin {
 
 // binaryName is the name a run builds for itself, so the test and the script have to agree.
 func (o *origin) binaryName(role string) string {
-	goos, arch := runtime.GOOS, runtime.GOARCH
-	return fmt.Sprintf("monitor-%s-%s-%s-%s", role, o.version, goos, arch)
+	o.mu.Lock()
+	defer o.mu.Unlock()
+	return binaryName(role, o.version)
 }
 
-// sign rewrites the manifest over whatever the assets currently are, and signs it.
+func binaryName(role, version string) string {
+	return fmt.Sprintf("monitor-%s-%s-%s", role, version, hostPlatform())
+}
+
+// sign rewrites the newest release's manifest over whatever its assets currently are, and
+// signs it.
 func (o *origin) sign(t *testing.T) {
 	t.Helper()
 	o.mu.Lock()
+	version := o.version
+	o.mu.Unlock()
+	o.signRelease(t, version)
+}
+
+func (o *origin) signRelease(t *testing.T, version string) {
+	t.Helper()
+	o.mu.Lock()
 	defer o.mu.Unlock()
+	prefix := version + "/"
 	manifest := ""
-	for name, body := range o.assets {
-		if name == "SHA256SUMS" || name == "SHA256SUMS.sig" {
+	for key, body := range o.assets {
+		name, ok := strings.CutPrefix(key, prefix)
+		if !ok || name == "SHA256SUMS" || name == "SHA256SUMS.sig" {
 			continue
 		}
 		sum := sha256.Sum256(body)
 		manifest += fmt.Sprintf("%s  %s\n", hex.EncodeToString(sum[:]), name)
 	}
-	o.assets["SHA256SUMS"] = []byte(manifest)
-	path := filepath.Join(o.dir, "SHA256SUMS")
+	o.assets[prefix+"SHA256SUMS"] = []byte(manifest)
+	path := filepath.Join(o.dir, "SHA256SUMS-"+version)
 	write(t, path, manifest)
 	openssl(t, "dgst", "-sha256", "-sign", o.priv, "-out", path+".sig", path)
 	signature, err := os.ReadFile(path + ".sig")
 	if err != nil {
 		t.Fatal(err)
 	}
-	o.assets["SHA256SUMS.sig"] = signature
+	o.assets[prefix+"SHA256SUMS.sig"] = signature
 }
 
 // installerArchive is what a release carries: install.sh and the per-role installers, which
@@ -136,14 +182,23 @@ func (o *origin) sign(t *testing.T) {
 // verbatim, which is how a hostile archive is built.
 func installerArchive(t *testing.T, extra map[string]*tar.Header) []byte {
 	t.Helper()
+	return packInstaller(t, map[string]string{
+		"install.sh":       dispatcherScript,
+		"install-agent.sh": recordingInstaller("agent"),
+		"install-hub.sh":   recordingInstaller("hub"),
+	}, extra)
+}
+
+// dispatcherScript stands in for install.sh: it hands over to the installer for the role.
+const dispatcherScript = "#!/bin/sh\nrole=$1\nshift\nexec sh \"$(dirname \"$0\")/install-$role.sh\" \"$@\"\n"
+
+// packInstaller packs files, by name, into the one top-level directory an installer archive
+// holds, and adds the extra headers verbatim.
+func packInstaller(t *testing.T, files map[string]string, extra map[string]*tar.Header) []byte {
+	t.Helper()
 	var buffer bytes.Buffer
 	zip := gzip.NewWriter(&buffer)
 	archive := tar.NewWriter(zip)
-	files := map[string]string{
-		"install.sh":       "#!/bin/sh\nrole=$1\nshift\nexec sh \"$(dirname \"$0\")/install-$role.sh\" \"$@\"\n",
-		"install-agent.sh": recordingInstaller("agent"),
-		"install-hub.sh":   recordingInstaller("hub"),
-	}
 	for name, body := range files {
 		header := &tar.Header{Name: "monitor-installer/" + name, Mode: 0o755, Size: int64(len(body))}
 		if err := archive.WriteHeader(header); err != nil {
@@ -546,7 +601,7 @@ func TestABootstrapRunRefusesToGoBackwards(t *testing.T) {
 	}
 }
 
-// spec: installer.md#the-two-halves-and-what-is-not-frozen-yet — the key the script carries is
+// spec: installer.md#the-two-halves — the key the script carries is
 // the key the repository publishes; two copies that could drift are worse than one.
 func TestTheCarriedKeyIsTheShippedKey(t *testing.T) {
 	script, err := os.ReadFile(bootstrap)
@@ -562,7 +617,7 @@ func TestTheCarriedKeyIsTheShippedKey(t *testing.T) {
 	}
 }
 
-// spec: installer.md#the-two-halves-and-what-is-not-frozen-yet — the fingerprint the install
+// spec: installer.md#the-two-halves — the fingerprint the install
 // guide publishes is what an operator checks a downloaded script against, so it has to be
 // this repository's key and not a stale copy of an older one.
 func TestTheGuidePublishesThisKeysFingerprint(t *testing.T) {
@@ -605,11 +660,9 @@ func TestAVersionGivenIsTheVersionInstalled(t *testing.T) {
 // comparison of the two as text agrees with.
 func TestAVersionIsComparedNumerically(t *testing.T) {
 	o := newOrigin(t)
-	o.version = "1.10.0"
+	o.setNewest("1.10.0")
 	o.set(o.binaryName("agent"), []byte("#!/bin/sh\necho monitor-agent 1.10.0\n"))
 	o.set("monitor-installer-1.10.0.tar.gz", installerArchive(t, nil))
-	o.remove("monitor-agent-1.2.3-" + hostPlatform())
-	o.remove("monitor-installer-1.2.3.tar.gz")
 	o.sign(t)
 
 	run := newBootstrapRun(t, o, "agent", "--hub", "https://hub.example.com", "--node", "laptop-a")

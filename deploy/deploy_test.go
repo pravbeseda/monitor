@@ -18,10 +18,15 @@ import (
 const (
 	agentUnit  = "systemd/monitor-agent.service"
 	hubUnit    = "systemd/monitor-hub.service"
+	updateUnit = "systemd/monitor-hub-update.service"
+	timerUnit  = "systemd/monitor-hub-update.timer"
 	agentPlist = "launchd/io.github.pravbeseda.monitor-agent.plist"
 	agentEnv   = "agent.env.example"
 	hubEnv     = "hub.env.example"
 )
+
+// keptScript is where the hub host keeps the install script its update timer runs.
+const keptScript = "/usr/local/libexec/monitor/monitor-install.sh"
 
 // exampleHub is the only URL any file here may carry.
 const exampleHub = "https://hub.example.com"
@@ -31,7 +36,7 @@ const exampleHub = "https://hub.example.com"
 const plistDoctype = `<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">`
 
 // shipped is every file this directory installs on a node.
-var shipped = []string{agentUnit, hubUnit, agentPlist, agentEnv, hubEnv}
+var shipped = []string{agentUnit, hubUnit, updateUnit, timerUnit, agentPlist, agentEnv, hubEnv}
 
 // layout is the spec's table read from the other side: the paths each unit has to name.
 var layout = []struct {
@@ -55,6 +60,15 @@ var layout = []struct {
 		},
 	},
 	{
+		name:  "hub update unit",
+		file:  updateUnit,
+		paths: []string{keptScript},
+	},
+	{
+		name: "hub update timer",
+		file: timerUnit,
+	},
+	{
 		name: "agent plist",
 		file: agentPlist,
 		paths: []string{
@@ -75,6 +89,10 @@ var allowedNames = map[string]bool{
 	"monitor-agent.log":                  true,
 	"network-online.target":              true,
 	"multi-user.target":                  true,
+	"timers.target":                      true,
+	"hub.target":                         true,
+	"monitor-install.sh":                 true,
+	"installer.md":                       true,
 	"io.github.pravbeseda.monitor-agent": true,
 	"hub.example.com":                    true,
 	"deployment.md":                      true,
@@ -149,9 +167,9 @@ func TestUnitsNameNoPathTheSpecDoesNotFix(t *testing.T) {
 	}
 }
 
-// agentCommand is the command line each service definition starts, however that system
+// serviceCommand is the command line each service definition starts, however that system
 // spells one: an ExecStart line for systemd, a ProgramArguments array for launchd.
-func agentCommand(t *testing.T, file string) []string {
+func serviceCommand(t *testing.T, file string) []string {
 	t.Helper()
 	if filepath.Ext(file) == ".plist" {
 		var doc struct {
@@ -187,7 +205,7 @@ func TestTheAgentServicesStartTheBinaryWithItsEnvironmentFile(t *testing.T) {
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
 			want := []string{"/usr/local/bin/monitor-agent", "--env-file", tc.envFile}
-			if got := agentCommand(t, tc.file); !slices.Equal(got, want) {
+			if got := serviceCommand(t, tc.file); !slices.Equal(got, want) {
 				t.Errorf("%s starts %q, want %q", tc.file, got, want)
 			}
 		})
@@ -347,6 +365,69 @@ func TestBothUnitsComeBackAfterAReboot(t *testing.T) {
 				}
 			}
 		})
+	}
+}
+
+// spec: deployment.md#the-services — the update runs the kept script as root, once, after the
+// network is up; the command line is part of what a kept script depends on
+// (installer.md#the-handover).
+func TestTheUpdateUnitRunsTheKeptScriptOnce(t *testing.T) {
+	body := code(t, updateUnit)
+	want := []string{keptScript, "hub", "--follow-target"}
+	if got := serviceCommand(t, updateUnit); !slices.Equal(got, want) {
+		t.Errorf("%s starts %q, want %q", updateUnit, got, want)
+	}
+	for _, line := range []string{"Type=oneshot", "Wants=network-online.target", "After=network-online.target"} {
+		if !strings.Contains(body, line) {
+			t.Errorf("%s has no %s", updateUnit, line)
+		}
+	}
+	for _, unwanted := range []string{"User=", "Group="} {
+		if strings.Contains(body, unwanted) {
+			t.Errorf("%s sets %s; the update writes where only root may", updateUnit, unwanted)
+		}
+	}
+}
+
+// spec: deployment.md#the-services — a failed run is a failed unit, and what the run prints
+// reaches the system log: nothing may swallow either.
+func TestTheUpdateUnitReportsWhatTheRunDid(t *testing.T) {
+	body := code(t, updateUnit)
+	for _, unwanted := range []string{"SuccessExitStatus=", "StandardOutput=", "StandardError="} {
+		if strings.Contains(body, unwanted) {
+			t.Errorf("%s sets %s; a run's status and output are the unit's as they are", updateUnit, unwanted)
+		}
+	}
+}
+
+// spec: deployment.md#the-services — the update does not depend on the hub, and only the timer
+// is armed at boot: a service with an [Install] section would run an update on every boot.
+func TestTheUpdateIsStartedByItsTimerAlone(t *testing.T) {
+	body := code(t, updateUnit)
+	for _, unwanted := range []string{"[Install]", "monitor-hub.service"} {
+		if strings.Contains(body, unwanted) {
+			t.Errorf("%s names %s; the update runs from its timer, whatever state the hub is in", updateUnit, unwanted)
+		}
+	}
+}
+
+// spec: deployment.md#the-services — once a day, spread over an hour, caught up after the host
+// was down, and armed again on every boot.
+func TestTheTimerRunsTheUpdateDaily(t *testing.T) {
+	body := code(t, timerUnit)
+	for _, line := range []string{
+		"OnCalendar=daily",
+		"RandomizedDelaySec=1h",
+		"Persistent=true",
+		"[Install]",
+		"WantedBy=timers.target",
+	} {
+		if !strings.Contains(body, line) {
+			t.Errorf("%s has no %s", timerUnit, line)
+		}
+	}
+	if strings.Contains(body, "OnBootSec=") {
+		t.Errorf("%s sets OnBootSec=; the update runs at boot only when a run was missed", timerUnit)
 	}
 }
 

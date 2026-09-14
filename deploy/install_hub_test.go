@@ -77,11 +77,13 @@ func hubLayout() []installedFile {
 	}
 }
 
-func assertHubLayout(t *testing.T, destDir string) {
+// assertHubLayout checks the layout's files and modes; present names files that were in
+// destDir before the run and are not the run's to count.
+func assertHubLayout(t *testing.T, destDir string, present ...string) {
 	t.Helper()
 	got := tree(t, destDir)
-	if len(got) != len(hubLayout()) {
-		t.Errorf("installed %d files, want %d: %v", len(got), len(hubLayout()), sortedKeys(got))
+	if want := len(hubLayout()) + len(present); len(got) != want {
+		t.Errorf("found %d files, want %d: %v", len(got), want, sortedKeys(got))
 	}
 	for _, file := range hubLayout() {
 		info, err := os.Stat(filepath.Join(destDir, file.path))

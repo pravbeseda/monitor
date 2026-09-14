@@ -46,12 +46,41 @@ trap 'on_exit 129' HUP
 usage() {
 	cat <<EOF
 usage: $program --binary <path>
+       [--follow-target --release X.Y.Z --newest X.Y.Z --answer <file>]
 
 Installs the hub binary, its service definition and the example configuration. The real
 configuration is the operator's: a run that does not find it leaves the service stopped.
 
+A follow run reads /etc/monitor/hub.target first. It installs only when the target names this
+release, and otherwise writes the version the target names into the answer file.
+
 DESTDIR stages the whole installation under a prefix and registers no service.
 EOF
+}
+
+# The grammar deploy/tag-version.sh enforces. A copy of the function in monitor-install.sh,
+# which cannot share a file with a release; a test asserts the two are the same.
+is_version() {
+	# Splitting on dots drops a trailing empty field, so the dots are judged before it.
+	case $1 in
+	.* | *. | *..*) return 1 ;;
+	esac
+	oldifs=$IFS
+	IFS=.
+	set -f
+	# shellcheck disable=SC2086 # deliberate: the IFS above is what splits on dots
+	set -- $1
+	set +f
+	IFS=$oldifs
+	[ $# -eq 3 ] || return 1
+	for part in "$@"; do
+		case $part in
+		# A component wider than the shell's integers is not a version anyone releases, and
+		# comparing one would error rather than answer.
+		'' | *[!0-9]* | 0?* | ??????????*) return 1 ;;
+		esac
+	done
+	return 0
 }
 
 refuse() {
@@ -66,12 +95,25 @@ refuse_with_usage() {
 }
 
 binary=
+follow=
+release=
+newest=
+answer=
 while [ $# -gt 0 ]; do
 	case $1 in
-	--binary)
+	--binary | --release | --newest | --answer)
 		[ "$#" -ge 2 ] || refuse "$1 needs a value"
-		binary=$2
+		case $1 in
+		--binary) binary=$2 ;;
+		--release) release=$2 ;;
+		--newest) newest=$2 ;;
+		--answer) answer=$2 ;;
+		esac
 		shift 2
+		;;
+	--follow-target)
+		follow=1
+		shift
 		;;
 	-h | --help)
 		usage
@@ -86,6 +128,19 @@ done
 [ -n "$binary" ] || refuse "--binary is required"
 [ -f "$binary" ] || refuse "--binary names no file: $binary"
 [ -x "$binary" ] || refuse "--binary names a file that is not executable: $binary"
+
+# The four options of a follow run come together or not at all (installer.md#the-handover).
+if [ -n "$follow$release$newest$answer" ]; then
+	[ -n "$follow" ] || refuse "a follow run needs --follow-target as well"
+	[ -n "$release" ] || refuse "a follow run needs --release as well"
+	[ -n "$newest" ] || refuse "a follow run needs --newest as well"
+	[ -n "$answer" ] || refuse "a follow run needs --answer as well"
+	is_version "$release" || refuse "--release is not a version: $release"
+	is_version "$newest" || refuse "--newest is not a version: $newest"
+	if [ ! -f "$answer" ] || [ -s "$answer" ]; then
+		refuse "--answer must name an empty file: $answer"
+	fi
+fi
 
 # DESTDIR stages the whole installation under a prefix: no root, no account, no service. A
 # value that stages nothing is refused rather than quietly writing into the real system.
@@ -168,6 +223,64 @@ account_or_nothing=
 [ ! -d "$destdir$data_dir" ] || account_or_nothing=$account
 check_dir "$destdir$config_dir" root
 check_dir "$destdir$data_dir" "$account_or_nothing"
+
+# The target chooses what root installs, so only root may have written it or the directory
+# it lives in.
+check_target_path() {
+	[ -e "$1" ] || [ -L "$1" ] || return 0
+	[ ! -L "$1" ] || refuse "$2 is a symlink, and the target chooses what root installs"
+	[ -z "$(find "$1" -maxdepth 0 \( -perm -g+w -o -perm -o+w \))" ] ||
+		refuse "$2 is writable by group or other, and the target chooses what root installs"
+	if [ -z "$destdir" ] && [ -z "$(find "$1" -maxdepth 0 -user root)" ]; then
+		refuse "$2 is not owned by root, and the target chooses what root installs"
+	fi
+}
+
+# Whether the release handed over is already what is installed and, on a real run, what the
+# service is running. A run stopped between replacing the binary and restarting the service
+# leaves identical files behind, and the next run has to finish it rather than skip it.
+already_running() {
+	cmp -s "$1" "$destdir$binary_file" || return 1
+	cmp -s "$service_source" "$destdir$service_file" || return 1
+	[ -z "$destdir" ] || return 0
+	pid=$(systemctl show -p MainPID --value monitor-hub.service 2>/dev/null) || return 1
+	[ "${pid:-0}" != 0 ] || return 1
+	cmp -s "$1" "/proc/$pid/exe"
+}
+
+# A follow run decides from the target before anything is written: it answers with another
+# version, finds nothing to change, or goes on to install (installer.md#answering-a-follow-run).
+if [ -n "$follow" ]; then
+	target_file=$config_dir/hub.target
+	check_target_path "$destdir$config_dir" "$config_dir"
+	check_target_path "$destdir$target_file" "$target_file"
+	[ -f "$destdir$target_file" ] ||
+		refuse "there is no $target_file: it holds latest or a version such as 1.2.3"
+	# The command substitution drops trailing newlines, so the line count is what refuses a
+	# second one.
+	lines=$(wc -l <"$destdir$target_file")
+	target=$(cat "$destdir$target_file")
+	if [ $((lines)) -gt 1 ]; then
+		refuse "$target_file holds more than one line"
+	fi
+	case $target in
+	latest) wanted=$newest ;;
+	*)
+		is_version "$target" || refuse "$target_file holds neither latest nor a version: $target"
+		wanted=$target
+		;;
+	esac
+	if [ "$wanted" != "$release" ]; then
+		printf '%s\n' "$wanted" >"$answer"
+		printf '%s: %s names %s, not this release %s; nothing is installed from it\n' \
+			"$program" "$target_file" "$wanted" "$release"
+		exit 0
+	fi
+	if already_running "$binary"; then
+		printf '%s: monitor-hub %s is already installed; nothing to do\n' "$program" "$release"
+		exit 0
+	fi
+fi
 
 # The account owns the secrets and the database, so an account that can log in is not the
 # system account this layout means (ADR 0019).

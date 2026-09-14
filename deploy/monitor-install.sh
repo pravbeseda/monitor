@@ -39,6 +39,7 @@ MFkwEwYHKoZIzj0CAQYIKoZIzj0DAQcDQgAEabB6p+jY9j7naasjBxF13XHafcaP
 	role=
 	version=
 	allow_downgrade=0
+	follow=0
 	hub=
 	node=
 	parse_arguments "$@"
@@ -49,11 +50,17 @@ MFkwEwYHKoZIzj0CAQYIKoZIzj0DAQcDQgAEabB6p+jY9j7naasjBxF13XHafcaP
 	origin=${MONITOR_RELEASE_ORIGIN:-$default_origin}
 	[ -n "$version" ] || version=$(newest_version)
 	check_version "$version"
+	newest=$version
 
 	make_workdir
 	fetch_and_check
 	check_not_a_downgrade
 	unpack
+
+	if [ "$follow" -eq 1 ]; then
+		follow_target
+		exit 0
+	fi
 
 	printf '%s: installing %s %s\n' "$program" "$role" "$version"
 	set -- "$role" --binary "$work/binary"
@@ -76,9 +83,13 @@ refuse() {
 usage() {
 	cat <<EOF
 usage: $program <hub|agent> [--version X.Y.Z] [--allow-downgrade] [--hub <url>] [--node <name>]
+       $program hub --follow-target
 
 Downloads the newest release, checks its signature and installs from it. The agent's token is
 read from MONITOR_TOKEN or from stdin, which the one-line form cannot offer.
+
+--follow-target is what the hub's update timer runs: the installer of the newest release reads
+/etc/monitor/hub.target and installs, or names the release to fetch and install instead.
 EOF
 }
 
@@ -129,9 +140,19 @@ parse_arguments() {
 			allow_downgrade=1
 			shift
 			;;
+		--follow-target)
+			follow=1
+			shift
+			;;
 		*) refuse_with_usage "unknown option: $1" ;;
 		esac
 	done
+
+	# A follow run takes its version from the target alone, and only the hub has one.
+	[ "$follow" -eq 1 ] || return 0
+	[ "$role" = hub ] || refuse_with_usage "--follow-target is the hub's; an agent's target is not built"
+	[ -z "$version" ] || refuse_with_usage "--follow-target takes its version from the target, not --version"
+	[ "$allow_downgrade" -eq 0 ] || refuse_with_usage "--follow-target installs an older release only when the target names it"
 }
 
 # The grammar deploy/tag-version.sh enforces on the way in, asked as a question: a release
@@ -151,8 +172,8 @@ is_version() {
 	[ $# -eq 3 ] || return 1
 	for part in "$@"; do
 		case $part in
-		# The length cap is what keeps newer_or_same comparing rather than erroring: a
-		# component wider than the shell's integers is not a version anyone releases.
+		# A component wider than the shell's integers is not a version anyone releases, and
+		# comparing one would error rather than answer.
 		'' | *[!0-9]* | 0?* | ??????????*) return 1 ;;
 		esac
 	done
@@ -323,6 +344,8 @@ check_not_a_downgrade() {
 		return 0
 	fi
 	unreadable="could not tell which version is installed; installing $version over it"
+	# A follow run may go on to install the release the target names rather than this one.
+	[ "$follow" -eq 0 ] || unreadable="could not tell which version is installed; following the target over it"
 	# Asking a binary its version means running it, so it is run only where nobody else could
 	# have put it there. Writability by group or other says that on any run; ownership says
 	# it only on a real one, where root is what "nobody else" means.
@@ -347,8 +370,57 @@ check_not_a_downgrade() {
 		printf '%s: %s\n' "$program" "$unreadable"
 		return 0
 	fi
-	newer_or_same "$version" "$installed" ||
-		refuse "release $version is older than the installed $installed; --allow-downgrade installs it anyway"
+	newer_or_same "$version" "$installed" && return 0
+	# An origin answering with an old release as the newest must not roll a hub back on its own.
+	[ "$follow" -eq 0 ] ||
+		refuse "the newest release $version is older than the installed $installed; a follow run installs nothing"
+	refuse "release $version is older than the installed $installed; --allow-downgrade installs it anyway"
+}
+
+# The follow run of docs/specs/installer.md#following-a-target. The newest release's installer
+# reads the target; when it names another release, that one release is fetched and its own
+# installer asked again, and a second answer ends the run.
+follow_target() {
+	hand_over_following
+	named=$(answered_version) || exit 1
+	[ -n "$named" ] || return 0
+
+	followed=$version
+	version=$named
+	rm -rf "$work/unpacked" "$work/release" "$work/entries"
+	fetch_and_check
+	unpack
+	hand_over_following
+	again=$(answered_version) || exit 1
+	[ -z "$again" ] ||
+		refuse "release $followed named $version, whose installer named $again in turn; nothing is installed"
+}
+
+hand_over_following() {
+	: >"$work/answer"
+	printf '%s: handing over to release %s to follow the target\n' "$program" "$version"
+	status=0
+	sh "$work/release/install.sh" hub --binary "$work/binary" --follow-target \
+		--release "$version" --newest "$newest" --answer "$work/answer" </dev/null || status=$?
+	[ "$status" -eq 0 ] || exit "$status"
+}
+
+# The version the installer wrote into the answer, or nothing when it wrote nothing. An answer
+# is one version and a trailing newline; anything else stops the run before it is used.
+answered_version() {
+	[ -s "$work/answer" ] || return 0
+	lines=$(wc -l <"$work/answer")
+	answer=$(cat "$work/answer")
+	if [ $((lines)) -gt 1 ] || ! is_version "$answer"; then
+		printf '%s: the installer of release %s answered with something that is not a version: %s\n' \
+			"$program" "$version" "$answer" >&2
+		return 1
+	fi
+	if [ "$answer" = "$version" ]; then
+		printf '%s: the installer of release %s answered with its own version\n' "$program" "$version" >&2
+		return 1
+	fi
+	printf '%s' "$answer"
 }
 
 # Component by component and numerically: 1.10.0 is newer than 1.9.0, which no text

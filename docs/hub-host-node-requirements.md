@@ -120,9 +120,22 @@ Nothing about the hub, the proxy or the firewall changes.
    rewrites them on every run ([ADR 0020](decisions/0020-agent-reads-its-environment-file.md)).
 
 9. **Installs are sequential, and the hub goes first.** Two installer runs at once on one
-   host are not supported. The hub is installed and restarted before the agent: the hub
-   accepts measurements from an agent older than itself, and nothing promises the reverse
-   ([ADR 0022](decisions/0022-updates-are-pulled.md)).
+   host are not supported, and the hub's update timer counts as one: starting its service
+   waits for a run already in progress instead of overlapping it. The hub is installed and
+   restarted before the agent: the hub accepts measurements from an agent older than itself,
+   and nothing promises the reverse ([ADR 0022](decisions/0022-updates-are-pulled.md)).
+
+10. **The hub is installed by its own update service, never with a pinned version.** The play
+    writes `/etc/monitor/hub.target` from a role variable — `latest` or a version — places the
+    kept script and the two update units, and enables the timer, all as
+    [install.md](install.md#keeping-the-hub-upgraded-unattended) describes. It then runs
+    `systemctl start monitor-hub-update.service`, which returns when the run has finished,
+    after `hub.yaml` and `hub.env` are written and before requirement 3's restart and wait.
+    The play never runs `monitor-install.sh hub --version …`: once the timer has moved the
+    hub past that version, the downgrade guard refuses it and the play fails. A failed update
+    run fails the play. When a timer run is already in progress, the start waits for that run
+    instead of starting another, and that run may have read the target before the play
+    rewrote it; a play that changed the target therefore starts the service a second time.
 
 ## What we are not asking for
 
@@ -130,8 +143,9 @@ Nothing about the hub, the proxy or the firewall changes.
 - No nginx or firewall change: the agent never leaves loopback.
 - No separate account for the agent: it runs as root by design
   ([deployment.md](specs/deployment.md#where-things-live)).
-- No update timer: upgrading is re-running the play with a new version
-  ([ADR 0022](decisions/0022-updates-are-pulled.md) describes the timer that will replace it).
+- No update timer for the agent: upgrading it is re-running the play with a new version.
+  Only the hub follows a target
+  ([ADR 0024](decisions/0024-the-hub-follows-a-target-with-a-kept-install-script.md)).
 
 ## How we check it is done
 
@@ -159,10 +173,9 @@ arguments, with diffs on. Two runs, and each must reach the tasks that carry the
 
 - a green one that also changes the content of `hub.env` — adding a line to it will do — so
   that its template task would have a diff to print;
-- a failing one that overrides **only the agent's** version variable with a version that
-  was never released. The hub's install still succeeds, the agent's fetch fails inside the
-  `block`, and the `rescue` prints the installer's `stderr`. Overriding a version the hub
-  shares would fail the hub's install first and never reach the agent's task.
+- a failing one that overrides the agent's version variable with a version that was never
+  released. The hub follows its target and still succeeds, the agent's fetch fails inside
+  the `block`, and the `rescue` prints the installer's `stderr`.
 
 The token is read from a file descriptor, so it is not an argument of `grep` either (bash):
 

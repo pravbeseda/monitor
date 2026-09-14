@@ -7,7 +7,8 @@
   [0007](../decisions/0007-public-repository.md),
   [0010](../decisions/0010-agent-configuration.md),
   [0019](../decisions/0019-deployment-layout.md),
-  [0020](../decisions/0020-agent-reads-its-environment-file.md)
+  [0020](../decisions/0020-agent-reads-its-environment-file.md),
+  [0024](../decisions/0024-the-hub-follows-a-target-with-a-kept-install-script.md)
 
 ## Purpose
 
@@ -40,9 +41,20 @@ per installation, which is what lets the unit files be constants.
 | hub data directory | `/var/lib/monitor` | — | `monitor`, 0700 |
 | configuration directory | `/etc/monitor` | `/usr/local/etc/monitor` | root, 0755 |
 | hub service | `/etc/systemd/system/monitor-hub.service` | — | root, 0644 |
+| hub target | `/etc/monitor/hub.target` | — | root, 0644 |
+| kept install script | `/usr/local/libexec/monitor/monitor-install.sh` | — | root, 0755 |
+| kept install script directory | `/usr/local/libexec/monitor` | — | root, 0755 |
+| hub update service and timer | `/etc/systemd/system/monitor-hub-update.service`, `monitor-hub-update.timer` | — | root, 0644 |
 
 The hub is a Debian service only ([0005](../decisions/0005-poc-stack.md)); the agent runs on
 both.
+
+The last four rows are the target and the resident half of
+[0024](../decisions/0024-the-hub-follows-a-target-with-a-kept-install-script.md). No
+installer writes them: the manual path of [install.md](../install.md) or the host's
+provisioning places them, so a release cannot break what repairs it. The two update units
+travel in the installer archive beside the other service definitions, and are still not
+installed from it.
 
 **The agent runs as root** — it stats every mounted volume, and a launchd daemon is a root
 process by definition. **The hub runs as the unprivileged `monitor` account**: it listens on
@@ -145,6 +157,11 @@ omitted.
 | hub | it exits, whatever the status | it is restarted after a short delay |
 | hub | it starts | it reads `/etc/monitor/hub.yaml` and `/var/lib/monitor/monitor.db`, and serves on the loopback address only |
 | hub | it writes to stdout or stderr | the lines reach the system log |
+| hub update | its timer is enabled | the update runs once a day, at a moment spread over an hour, and a run missed while the host was down happens soon after it is back |
+| hub update | the host reboots | the timer is armed again; the update itself does not run at boot unless a run was missed |
+| hub update | it runs | the kept script runs as root with `hub --follow-target` ([installer.md](installer.md#following-a-target)), once the network is up, and its output reaches the system log |
+| hub update | the hub is stopped or failing | the update still runs: nothing ties it to the hub's service |
+| hub update | the run fails | the unit is reported failed, and the host is left as [installer.md](installer.md#invariants) says a failed run leaves it |
 
 A *wrong* token is not a service concern: the agent keeps ticking and the hub refuses its
 batches ([agent.md](agent.md#edge-cases)), which surfaces as a silent node rather than as a
@@ -199,7 +216,7 @@ makes the behaviour above testable without touching the machine running the test
   the stage-3 bullet in [poc.md](../poc.md).
 - Building, publishing or verifying the binary: the script takes one that exists, and
   [release.md](release.md) owns where it comes from.
-- Uninstalling: two documented commands in the install guide, not a mode of the script.
+- Uninstalling: the commands in the install guide, not a mode of the script.
 - Installing as an act — what a run downloads, checks and calls:
   [installer.md](installer.md). This spec owns the result on disk, for the hub as for the
   agent.

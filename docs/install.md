@@ -331,6 +331,62 @@ sudo systemctl restart monitor-hub.service
 The hub accepts measurements from an agent older than itself, so it can be upgraded on its
 own ([ADR 0022](decisions/0022-updates-are-pulled.md)).
 
+On a hub host with the update timer below, the target is what chooses the version: a hub
+installed by hand is replaced at the next run by whatever the target names.
+
+### Keeping the hub upgraded unattended
+
+A timer on the hub host runs a kept copy of `monitor-install.sh` once a day, and the hub
+follows the version `/etc/monitor/hub.target` names
+([ADR 0024](decisions/0024-the-hub-follows-a-target-with-a-kept-install-script.md),
+[specs/installer.md](specs/installer.md#following-a-target)). No release touches the kept
+script, its units or the target: they are placed once, like this, or by the host's
+provisioning.
+
+Download and check the script with the first lines of section 0's block — up to and including
+the fingerprint check, into `"$home/monitor"` — and fetch the two units beside it:
+
+```sh
+for unit in monitor-hub-update.service monitor-hub-update.timer; do
+    sudo curl -fsSLo "$home/monitor/$unit" \
+        "https://raw.githubusercontent.com/pravbeseda/monitor/main/deploy/systemd/$unit"
+done
+sudo install -d -o root -g root -m 0755 /usr/local/libexec/monitor
+sudo install -o root -g root -m 0755 "$home/monitor/install.sh" \
+    /usr/local/libexec/monitor/monitor-install.sh
+sudo install -o root -g root -m 0644 "$home/monitor/monitor-hub-update.service" \
+    "$home/monitor/monitor-hub-update.timer" /etc/systemd/system/
+printf 'latest\n' | sudo tee /etc/monitor/hub.target >/dev/null
+sudo chmod 0644 /etc/monitor/hub.target
+sudo rm -r "$home/monitor"
+sudo systemctl daemon-reload
+sudo systemctl enable --now monitor-hub-update.timer
+```
+
+Then one run now rather than tomorrow, and what it did:
+
+```sh
+sudo systemctl start monitor-hub-update.service
+sudo journalctl -u monitor-hub-update.service -n 20
+```
+
+**The target** is `latest` or one version. Pinning or rolling back is writing a version into
+it — `printf '1.2.3\n' | sudo tee /etc/monitor/hub.target >/dev/null` — and it takes effect
+at the next run, or at once with the `systemctl start` above. It goes
+back no further than the first release that follows a target; below that is the manual path.
+A merge that should not reach the hub carries `release:none`
+([specs/release.md](specs/release.md#tagging-a-merge)).
+
+**Replacing the kept script** is the same `install` of a freshly downloaded and checked copy.
+That is what a rotated signing key needs.
+
+**Stop the timer first** after a leaked key, and before stopping the hub for maintenance — the
+next run installs a stopped hub again and starts it. `enable --now` turns it back on.
+
+```sh
+sudo systemctl disable --now monitor-hub-update.timer
+```
+
 ## 6. Uninstall
 
 Deliberately not a mode of the script — it is these commands
@@ -353,9 +409,14 @@ sudo rm /Library/LaunchDaemons/io.github.pravbeseda.monitor-agent.plist \
     /usr/local/bin/monitor-agent /usr/local/etc/monitor/agent.env /var/log/monitor-agent.log
 ```
 
-The hub host, the same way:
+The hub host, the same way — its update timer first, when it has one, or the timer could
+install the hub again in between:
 
 ```sh
+sudo systemctl disable --now monitor-hub-update.timer
+sudo rm /etc/systemd/system/monitor-hub-update.service /etc/systemd/system/monitor-hub-update.timer \
+    /etc/monitor/hub.target
+sudo rm -r /usr/local/libexec/monitor
 sudo systemctl disable --now monitor-hub.service
 sudo rm /etc/systemd/system/monitor-hub.service /usr/local/bin/monitor-hub
 sudo systemctl daemon-reload
@@ -374,6 +435,7 @@ only, over loopback. What that proxy has to do is written down in
 [nginx-requirements.md](nginx-requirements.md) and applied from the Ansible repository that
 owns the hub host ([ADR 0023](decisions/0023-proxy-holds-the-web-perimeter.md)).
 
-Nothing updates a machine unattended: a new version is section 0's command or step 5's, both
-run by hand. The timer that would do it by itself is
+Only the hub updates itself ([Keeping the hub upgraded
+unattended](#keeping-the-hub-upgraded-unattended)). A node gets a new version from section 0's
+command or step 5's, run by hand; the hub naming a node's target is the rest of
 [ADR 0022](decisions/0022-updates-are-pulled.md), and it is not built.

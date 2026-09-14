@@ -9,24 +9,26 @@
   [0019](../decisions/0019-deployment-layout.md),
   [0020](../decisions/0020-agent-reads-its-environment-file.md),
   [0021](../decisions/0021-shell-is-linted-too.md),
-  [0022](../decisions/0022-updates-are-pulled.md)
+  [0022](../decisions/0022-updates-are-pulled.md),
+  [0024](../decisions/0024-the-hub-follows-a-target-with-a-kept-install-script.md)
 
 ## Purpose
 
-One command puts a hub or an agent on a machine, and the same command upgrades it. This spec
-owns what that command does and what it refuses.
+One command puts a hub or an agent on a machine, and the same command upgrades it. On the
+hub host a kept copy of that command, run by a timer, keeps the hub on the version the host
+names. This spec owns what the command does and what it refuses, in both uses.
 
-It is the first half of [0022](../decisions/0022-updates-are-pulled.md) — points 1, 2 and 6:
-a release that carries its own installer, verified before anything from it runs. The timer,
-the hub naming a target version, and an installer that answers with a version instead of
-installing are the second half and are not here. Until they exist, **an upgrade is the
-operator running the same command again**, and nothing on the machine updates itself.
+It is [0022](../decisions/0022-updates-are-pulled.md) for the hub, shaped by
+[0024](../decisions/0024-the-hub-follows-a-target-with-a-kept-install-script.md): a release
+that carries its own installer, verified before anything from it runs, and an installer that
+answers with a version instead of installing. An agent is still upgraded by the operator
+running the same command again.
 
 `install-agent.sh` keeps the contract [deployment.md](deployment.md) gives it — a binary that
 already exists, passed as `--binary` — because it is what repairs a machine this installer
 broke. The installer calls it rather than replacing it.
 
-## The two halves, and what is not frozen yet
+## The two halves
 
 **`monitor-install.sh` is what the operator runs**, over `curl` or from a checkout. It
 downloads a release, checks it, unpacks it and hands over; it decides nothing else. It
@@ -36,14 +38,13 @@ carries the release signing key, because a release cannot vouch for itself
 they are the same bytes is what keeps them from drifting. Beyond the shell it needs `curl`,
 `openssl`, `tar` and `find`, and it names whichever is missing.
 
-**No machine keeps a copy of the key that a release cannot replace.** The script is fetched
-for each run; what a release leaves behind is the binary, the service definition and the
-examples, and every one of those the next release overwrites. So rotating the signing key
-stays what [release.md](release.md) already describes — three commands and a commit. The resident, frozen half of
-[0022](../decisions/0022-updates-are-pulled.md) arrives with the timer, and **that** is the
-unit of work which must answer where an offline copy of the private key lives and how many
-keys the frozen half carries; this spec deliberately leaves both open, because it freezes
-nothing.
+**The hub host keeps one copy of the key a release cannot replace**: the kept script the
+timer runs ([Following a target](#following-a-target)). An operator's run still fetches the
+script each time, and what a release leaves behind is the binary, the service definition and
+the examples, every one of which the next release overwrites. So a rotation is what
+[release.md](release.md) describes plus replacing the kept script on the hub host. It carries
+one key and no copy of the private half exists
+([0024](../decisions/0024-the-hub-follows-a-target-with-a-kept-install-script.md), point 7).
 
 **The installer travels inside the release**, as `monitor-installer-<version>.tar.gz` listed
 in that release's signed manifest ([release.md](release.md) owns the asset; this spec owns
@@ -93,6 +94,32 @@ sh <unpacked>/install.sh <role> --binary <verified path> [--hub <url> --node <na
 - The binary is already verified and already executable when the installer sees it.
 - The run exits with the installer's status, and passes its output through unchanged.
 
+A follow run adds four options to the same form. Only the hub's installer accepts them today;
+the form names no role of its own, so an agent's installer can take the same four:
+
+```
+sh <unpacked>/install.sh <role> --binary <verified path> \
+    --follow-target --release <this release's version> --newest <newest version> --answer <file>
+```
+
+- `--answer` names an empty file. An installer that exits 0 and leaves it empty has nothing
+  further for the run to do — it installed, found nothing to change, or declined — and the
+  run claims nothing of its own. One that writes into it installs nothing and exits 0; what
+  it writes is one `MAJOR.MINOR.PATCH`, a trailing newline allowed, and anything else is
+  refused by the run. A non-zero exit is a refusal whatever the file holds.
+- The installer downloads nothing: `--newest` is how `latest` is resolved without asking the
+  origin, and both hand-overs of one run pass the same value.
+- The second hand-over runs the installer of the release the first one named, out of a
+  directory of its own, with an empty answer file.
+
+**What a kept script depends on is frozen from the first kept script on**, because it stays
+on its host until someone replaces it: these four options and the answer's meaning, the
+handover form above, the two URL shapes of [Where a release is fetched
+from](#where-a-release-is-fetched-from), the asset names and the manifest format of
+[release.md](release.md), the archive being one directory holding `install.sh`, the signature
+algorithm, and the command line `monitor-hub-update.service` starts. Changing one of them is
+replacing the script on every host that keeps one.
+
 ## Behaviour
 
 One row = one test. Anchors: `spec: installer.md#<heading>`. **Every refusal exits non-zero
@@ -103,8 +130,10 @@ Some rows a staged suite cannot reach, because staging is defined as not doing t
 creating the account and accepting an existing one, refusing one that can log in, telling
 systemd about the unit and starting the service, correcting an owner, refusing a host with no
 systemd, ignoring an inherited `TMPDIR`, treating an installed binary owned by anyone but
-root as replaceable, and stripping an archive's owner and setuid bits, which an unprivileged
-tar would not have restored anyway. They are proved on a real host; everything else in these
+root as replaceable, stripping an archive's owner and setuid bits, which an unprivileged
+tar would not have restored anyway, refusing a target owned by anyone but root, and telling
+a running hub on the release's binary from a stopped one or one still on the binary it
+replaced. They are proved on a real host; everything else in these
 tables is proved by the suite.
 
 `monitor-install.sh <role> [options]`, where `<role>` is `hub` or `agent`.
@@ -166,6 +195,48 @@ The verdict on a signature is `openssl`'s exit status and never its output, for 
 | examples the operator has edited | they are overwritten; the examples are the release's and the real files are the operator's |
 | a real run on a host with no systemd — macOS among them | nothing is installed: the hub is a Debian service ([0005](../decisions/0005-poc-stack.md)) |
 
+### Following a target
+
+`monitor-install.sh hub --follow-target` is what `monitor-hub-update.service` runs from the
+kept copy ([deployment.md](deployment.md#where-things-live)). The target is
+`/etc/monitor/hub.target`, holding exactly `latest` or one `MAJOR.MINOR.PATCH`, a trailing
+newline allowed. The rows of [Fetching and checking a release](#fetching-and-checking-a-release)
+and [Unpacking](#unpacking) hold for each release a follow run fetches.
+
+| Event | Outcome |
+|---|---|
+| target `latest` | the newest release's hub is installed |
+| target naming the newest version | the same |
+| target naming an older release | that release's hub is installed, even over a newer one in place: a target is a deliberate choice, and the downgrade guard judges the newest release alone |
+| the newest release older than the hub in place | nothing is installed whatever the target, and the run says so: an origin serving an old release as the newest cannot roll the hub back |
+| any follow run | the newest release is downloaded and verified first, even when the target names another |
+| target naming a release whose manifest lists no installer archive | nothing is installed, and the run says that release predates the installer |
+| target naming a release whose installer does not follow a target | nothing is installed, and that installer's refusal is passed through |
+| target naming a release that cannot be fetched once the newest one was verified | nothing is installed, and the run names the version |
+| the second hand-over | it runs the installer of the release the first one named, given the same newest version and an empty answer |
+| the named release's installer names a version in turn | nothing is installed, and the run names the version it followed and the one named after it |
+| an answer that is not one `MAJOR.MINOR.PATCH`, or names the release whose installer gave it | nothing more is fetched, nothing is installed, and the run names the answer |
+| an installer that exits 0 leaving the answer empty | the run ends with that installer's output and adds no claim of its own |
+| `--follow-target` with the `agent` role | the usage on stderr: an agent's target is the hub's to name, and that is not built |
+| `--follow-target` with `--version` or `--allow-downgrade` | the usage on stderr |
+
+### Answering a follow run
+
+What `install.sh hub` does when it is handed the four options of [The handover](#the-handover).
+
+| Event | Outcome |
+|---|---|
+| a target that resolves to `--release` | it installs as [Installing the hub](#installing-the-hub) says, and the answer stays empty |
+| a target that resolves to another version | the answer holds that version, nothing is written outside it, and the exit is 0 |
+| target `latest` | it resolves to `--newest` |
+| a target that resolves to `--release`, with the hub binary and service definition in place byte-identical to the release's and, on a real run, the service running that binary | nothing is written, the answer stays empty, the run says the hub is already at that version, and no service command runs |
+| the same, with any of those not so — a service definition that differs, a service that is stopped, or one still running the binary that was replaced | it installs as [Installing the hub](#installing-the-hub) says, so a run stopped before its restart is finished by the next one |
+| no target file | nothing is installed, and the run names the file and the two forms it may take |
+| a target that is empty, holds anything beside the value and one trailing newline, or holds neither `latest` nor `MAJOR.MINOR.PATCH` | nothing is installed, and the run names the file |
+| the target or `/etc/monitor` a symlink, writable by group or other, or on a real run owned by anyone but root | nothing is installed, and the run names the path: the target chooses what root installs |
+| only some of `--follow-target`, `--release`, `--newest` and `--answer` | nothing is installed, and the run names what is missing |
+| `--release` or `--newest` that is not `MAJOR.MINOR.PATCH`, or `--answer` naming no file or a file that is not empty | nothing is installed, and the run names the value |
+
 ### Installing the agent
 
 | Event | Outcome |
@@ -180,7 +251,7 @@ The verdict on a signature is `openssl`'s exit status and never its output, for 
 
 | Event | Outcome |
 |---|---|
-| `DESTDIR` naming an absolute path that is not `/` | everything is staged under it, no account is created, and no service command runs |
+| `DESTDIR` naming an absolute path that is not `/` | everything is staged under it and read from under it, the target and the binary in place included; no account is created, and no service command runs |
 | `DESTDIR` relative, or naming a path that resolves to `/` — `/`, `//`, `/.`, `/etc/..` | nothing is written, and the run says why: a staged run that writes into the real system is not a staged run |
 | `DESTDIR` empty | it is not a staged run at all, and the row below applies |
 | no `DESTDIR` and not root | nothing is written, and the run says it needs root |
@@ -220,7 +291,8 @@ The verdict on a signature is `openssl`'s exit status and never its output, for 
   two-step form: download the script into a directory only root can write, check the key it
   carries against the fingerprint [install.md](../install.md) publishes, run it with the
   token on stdin, and delete it — a copy left lying around is a copy with an old key and an
-  old origin.
+  old origin. The copy the hub host keeps on purpose is replaced by hand for the same reason
+  ([install.md](../install.md#keeping-the-hub-upgraded-unattended)).
 - **A release older than this work** carries binaries and no archive: the run says so and
   installs nothing. Reaching it is the manual path of [install.md](../install.md).
 - **A machine that is both hub and node** runs the command once per role, and gets one
@@ -228,18 +300,36 @@ The verdict on a signature is `openssl`'s exit status and never its output, for 
 - **The hub is upgraded under a running service.** Replacing the binary does not restart it
   by itself; the run restarts the service, and a hub that will not start on the new binary is
   recovered by the manual path.
-- **Rotating the signing key** touches four places: the secret in the release environment,
-  `deploy/release-signing-key.pub`, the copy inside `monitor-install.sh`, and the fingerprint
-  [install.md](../install.md) publishes. The last two are asserted by tests, so missing
-  either turns the suite red rather than the fleet. Nothing on any machine holds a key that a
-  release cannot replace, which is what keeps rotation cheap at this stage.
+- **Rotating the signing key** touches five places: the secret in the release environment,
+  `deploy/release-signing-key.pub`, the copy inside `monitor-install.sh`, the fingerprint
+  [install.md](../install.md) publishes, and the kept script on the hub host. The copy and the
+  fingerprint are asserted by tests, so missing either turns the suite red rather than the
+  fleet; the kept script is replaced over the manual path. A kept script with the new key verifies no release
+  signed with the old one, so a rotation also raises the rollback floor to the first release
+  signed with the new key.
+- **A lost key and a leaked one differ.** A lost key leaves the kept script refusing every
+  new release until it is replaced; the hub keeps the version it has. A leaked key is still
+  accepted by the kept script, so after a leak the timer is stopped, or the script replaced,
+  before anything else.
 - **A signature does not prove freshness.** Whoever answers for the origin can serve a
-  genuine older release for ever, and every check here passes. The origin is a product
-  default that only a staged run may override, and a signed statement of what is current is
-  the second half's problem ([0022](../decisions/0022-updates-are-pulled.md)).
+  genuine older release for ever, and every check here passes, `latest` included. The origin
+  is a product default that only a staged run may override, and a signed statement of what
+  is current is not built.
 - **Two runs at once on one machine** are not supported: the environment file is read and
   rewritten, so a token rotated by one run can be lost by the other. Each file still ends as
-  one of the two runs left it.
+  one of the two runs left it. An operator's run while the timer's is in progress is the same
+  case.
+- **The rollback floor.** A target can go back no further than the first release whose
+  installer follows a target: an older installer refuses `--follow-target` as an unknown
+  option, and a release older still carries no installer at all. Going below the floor is the
+  manual path.
+- **A broken newest installer blocks every target**, rollback included, because every run
+  hands over to it first. The remedy is a fixed release, or the manual path.
+- **A target changed between the two hand-overs** is read afresh by the second installer; if
+  it no longer names that release, the run stops as for a second answer, and the next run
+  follows the new target.
+- **An installer that neither installs nor answers** looks like a success to the run. It is
+  the release's own business, and the installer's output says what it did.
 
 ## Where a release is fetched from
 
@@ -250,15 +340,17 @@ base, which is what lets the rows above be tested against a release served over 
 
 ## Out of scope
 
-- The timer, the resident half it needs, the hub naming a target version, and the rollback
-  that follows — the rest of [0022](../decisions/0022-updates-are-pulled.md), including where
-  an offline copy of the private key lives and how many keys the frozen half carries.
-- What an installation looks like on disk: [deployment.md](deployment.md) owns every path,
-  owner and mode, and this spec installs what that one describes.
+- An agent following a target: the hub naming it, the agent's installer asking for it, and a
+  kept script and timer on Debian and macOS — the rest of
+  [0022](../decisions/0022-updates-are-pulled.md). Before a kept script reaches a node that
+  is touched by hand, how many keys it carries is answered again
+  ([0024](../decisions/0024-the-hub-follows-a-target-with-a-kept-install-script.md), point 7).
+- Placing the kept script, its units and the target: [install.md](../install.md) and the
+  host's provisioning. What they look like on disk, and every other path, owner and mode, is
+  [deployment.md](deployment.md).
 - What a release contains and how it is signed: [release.md](release.md).
 - nginx, TLS and authentication in front of the hub.
 
 ## Open questions
 
-None. The key questions this work uncovered belong to the unit that introduces a resident
-half, and are recorded under Out of scope rather than answered here.
+None.

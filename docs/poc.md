@@ -117,8 +117,12 @@ nodes:
       switched off by disabling one workflow
       ([release spec](specs/release.md#tagging-a-merge))
 - [x] One command that installs or upgrades a hub or an agent from a signed release
-      ([installer spec](specs/installer.md)); the timer that would do it unattended is
-      [0022](decisions/0022-updates-are-pulled.md) and is not built
+      ([installer spec](specs/installer.md))
+- [x] The hub upgrades itself daily to the version its host names
+      ([0024](decisions/0024-the-hub-follows-a-target-with-a-kept-install-script.md),
+      [installer spec](specs/installer.md#following-a-target)); agents following a target
+      named by the hub are the rest of [0022](decisions/0022-updates-are-pulled.md) and are
+      not built
 - [ ] nginx vhost for the hub, per-node tokens, authentication on the web page and a
       credential a program can send to the read endpoints. The proxy holds that credential
       ([0023](decisions/0023-proxy-holds-the-web-perimeter.md)) and what it has to do is
