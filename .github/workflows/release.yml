@@ -1,10 +1,12 @@
-# Publishing rules from docs/specs/release.md. A tag is the only trigger, and a run either
-# publishes nine files or publishes nothing.
+# Publishing rules from docs/specs/release.md. Only a tag releases — pushed, or named when the
+# run is started by hand or by auto-tag.yml — and a run either publishes nine files or
+# publishes nothing.
 name: Release
 
 on:
   push:
     tags: ["v*"]
+  workflow_dispatch:
 
 # Only the job that publishes may write, and only it sees the signing key.
 permissions:
@@ -23,6 +25,14 @@ jobs:
       - uses: actions/checkout@v4
         with:
           fetch-depth: 0
+
+      # A run started by hand may name a branch, and a branch may be named like a tag.
+      - name: The ref is a tag
+        run: |
+          if [ "$GITHUB_REF_TYPE" != tag ]; then
+            echo "refusing $GITHUB_REF: only a tag releases" >&2
+            exit 1
+          fi
 
       # The grammar itself is deploy/tag-version.sh, which the test suite covers.
       - name: The tag names a version

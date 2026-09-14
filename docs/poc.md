@@ -113,6 +113,9 @@ nodes:
       ([deployment spec](specs/deployment.md), [install guide](install.md))
 - [x] Signed releases published by CI on a tag, and a verifier for what they publish
       ([release spec](specs/release.md))
+- [x] A merge into `main` tags itself and releases, moved by a `release:` label and
+      switched off by disabling one workflow
+      ([release spec](specs/release.md#tagging-a-merge))
 - [x] One command that installs or upgrades a hub or an agent from a signed release
       ([installer spec](specs/installer.md)); the timer that would do it unattended is
       [0022](decisions/0022-updates-are-pulled.md) and is not built

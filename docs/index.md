@@ -61,7 +61,7 @@ can see ([ADR 0017](decisions/0017-one-spec-and-decision-gates.md)). New specs s
 | [agent.md](specs/agent.md) | The agent: local configuration, tick loop, delivery and configuration application | approved |
 | [evaluation.md](specs/evaluation.md) | Levels, hysteresis, the event log, silence, digests and the notifier boundary | approved |
 | [history.md](specs/history.md) | The history series, `/api/v1/series`, `/api/v1/history` and the drill-down page | approved |
-| [release.md](specs/release.md) | What a tag publishes, how a release is signed, and how an artifact is checked | approved |
+| [release.md](specs/release.md) | How a merge tags itself, what a tag publishes, how a release is signed, and how an artifact is checked | approved |
 | [installer.md](specs/installer.md) | One command that installs or upgrades a hub or an agent from a signed release | approved |
 | [deployment.md](specs/deployment.md) | The install layout, the units and what `install-agent.sh` does to a node | approved |
 
@@ -77,6 +77,7 @@ Reasoning from working sessions, including options that were rejected.
 | [2026-08-29](log/2026-08-29-stage-2-decisions.md) | Stage 2: what the evaluation design rejected, and what three review rounds changed |
 | [2026-09-06](log/2026-09-06-release-signing.md) | Release signing: the tools, the manifest and the key placement that lost |
 | [2026-09-13](log/2026-09-13-hub-host-node.md) | The agent on the hub host: loopback, and why every play restarts rather than detecting a change |
+| [2026-09-14](log/2026-09-14-auto-tag.md) | A merge tags itself: how the tag reaches the release, and the tokens and tools that lost |
 
 ## Not written yet
 
