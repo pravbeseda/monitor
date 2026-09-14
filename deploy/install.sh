@@ -20,6 +20,7 @@ source_dir=$(dirname "$0")
 usage() {
 	cat >&2 <<EOF
 usage: $program <hub|agent> --binary <path> [--hub <url>] [--node <name>]
+       [--follow-target --release X.Y.Z --newest X.Y.Z --answer <file>]
 
 Runs the installer for that role out of this release. DESTDIR is inherited.
 EOF
