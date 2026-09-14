@@ -10,6 +10,7 @@ import (
 	"github.com/pravbeseda/monitor/internal/history"
 	"github.com/pravbeseda/monitor/internal/i18n"
 	"github.com/pravbeseda/monitor/internal/storage"
+	"github.com/pravbeseda/monitor/internal/version"
 )
 
 //go:embed templates/*.html
@@ -22,6 +23,7 @@ var pageTemplate = template.Must(template.ParseFS(templates, "templates/index.ht
 type view struct {
 	Locale         i18n.Locale
 	Title          string
+	Version        string
 	Empty          string
 	NoValues       string
 	LastSeenLabel  string
@@ -34,6 +36,7 @@ type view struct {
 
 type nodeView struct {
 	Name     string
+	Version  string
 	LastSeen string
 	Values   []valueView
 }
@@ -71,6 +74,7 @@ func index(printer *i18n.Printer, states []storage.NodeState, lang string) view 
 	out := view{
 		Locale:         printer.Locale(),
 		Title:          printer.T("page.title"),
+		Version:        version.Current,
 		Empty:          printer.T("page.empty"),
 		NoValues:       printer.T("node.no_values"),
 		LastSeenLabel:  printer.T("node.last_seen"),
@@ -83,6 +87,7 @@ func index(printer *i18n.Printer, states []storage.NodeState, lang string) view 
 	for _, state := range states {
 		node := nodeView{
 			Name:     state.Node,
+			Version:  state.AgentVersion,
 			LastSeen: printer.Time(state.LastSeen),
 			Values:   make([]valueView, 0, len(state.Values)),
 		}

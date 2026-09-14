@@ -34,12 +34,13 @@ type Ingest struct {
 	Measurements []Measurement
 }
 
-// NodeState is what a node looks like right now: when it was last heard from, and the
-// latest value of every series it reports.
+// NodeState is what a node looks like right now: when it was last heard from, which agent
+// version it last reported, and the latest value of every series it reports.
 type NodeState struct {
-	Node     string
-	LastSeen time.Time
-	Values   []Value
+	Node         string
+	LastSeen     time.Time
+	AgentVersion string
+	Values       []Value
 }
 
 // Value is the latest reading of one series.
