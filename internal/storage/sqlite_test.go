@@ -61,7 +61,7 @@ func TestSaveIngestStoresMeasurementsAndLastSeen(t *testing.T) {
 	}
 }
 
-// spec: ingest.md#storage — measurements empty: last-seen updated, nothing else.
+// spec: ingest.md#storage — measurements empty: no measurements stored, the node still updated.
 func TestSaveIngestWithoutMeasurementsUpdatesLastSeen(t *testing.T) {
 	db := open(t)
 	received := time.Date(2026, 8, 28, 10, 5, 0, 0, time.UTC)

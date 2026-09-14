@@ -112,7 +112,7 @@ One row = one test. Anchors: `spec: ingest.md#<heading>`.
 | Request | Response | Side effect |
 |---|---|---|
 | valid request | 200 | all measurements stored; node's last-seen set to hub receipt time; node's agent version replaced by the request's |
-| valid request, `measurements` empty | 200 | last-seen updated, nothing else |
+| valid request, `measurements` empty | 200 | no measurements stored; the node updated as for any valid request |
 | measurement with a metric id the hub's config does not declare | 200 | stored; evaluation ignores it (out of scope here) |
 | measurement identical to a stored one (same node, metric, labels, ts to the millisecond) | 200 | duplicate silently skipped |
 | `manifest` differs from the stored one | 200 | stored manifest replaced |
