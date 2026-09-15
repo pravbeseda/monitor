@@ -118,7 +118,7 @@ nodes:
       ([release spec](specs/release.md#tagging-a-merge))
 - [x] One command that installs or upgrades a hub or an agent from a signed release
       ([installer spec](specs/installer.md))
-- [x] The hub upgrades itself daily to the version its host names
+- [x] The hub upgrades itself hourly to the version its host names
       ([0024](decisions/0024-the-hub-follows-a-target-with-a-kept-install-script.md),
       [installer spec](specs/installer.md#following-a-target)); agents following a target
       named by the hub are the rest of [0022](decisions/0022-updates-are-pulled.md) and are

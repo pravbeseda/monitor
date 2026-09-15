@@ -4,37 +4,61 @@
 package deploy_test
 
 import (
+	"crypto/sha256"
+	"encoding/hex"
 	"os"
 	"path/filepath"
 	"strings"
 	"testing"
 )
 
-// answeringArchive is an installer whose install-hub.sh records how it was called and what
-// arrived on its stdin, and writes named into the answer file it is given; an empty named
-// answers nothing. failing makes it refuse instead, as an installer that predates following
-// would.
-func answeringArchive(t *testing.T, named string, failing bool) []byte {
+// How a scripted installer answers a follow hand-over. Any other value is written into the
+// answer as it stands, which is how a version or a malformed answer is scripted.
+const (
+	answersNothing  = "" // the hub already runs its release, or it declined
+	asksForBinary   = "install"
+	asksEvenWithIt  = "greedy"
+	refusesHandOver = "refuse"
+)
+
+// answeringArchive is an installer whose install-hub.sh records how it was called, the binary
+// it was handed and what arrived on its stdin, then answers as behaviour says.
+func answeringArchive(t *testing.T, behaviour string) []byte {
 	t.Helper()
 	hub := "#!/bin/sh\nprintf 'hub args: %s\\n' \"$*\" >> \"$RECORD\"\n" +
-		"printf 'binary: %s\\n' \"$(cat \"$2\")\" >> \"$RECORD\"\n" +
+		"release= answer= binary=\n" +
+		"while [ $# -gt 0 ]; do\n  case $1 in\n" +
+		"  --release) release=$2 ;;\n  --answer) answer=$2 ;;\n  --binary) binary=$2 ;;\n" +
+		"  esac\n  shift\ndone\n" +
+		"[ -z \"$binary\" ] || printf 'binary: %s\\n' \"$(cat \"$binary\")\" >> \"$RECORD\"\n" +
 		"printf 'stdin: [%s]\\n' \"$(cat)\" >> \"$RECORD\"\n"
-	if failing {
-		hub += "echo 'install-hub.sh: unknown option: --follow-target' >&2\nexit 1\n"
-	} else {
-		hub += "answer=\nwhile [ $# -gt 0 ]; do\n  [ \"$1\" != --answer ] || answer=$2\n  shift\ndone\n" +
-			"[ -z '" + named + "' ] || printf '" + named + "\\n' > \"$answer\"\nexit 0\n"
+	switch behaviour {
+	case answersNothing:
+	case asksForBinary:
+		hub += "[ -n \"$binary\" ] || printf '%s\\n' \"$release\" > \"$answer\"\n"
+	case asksEvenWithIt:
+		hub += "printf '%s\\n' \"$release\" > \"$answer\"\n"
+	case refusesHandOver:
+		hub += "echo 'install-hub.sh: --binary is required' >&2\nexit 1\n"
+	default:
+		hub += "printf '" + behaviour + "\\n' > \"$answer\"\n"
 	}
+	hub += "exit 0\n"
 	return packInstaller(t, map[string]string{"install.sh": dispatcherScript, "install-hub.sh": hub}, nil)
 }
 
-// followOrigin is an origin whose newest release, 1.2.3, answers with named.
-func followOrigin(t *testing.T, named string) *origin {
+// followOrigin is an origin whose newest release, 1.2.3, answers as behaviour says.
+func followOrigin(t *testing.T, behaviour string) *origin {
 	t.Helper()
 	o := newOrigin(t)
-	o.set("monitor-installer-1.2.3.tar.gz", answeringArchive(t, named, false))
+	o.set("monitor-installer-1.2.3.tar.gz", answeringArchive(t, behaviour))
 	o.sign(t)
 	return o
+}
+
+func hubDigest(version string) string {
+	sum := sha256.Sum256(syntheticBinary("hub", version))
+	return hex.EncodeToString(sum[:])
 }
 
 func handOvers(t *testing.T, run bootstrapRun) []string {
@@ -68,6 +92,17 @@ func fetchedTags(o *origin) []string {
 	return tags
 }
 
+// fetchedCount is how many times the run asked for one asset of one release.
+func fetchedCount(o *origin, version, name string) int {
+	count := 0
+	for _, path := range o.requests() {
+		if path == "/releases/download/v"+version+"/"+name {
+			count++
+		}
+	}
+	return count
+}
+
 func installBinary(t *testing.T, destDir, body string) {
 	t.Helper()
 	dir := filepath.Join(destDir, "usr", "local", "bin")
@@ -79,11 +114,11 @@ func installBinary(t *testing.T, destDir, body string) {
 	}
 }
 
-// spec: installer.md#following-a-target — a target that resolves to the newest release is
-// installed by its installer, handed the four options and no stdin, and the run adds no
-// claim of its own.
-func TestAFollowRunHandsTheNewestReleaseOver(t *testing.T) {
-	o := followOrigin(t, "")
+// spec: installer.md#following-a-target — a hub already running the release its target
+// resolves to costs no binary: the newest release's installer is handed the five options and
+// no stdin, answers nothing, and the run adds no claim of its own.
+func TestAFollowRunDownloadsNoBinaryForAHubAtItsTarget(t *testing.T) {
+	o := followOrigin(t, answersNothing)
 	run := newBootstrapRun(t, o, "hub", "--follow-target")
 	run.stdin = "nothing the hub should read"
 
@@ -96,10 +131,16 @@ func TestAFollowRunHandsTheNewestReleaseOver(t *testing.T) {
 	if len(calls) != 1 {
 		t.Fatalf("the run handed over %d times, want once: %v", len(calls), calls)
 	}
-	for _, want := range []string{"--follow-target", "--release 1.2.3", "--newest 1.2.3", "--answer "} {
+	for _, want := range []string{"--follow-target", "--release 1.2.3", "--newest 1.2.3", "--digest " + hubDigest("1.2.3"), "--answer "} {
 		if !strings.Contains(calls[0], want) {
 			t.Errorf("the hand-over does not carry %q: %s", want, calls[0])
 		}
+	}
+	if strings.Contains(calls[0], "--binary") {
+		t.Errorf("the first hand-over carries a binary: %s", calls[0])
+	}
+	if n := fetchedCount(o, "1.2.3", binaryName("hub", "1.2.3")); n != 0 {
+		t.Errorf("the run downloaded the hub binary %d times; nobody asked for it", n)
 	}
 	if record, _ := os.ReadFile(run.record); !strings.Contains(string(record), "stdin: []") {
 		t.Errorf("the installer was handed something on stdin:\n%s", record)
@@ -109,14 +150,11 @@ func TestAFollowRunHandsTheNewestReleaseOver(t *testing.T) {
 	}
 }
 
-// spec: installer.md#following-a-target — a named older release is fetched after the newest,
-// and its own installer is handed the same newest version; the downgrade guard does not stand
-// in the way of a target.
-func TestAFollowRunFetchesTheReleaseTheTargetNames(t *testing.T) {
-	o := followOrigin(t, "1.0.0")
-	o.publish(t, "1.0.0", answeringArchive(t, "", false))
+// spec: installer.md#following-a-target — an installer asking for its own release's binary
+// gets it once, checked against the manifest already verified, with the same options.
+func TestAFollowRunDownloadsTheBinaryWhenAsked(t *testing.T) {
+	o := followOrigin(t, asksForBinary)
 	run := newBootstrapRun(t, o, "hub", "--follow-target")
-	installBinary(t, run.destDir, "#!/bin/sh\necho monitor-hub 1.2.3\n")
 
 	stdout, stderr, err := run.start(t)
 	if err != nil {
@@ -127,24 +165,86 @@ func TestAFollowRunFetchesTheReleaseTheTargetNames(t *testing.T) {
 	if len(calls) != 2 {
 		t.Fatalf("the run handed over %d times, want twice: %v", len(calls), calls)
 	}
-	for _, want := range []string{"--release 1.0.0", "--newest 1.2.3"} {
+	for _, want := range []string{"--release 1.2.3", "--newest 1.2.3", "--digest " + hubDigest("1.2.3"), "--binary "} {
 		if !strings.Contains(calls[1], want) {
 			t.Errorf("the second hand-over does not carry %q: %s", want, calls[1])
 		}
 	}
+	if record, _ := os.ReadFile(run.record); !strings.Contains(string(record), "binary: #!/bin/sh\necho monitor-hub 1.2.3") {
+		t.Errorf("the installer was not handed its release's binary:\n%s", record)
+	}
+	if n := fetchedCount(o, "1.2.3", binaryName("hub", "1.2.3")); n != 1 {
+		t.Errorf("the run downloaded the hub binary %d times, want once", n)
+	}
+	if n := fetchedCount(o, "1.2.3", "SHA256SUMS"); n != 1 {
+		t.Errorf("the run downloaded the manifest %d times; the binary is checked against the one verified", n)
+	}
+}
+
+// spec: installer.md#following-a-target — a named older release is fetched after the newest,
+// its own installer is handed its own digest and the same newest version, and only its binary
+// is downloaded; the downgrade guard does not stand in the way of a target.
+func TestAFollowRunFetchesTheReleaseTheTargetNames(t *testing.T) {
+	o := followOrigin(t, "1.0.0")
+	o.publish(t, "1.0.0", answeringArchive(t, asksForBinary))
+	run := newBootstrapRun(t, o, "hub", "--follow-target")
+	installBinary(t, run.destDir, "#!/bin/sh\necho monitor-hub 1.2.3\n")
+
+	stdout, stderr, err := run.start(t)
+	if err != nil {
+		t.Fatalf("the run failed: %v\n%s%s", err, stdout, stderr)
+	}
+
+	calls := handOvers(t, run)
+	if len(calls) != 3 {
+		t.Fatalf("the run handed over %d times, want three times: %v", len(calls), calls)
+	}
+	for _, want := range []string{"--release 1.0.0", "--newest 1.2.3", "--digest " + hubDigest("1.0.0")} {
+		if !strings.Contains(calls[1], want) || !strings.Contains(calls[2], want) {
+			t.Errorf("the hand-overs to 1.0.0 do not both carry %q: %v", want, calls[1:])
+		}
+	}
+	if strings.Contains(calls[1], "--binary") || !strings.Contains(calls[2], "--binary") {
+		t.Errorf("only the last hand-over carries a binary: %v", calls)
+	}
 	record, _ := os.ReadFile(run.record)
 	if !strings.Contains(string(record), "binary: #!/bin/sh\necho monitor-hub 1.0.0") {
-		t.Errorf("the second installer was not handed the named release's binary:\n%s", record)
+		t.Errorf("the named release's installer was not handed its binary:\n%s", record)
+	}
+	if n := fetchedCount(o, "1.2.3", binaryName("hub", "1.2.3")); n != 0 {
+		t.Errorf("the newest release's binary was downloaded %d times; nobody asked for it", n)
 	}
 	if tags := fetchedTags(o); strings.Join(tags, " ") != "v1.2.3 v1.0.0" {
 		t.Errorf("the run fetched %v, want the newest release and then the named one", tags)
 	}
 }
 
+// spec: installer.md#following-a-target — a hub held on an older release that it already
+// runs costs no binary either.
+func TestAFollowRunDownloadsNoBinaryForAHubPinnedWhereItIs(t *testing.T) {
+	o := followOrigin(t, "1.0.0")
+	o.publish(t, "1.0.0", answeringArchive(t, answersNothing))
+	run := newBootstrapRun(t, o, "hub", "--follow-target")
+
+	stdout, stderr, err := run.start(t)
+	if err != nil {
+		t.Fatalf("the run failed: %v\n%s%s", err, stdout, stderr)
+	}
+
+	if calls := handOvers(t, run); len(calls) != 2 {
+		t.Errorf("the run handed over %d times, want twice: %v", len(calls), calls)
+	}
+	for _, version := range []string{"1.2.3", "1.0.0"} {
+		if n := fetchedCount(o, version, binaryName("hub", version)); n != 0 {
+			t.Errorf("the run downloaded %s's binary %d times; nobody asked for it", version, n)
+		}
+	}
+}
+
 // spec: installer.md#following-a-target — an origin serving an older release as the newest
 // cannot roll the hub back.
 func TestAFollowRunRefusesANewestOlderThanTheHubInPlace(t *testing.T) {
-	o := followOrigin(t, "")
+	o := followOrigin(t, asksForBinary)
 	run := newBootstrapRun(t, o, "hub", "--follow-target")
 	installBinary(t, run.destDir, "#!/bin/sh\necho monitor-hub 9.9.9\n")
 
@@ -161,12 +261,12 @@ func TestAFollowRunRefusesANewestOlderThanTheHubInPlace(t *testing.T) {
 	}
 }
 
-// spec: installer.md#following-a-target — the ways the version an installer named cannot be
-// followed, none of which installs anything past the first hand-over.
+// spec: installer.md#following-a-target — the ways an answer cannot be followed, none of
+// which installs anything.
 func TestAFollowRunThatCannotFollowTheAnswer(t *testing.T) {
 	tests := []struct {
 		name      string
-		named     string
+		newest    string // how the newest release's installer answers
 		prepare   func(t *testing.T, o *origin)
 		says      []string
 		handOvers int
@@ -174,17 +274,17 @@ func TestAFollowRunThatCannotFollowTheAnswer(t *testing.T) {
 	}{
 		{
 			name:      "a release that predates the installer",
-			named:     "1.0.0",
+			newest:    "1.0.0",
 			prepare:   func(t *testing.T, o *origin) { o.publish(t, "1.0.0", nil) },
 			says:      []string{"predates the installer"},
 			handOvers: 1,
 			fetched:   "v1.2.3 v1.0.0",
 		},
 		{
-			name:  "a release whose signature does not verify",
-			named: "1.0.0",
+			name:   "a release whose signature does not verify",
+			newest: "1.0.0",
 			prepare: func(t *testing.T, o *origin) {
-				o.publish(t, "1.0.0", answeringArchive(t, "", false))
+				o.publish(t, "1.0.0", answeringArchive(t, asksForBinary))
 				o.tamper("1.0.0", "SHA256SUMS.sig", []byte("not a signature\n"))
 			},
 			says:      []string{"signature"},
@@ -192,42 +292,79 @@ func TestAFollowRunThatCannotFollowTheAnswer(t *testing.T) {
 			fetched:   "v1.2.3 v1.0.0",
 		},
 		{
-			name:  "a release whose installer does not follow a target",
-			named: "1.0.0",
+			name:   "a release whose installer does not take this hand-over",
+			newest: "1.0.0",
 			prepare: func(t *testing.T, o *origin) {
-				o.publish(t, "1.0.0", answeringArchive(t, "", true))
+				o.publish(t, "1.0.0", answeringArchive(t, refusesHandOver))
 			},
-			says:      []string{"unknown option: --follow-target"},
+			says:      []string{"--binary is required"},
 			handOvers: 2,
 			fetched:   "v1.2.3 v1.0.0",
 		},
 		{
 			name:      "a release the origin does not serve",
-			named:     "7.7.7",
+			newest:    "7.7.7",
 			says:      []string{"7.7.7"},
 			handOvers: 1,
 			fetched:   "v1.2.3 v7.7.7",
 		},
 		{
-			name:  "an installer that names a version in turn",
-			named: "1.0.0",
+			name:   "an installer that names another version in turn",
+			newest: "1.0.0",
 			prepare: func(t *testing.T, o *origin) {
-				o.publish(t, "1.0.0", answeringArchive(t, "1.1.0", false))
+				o.publish(t, "1.0.0", answeringArchive(t, "1.1.0"))
 			},
 			says:      []string{"1.0.0", "1.1.0"},
 			handOvers: 2,
 			fetched:   "v1.2.3 v1.0.0",
 		},
-		{name: "an answer that is not a version", named: "stable", says: []string{"not a version: stable"}, handOvers: 1, fetched: "v1.2.3"},
-		{name: "an answer that is half a version", named: "1.2", says: []string{"not a version: 1.2"}, handOvers: 1, fetched: "v1.2.3"},
-		{name: "an answer of two versions", named: "1.0.0\\n1.1.0", says: []string{"not a version"}, handOvers: 1, fetched: "v1.2.3"},
-		{name: "an answer with a second, empty line", named: "1.0.0\\n", says: []string{"not a version"}, handOvers: 1, fetched: "v1.2.3"},
-		{name: "an answer naming its own release", named: "1.2.3", says: []string{"its own version"}, handOvers: 1, fetched: "v1.2.3"},
+		{
+			name:   "a binary that is not the one its manifest names",
+			newest: asksForBinary,
+			prepare: func(_ *testing.T, o *origin) {
+				o.tamper("1.2.3", binaryName("hub", "1.2.3"), []byte("#!/bin/sh\necho tampered\n"))
+			},
+			says:      []string{"does not match the digest"},
+			handOvers: 1,
+			fetched:   "v1.2.3",
+		},
+		{
+			name:   "a named release's binary that is not the one its manifest names",
+			newest: "1.0.0",
+			prepare: func(t *testing.T, o *origin) {
+				o.publish(t, "1.0.0", answeringArchive(t, asksForBinary))
+				o.tamper("1.0.0", binaryName("hub", "1.0.0"), []byte("#!/bin/sh\necho tampered\n"))
+			},
+			says:      []string{"does not match the digest"},
+			handOvers: 2,
+			fetched:   "v1.2.3 v1.0.0",
+		},
+		{
+			name:      "an installer that answers after it was given its binary",
+			newest:    asksEvenWithIt,
+			says:      []string{"after it was given its binary"},
+			handOvers: 2,
+			fetched:   "v1.2.3",
+		},
+		{
+			name:   "a named release's installer that answers after it was given its binary",
+			newest: "1.0.0",
+			prepare: func(t *testing.T, o *origin) {
+				o.publish(t, "1.0.0", answeringArchive(t, asksEvenWithIt))
+			},
+			says:      []string{"after it was given its binary"},
+			handOvers: 3,
+			fetched:   "v1.2.3 v1.0.0",
+		},
+		{name: "an answer that is not a version", newest: "stable", says: []string{"not a version: stable"}, handOvers: 1, fetched: "v1.2.3"},
+		{name: "an answer that is half a version", newest: "1.2", says: []string{"not a version: 1.2"}, handOvers: 1, fetched: "v1.2.3"},
+		{name: "an answer of two versions", newest: "1.0.0\\n1.1.0", says: []string{"not a version"}, handOvers: 1, fetched: "v1.2.3"},
+		{name: "an answer with a second, empty line", newest: "1.0.0\\n", says: []string{"not a version"}, handOvers: 1, fetched: "v1.2.3"},
 	}
 
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
-			o := followOrigin(t, test.named)
+			o := followOrigin(t, test.newest)
 			if test.prepare != nil {
 				test.prepare(t, o)
 			}
@@ -265,7 +402,7 @@ func TestAFollowRunRefusesArgumentsThatChooseForIt(t *testing.T) {
 		{[]string{"hub", "--follow-target", "--allow-downgrade"}, "only when the target names it"},
 	} {
 		t.Run(strings.Join(test.args, " "), func(t *testing.T) {
-			o := followOrigin(t, "")
+			o := followOrigin(t, answersNothing)
 			run := newBootstrapRun(t, o, test.args...)
 
 			stdout, stderr, err := run.start(t)
@@ -284,15 +421,16 @@ func TestAFollowRunRefusesArgumentsThatChooseForIt(t *testing.T) {
 }
 
 // spec: installer.md#following-a-target — the whole chain with the installer a release really
-// carries: the target on the host decides which hub lands.
+// carries: the target on the host decides which hub lands, and the next run downloads no
+// binary for a hub already there.
 func TestTheWholeChainFollowsTheTarget(t *testing.T) {
 	for _, test := range []struct {
-		target string
-		lands  string
+		target  string
+		version string
 	}{
-		{"latest\n", "monitor-hub 1.2.3"},
-		{"1.2.3\n", "monitor-hub 1.2.3"},
-		{"1.0.0\n", "monitor-hub 1.0.0"},
+		{"latest\n", "1.2.3"},
+		{"1.2.3\n", "1.2.3"},
+		{"1.0.0\n", "1.0.0"},
 	} {
 		t.Run(strings.TrimSpace(test.target), func(t *testing.T) {
 			o := newOrigin(t)
@@ -311,8 +449,19 @@ func TestTheWholeChainFollowsTheTarget(t *testing.T) {
 			if err != nil {
 				t.Fatalf("no hub landed: %v\n%s%s", err, stdout, stderr)
 			}
-			if !strings.Contains(string(installed), test.lands) {
-				t.Errorf("the hub that landed is %q, want %s", installed, test.lands)
+			if want := "monitor-hub " + test.version; !strings.Contains(string(installed), want) {
+				t.Errorf("the hub that landed is %q, want %s", installed, want)
+			}
+
+			stdout, stderr, err = run.start(t)
+			if err != nil {
+				t.Fatalf("the second run failed: %v\n%s%s", err, stdout, stderr)
+			}
+			if n := fetchedCount(o, test.version, binaryName("hub", test.version)); n != 1 {
+				t.Errorf("two runs downloaded the binary %d times, want once", n)
+			}
+			if !strings.Contains(stdout, "already") {
+				t.Errorf("the second run does not say the hub is already there:\n%s", stdout)
 			}
 		})
 	}

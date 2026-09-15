@@ -1,6 +1,9 @@
 # 0024. The hub follows a target file with a kept copy of the install script
 
 - **Status:** accepted
+- **Amended by:** [0025](0025-the-hub-checks-hourly-and-downloads-a-binary-to-install-it.md),
+  for point 4's answer contract, point 5's test of a release already in place, the daily
+  timer, and the consequences naming the frozen options and the rollback floor
 - **Date:** 2026-09-14
 - **Source:** [0022](0022-updates-are-pulled.md) points 3, 5, 6 and 7, and the open key
   question [release.md](../specs/release.md#generating-and-rotating-the-key) left for this

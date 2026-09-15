@@ -53,7 +53,9 @@ MFkwEwYHKoZIzj0CAQYIKoZIzj0DAQcDQgAEabB6p+jY9j7naasjBxF13XHafcaP
 	newest=$version
 
 	make_workdir
-	fetch_and_check
+	fetch_release
+	# A follow run downloads a binary only once an installer asks for it.
+	[ "$follow" -eq 1 ] || fetch_binary
 	check_not_a_downgrade
 	unpack
 
@@ -89,7 +91,8 @@ Downloads the newest release, checks its signature and installs from it. The age
 read from MONITOR_TOKEN or from stdin, which the one-line form cannot offer.
 
 --follow-target is what the hub's update timer runs: the installer of the newest release reads
-/etc/monitor/hub.target and installs, or names the release to fetch and install instead.
+/etc/monitor/hub.target and does nothing, asks for its binary, or names another release to
+fetch; a binary is downloaded only when an installer asks for it.
 EOF
 }
 
@@ -280,7 +283,8 @@ check_asset() {
 		refuse "$1 does not match the digest release $version gives it"
 }
 
-fetch_and_check() {
+# The manifest of release $version, verified, and the installer archive it lists.
+fetch_release() {
 	key=$work/release-key.pub
 	if [ "$staged" -eq 1 ] && [ -n "${MONITOR_RELEASE_KEY:-}" ]; then
 		cp "$MONITOR_RELEASE_KEY" "$key"
@@ -311,6 +315,10 @@ fetch_and_check() {
 
 	download "$archive_asset" installer.tar.gz
 	check_asset "$archive_asset" installer.tar.gz
+}
+
+# The binary of release $version, checked against the manifest fetch_release verified.
+fetch_binary() {
 	download "$binary_asset" binary
 	check_asset "$binary_asset" binary
 	chmod 0755 "$work/binary"
@@ -378,30 +386,40 @@ check_not_a_downgrade() {
 }
 
 # The follow run of docs/specs/installer.md#following-a-target. The newest release's installer
-# reads the target; when it names another release, that one release is fetched and its own
-# installer asked again, and a second answer ends the run.
+# reads the target and answers: nothing, its own version to ask for its binary, or another
+# release, whose own installer is then asked once more. At most three hand-overs.
 follow_target() {
 	hand_over_following
 	named=$(answered_version) || exit 1
 	[ -n "$named" ] || return 0
+	if [ "$named" != "$version" ]; then
+		followed=$version
+		version=$named
+		rm -rf "$work/unpacked" "$work/release" "$work/entries"
+		fetch_release
+		unpack
+		hand_over_following
+		again=$(answered_version) || exit 1
+		[ -n "$again" ] || return 0
+		[ "$again" = "$version" ] ||
+			refuse "release $followed named $version, whose installer named $again in turn; nothing is installed"
+	fi
 
-	followed=$version
-	version=$named
-	rm -rf "$work/unpacked" "$work/release" "$work/entries"
-	fetch_and_check
-	unpack
-	hand_over_following
-	again=$(answered_version) || exit 1
-	[ -z "$again" ] ||
-		refuse "release $followed named $version, whose installer named $again in turn; nothing is installed"
+	fetch_binary
+	hand_over_following --binary "$work/binary"
+	[ ! -s "$work/answer" ] ||
+		refuse "the installer of release $version answered after it was given its binary; the run stops"
 }
 
+# One hand-over to the unpacked release's installer, with the options of
+# docs/specs/installer.md#the-handover and whatever is added after them.
 hand_over_following() {
 	: >"$work/answer"
 	printf '%s: handing over to release %s to follow the target\n' "$program" "$version"
 	status=0
-	sh "$work/release/install.sh" hub --binary "$work/binary" --follow-target \
-		--release "$version" --newest "$newest" --answer "$work/answer" </dev/null || status=$?
+	sh "$work/release/install.sh" hub --follow-target --release "$version" --newest "$newest" \
+		--digest "$(manifest_digest "$binary_asset")" --answer "$work/answer" "$@" </dev/null ||
+		status=$?
 	[ "$status" -eq 0 ] || exit "$status"
 }
 
@@ -414,10 +432,6 @@ answered_version() {
 	if [ $((lines)) -gt 1 ] || ! is_version "$answer"; then
 		printf '%s: the installer of release %s answered with something that is not a version: %s\n' \
 			"$program" "$version" "$answer" >&2
-		return 1
-	fi
-	if [ "$answer" = "$version" ]; then
-		printf '%s: the installer of release %s answered with its own version\n' "$program" "$version" >&2
 		return 1
 	fi
 	printf '%s' "$answer"

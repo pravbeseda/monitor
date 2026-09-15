@@ -4,6 +4,9 @@
 - **Amends:** the "no second endpoint" clause of [0010](0010-agent-configuration.md), for the
   target version alone; everything that ADR says about the agent's own configuration, about
   the second credential it refuses, and about the hub never initiating, stands
+- **Amended by:** [0025](0025-the-hub-checks-hourly-and-downloads-a-binary-to-install-it.md),
+  for point 6's installer installing itself on its own version (the hub's asks for its binary
+  instead), point 7's daily run, and what every run downloads
 - **Date:** 2026-09-06
 - **Source:** [POC](../poc.md) stage 3, the manual upgrade path in
   [install.md](../install.md), and [issue #16](https://github.com/pravbeseda/monitor/issues/16)

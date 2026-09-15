@@ -1,8 +1,11 @@
 // This file drives the real install-hub.sh as a follow run hands over to it: the target on
-// the staged host decides whether it installs or answers with the version it needs.
+// the staged host decides whether it installs, asks for its release's binary, finds nothing
+// to do, or answers with the version it needs.
 package deploy_test
 
 import (
+	"crypto/sha256"
+	"encoding/hex"
 	"os"
 	"path/filepath"
 	"strings"
@@ -10,7 +13,7 @@ import (
 )
 
 // followHub is one follow hand-over to install-hub.sh, staged under destDir. An empty target
-// leaves no target file at all.
+// leaves no target file at all. binary is the release's hub binary, and digest its SHA-256.
 type followHub struct {
 	destDir string
 	target  string
@@ -18,6 +21,7 @@ type followHub struct {
 	newest  string
 	answer  string
 	binary  string
+	digest  string
 }
 
 func newFollowHub(t *testing.T, target, release, newest string) followHub {
@@ -30,6 +34,7 @@ func newFollowHub(t *testing.T, target, release, newest string) followHub {
 		answer:  filepath.Join(t.TempDir(), "answer"),
 		binary:  hubBinary(t),
 	}
+	f.digest = fileDigest(t, f.binary)
 	if err := os.WriteFile(f.answer, nil, 0o600); err != nil {
 		t.Fatal(err)
 	}
@@ -37,6 +42,16 @@ func newFollowHub(t *testing.T, target, release, newest string) followHub {
 		writeTarget(t, f.destDir, target)
 	}
 	return f
+}
+
+func fileDigest(t *testing.T, path string) string {
+	t.Helper()
+	body, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	sum := sha256.Sum256(body)
+	return hex.EncodeToString(sum[:])
 }
 
 func writeTarget(t *testing.T, destDir, body string) {
@@ -50,8 +65,14 @@ func writeTarget(t *testing.T, destDir, body string) {
 	}
 }
 
+// args is the first hand-over of a follow run: the five options and no binary.
 func (f followHub) args() []string {
-	return []string{"--binary", f.binary, "--follow-target", "--release", f.release, "--newest", f.newest, "--answer", f.answer}
+	return []string{"--follow-target", "--release", f.release, "--newest", f.newest, "--digest", f.digest, "--answer", f.answer}
+}
+
+// withBinary is the hand-over that follows an installer asking for its release's binary.
+func (f followHub) withBinary() []string {
+	return append(f.args(), "--binary", f.binary)
 }
 
 func (f followHub) start(t *testing.T, args ...string) (stdout, stderr string, err error) {
@@ -60,6 +81,15 @@ func (f followHub) start(t *testing.T, args ...string) (stdout, stderr string, e
 		args = f.args()
 	}
 	return hubRun{destDir: f.destDir, args: args}.start(t)
+}
+
+func (f followHub) mustStart(t *testing.T, args ...string) (stdout string) {
+	t.Helper()
+	stdout, stderr, err := f.start(t, args...)
+	if err != nil {
+		t.Fatalf("the run failed: %v\n%s%s", err, stdout, stderr)
+	}
+	return stdout
 }
 
 func (f followHub) answered(t *testing.T) string {
@@ -71,17 +101,20 @@ func (f followHub) answered(t *testing.T) string {
 	return string(body)
 }
 
+// installed puts the release's hub in place the way an operator's run does.
+func (f followHub) installed(t *testing.T) {
+	t.Helper()
+	hubRun{destDir: f.destDir, args: []string{"--binary", f.binary}}.mustRun(t)
+}
+
 // spec: installer.md#answering-a-follow-run — a target that resolves to the release handed
-// over installs it, and the answer stays empty.
+// over, with that release's binary, installs it, and the answer stays empty.
 func TestAFollowRunInstallsTheReleaseItsTargetNames(t *testing.T) {
 	for _, target := range []string{"1.2.3\n", "1.2.3"} {
 		t.Run(strings.TrimSpace(target), func(t *testing.T) {
 			f := newFollowHub(t, target, "1.2.3", "1.3.0")
 
-			stdout, stderr, err := f.start(t)
-			if err != nil {
-				t.Fatalf("the run failed: %v\n%s%s", err, stdout, stderr)
-			}
+			f.mustStart(t, f.withBinary()...)
 
 			assertHubLayout(t, f.destDir, "etc/monitor/hub.target")
 			if got := f.answered(t); got != "" {
@@ -91,31 +124,41 @@ func TestAFollowRunInstallsTheReleaseItsTargetNames(t *testing.T) {
 	}
 }
 
+// spec: installer.md#answering-a-follow-run — without the binary, a target that resolves to
+// the release handed over asks for that release's binary, and nothing is written.
+func TestAFollowRunAsksForItsOwnReleasesBinary(t *testing.T) {
+	f := newFollowHub(t, "1.2.3\n", "1.2.3", "1.3.0")
+
+	f.mustStart(t)
+
+	if got := strings.TrimSpace(f.answered(t)); got != "1.2.3" {
+		t.Errorf("the answer holds %q, want 1.2.3", got)
+	}
+	if files := sortedKeys(tree(t, f.destDir)); len(files) != 1 {
+		t.Errorf("an answering run wrote files: %v", files)
+	}
+}
+
 // spec: installer.md#answering-a-follow-run — target latest resolves to --newest.
 func TestAFollowRunResolvesLatestToTheNewestRelease(t *testing.T) {
-	t.Run("the newest is this release", func(t *testing.T) {
-		f := newFollowHub(t, "latest\n", "1.2.3", "1.2.3")
+	for _, test := range []struct {
+		name   string
+		newest string
+		answer string
+	}{
+		{"the newest is this release", "1.2.3", "1.2.3"},
+		{"the newest is another release", "1.3.0", "1.3.0"},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			f := newFollowHub(t, "latest\n", "1.2.3", test.newest)
 
-		stdout, stderr, err := f.start(t)
-		if err != nil {
-			t.Fatalf("the run failed: %v\n%s%s", err, stdout, stderr)
-		}
-		if _, err := os.Stat(filepath.Join(f.destDir, "usr/local/bin/monitor-hub")); err != nil {
-			t.Errorf("the hub was not installed: %v", err)
-		}
-	})
+			f.mustStart(t)
 
-	t.Run("the newest is another release", func(t *testing.T) {
-		f := newFollowHub(t, "latest\n", "1.2.3", "1.3.0")
-
-		stdout, stderr, err := f.start(t)
-		if err != nil {
-			t.Fatalf("the run failed: %v\n%s%s", err, stdout, stderr)
-		}
-		if got := strings.TrimSpace(f.answered(t)); got != "1.3.0" {
-			t.Errorf("the answer holds %q, want 1.3.0", got)
-		}
-	})
+			if got := strings.TrimSpace(f.answered(t)); got != test.answer {
+				t.Errorf("the answer holds %q, want %s", got, test.answer)
+			}
+		})
+	}
 }
 
 // spec: installer.md#answering-a-follow-run — a target naming another release is answered
@@ -123,10 +166,7 @@ func TestAFollowRunResolvesLatestToTheNewestRelease(t *testing.T) {
 func TestAFollowRunAnswersWithTheVersionItsTargetNames(t *testing.T) {
 	f := newFollowHub(t, "1.0.0\n", "1.2.3", "1.2.3")
 
-	stdout, stderr, err := f.start(t)
-	if err != nil {
-		t.Fatalf("the run failed: %v\n%s%s", err, stdout, stderr)
-	}
+	f.mustStart(t)
 
 	if got := strings.TrimSpace(f.answered(t)); got != "1.0.0" {
 		t.Errorf("the answer holds %q, want 1.0.0", got)
@@ -136,23 +176,20 @@ func TestAFollowRunAnswersWithTheVersionItsTargetNames(t *testing.T) {
 	}
 }
 
-// spec: installer.md#answering-a-follow-run — a hub already at the target's binary is left
-// alone: nothing is written, and the run says why.
+// spec: installer.md#answering-a-follow-run — a hub already running the release is left
+// alone, told by its digest alone: nothing is written, nothing is asked, and the run says why.
 // spec: installer.md#staged-installs — the target and the binary in place are read from under
 // DESTDIR.
 func TestAFollowRunLeavesAnUnchangedHubAlone(t *testing.T) {
 	f := newFollowHub(t, "1.2.3\n", "1.2.3", "1.2.3")
-	hubRun{destDir: f.destDir, args: []string{"--binary", f.binary}}.mustRun(t)
+	f.installed(t)
 	example := filepath.Join(f.destDir, "etc/monitor/hub.env.example")
 	// An install run would overwrite this, so it surviving shows nothing was written.
 	if err := os.WriteFile(example, []byte("edited by hand\n"), 0o600); err != nil {
 		t.Fatal(err)
 	}
 
-	stdout, stderr, err := f.start(t)
-	if err != nil {
-		t.Fatalf("the run failed: %v\n%s%s", err, stdout, stderr)
-	}
+	stdout := f.mustStart(t)
 
 	if !strings.Contains(stdout, "already") {
 		t.Errorf("the run does not say the hub is already at that version:\n%s", stdout)
@@ -165,33 +202,84 @@ func TestAFollowRunLeavesAnUnchangedHubAlone(t *testing.T) {
 	}
 }
 
-// spec: installer.md#answering-a-follow-run — identical binary bytes are not enough: a service
-// definition that differs from the release's is installed over, as a run stopped half-way
-// would leave it.
-func TestAFollowRunInstallsOverAnUnfinishedHub(t *testing.T) {
-	f := newFollowHub(t, "1.2.3\n", "1.2.3", "1.2.3")
-	hubRun{destDir: f.destDir, args: []string{"--binary", f.binary}}.mustRun(t)
-	service := filepath.Join(f.destDir, "etc/systemd/system/monitor-hub.service")
-	if err := os.WriteFile(service, []byte("# an older unit\n"), 0o644); err != nil {
-		t.Fatal(err)
-	}
+// spec: installer.md#answering-a-follow-run — a hub that is not quite the release asks for its
+// binary rather than being taken for up to date, and the binary then finishes it.
+func TestAFollowRunAsksAgainForAnUnfinishedHub(t *testing.T) {
+	for _, test := range []struct {
+		name  string
+		spoil func(t *testing.T, destDir string)
+	}{
+		{"a service definition that differs", func(t *testing.T, destDir string) {
+			path := filepath.Join(destDir, "etc/systemd/system/monitor-hub.service")
+			if err := os.WriteFile(path, []byte("# an older unit\n"), 0o644); err != nil {
+				t.Fatal(err)
+			}
+		}},
+		{"a binary its group may write to", func(t *testing.T, destDir string) {
+			chmod(t, filepath.Join(destDir, "usr/local/bin/monitor-hub"), 0o775)
+		}},
+		{"another binary", func(t *testing.T, destDir string) {
+			path := filepath.Join(destDir, "usr/local/bin/monitor-hub")
+			if err := os.WriteFile(path, []byte("#!/bin/sh\necho monitor-hub 1.2.2\n"), 0o755); err != nil {
+				t.Fatal(err)
+			}
+		}},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			f := newFollowHub(t, "1.2.3\n", "1.2.3", "1.2.3")
+			f.installed(t)
+			test.spoil(t, f.destDir)
 
-	stdout, stderr, err := f.start(t)
-	if err != nil {
-		t.Fatalf("the run failed: %v\n%s%s", err, stdout, stderr)
-	}
+			stdout := f.mustStart(t)
+			if strings.Contains(stdout, "already") {
+				t.Errorf("the run took an unfinished hub for up to date:\n%s", stdout)
+			}
+			if got := strings.TrimSpace(f.answered(t)); got != "1.2.3" {
+				t.Fatalf("the answer holds %q, want 1.2.3", got)
+			}
 
-	if strings.Contains(stdout, "already") {
-		t.Errorf("the run skipped a hub whose service definition is not the release's:\n%s", stdout)
-	}
-	if body, _ := os.ReadFile(service); string(body) == "# an older unit\n" {
-		t.Error("the service definition was not replaced")
+			if err := os.WriteFile(f.answer, nil, 0o600); err != nil {
+				t.Fatal(err)
+			}
+			f.mustStart(t, f.withBinary()...)
+			assertHubLayout(t, f.destDir, "etc/monitor/hub.target")
+			if got := fileDigest(t, filepath.Join(f.destDir, "usr/local/bin/monitor-hub")); got != f.digest {
+				t.Error("the binary handed over is not the one in place")
+			}
+		})
 	}
 }
 
 // spec: installer.md#answering-a-follow-run — every way a follow hand-over is refused, none
 // of which installs or answers anything.
 func TestAFollowRunRefuses(t *testing.T) {
+	without := func(option string) func(f followHub) []string {
+		return func(f followHub) []string {
+			args := f.args()
+			for i, arg := range args {
+				if arg != option {
+					continue
+				}
+				if option == "--follow-target" {
+					return append(args[:i:i], args[i+1:]...)
+				}
+				return append(args[:i:i], args[i+2:]...)
+			}
+			return args
+		}
+	}
+	with := func(option, value string) func(f followHub) []string {
+		return func(f followHub) []string {
+			args := f.args()
+			for i, arg := range args {
+				if arg == option {
+					args[i+1] = value
+				}
+			}
+			return args
+		}
+	}
+
 	tests := []struct {
 		name    string
 		target  string
@@ -255,59 +343,33 @@ func TestAFollowRunRefuses(t *testing.T) {
 			},
 			names: "/etc/monitor",
 		},
+		{name: "no --follow-target", target: "latest\n", args: without("--follow-target"), names: "--follow-target"},
+		{name: "no --release", target: "latest\n", args: without("--release"), names: "--release"},
+		{name: "no --newest", target: "latest\n", args: without("--newest"), names: "--newest"},
+		{name: "no --digest", target: "latest\n", args: without("--digest"), names: "needs --digest"},
 		{
-			name:   "no --newest",
-			target: "latest\n",
+			name:   "a --binary naming no file",
+			target: "1.2.3\n",
 			args: func(f followHub) []string {
-				return []string{"--binary", f.binary, "--follow-target", "--release", f.release, "--answer", f.answer}
+				return append(f.args(), "--binary", filepath.Join(f.destDir, "no-such-hub"))
 			},
-			names: "--newest",
+			names: "no file",
 		},
+		{name: "no --answer", target: "latest\n", args: without("--answer"), names: "--answer"},
+		{name: "a --release that is not a version", target: "latest\n", args: with("--release", "v1.2.3"), names: "v1.2.3"},
+		{name: "a --newest that is not a version", target: "latest\n", args: with("--newest", "v1.3.0"), names: "v1.3.0"},
+		{name: "a --digest that is too short", target: "latest\n", args: with("--digest", "abc123"), names: "abc123"},
 		{
-			name:   "no --answer",
+			name:   "a --digest in capitals",
 			target: "latest\n",
-			args: func(f followHub) []string {
-				return []string{"--binary", f.binary, "--follow-target", "--release", f.release, "--newest", f.newest}
-			},
-			names: "--answer",
-		},
-		{
-			name:   "a --release that is not a version",
-			target: "latest\n",
-			args: func(f followHub) []string {
-				return []string{"--binary", f.binary, "--follow-target", "--release", "v1.2.3", "--newest", f.newest, "--answer", f.answer}
-			},
-			names: "v1.2.3",
-		},
-		{
-			name:   "no --release",
-			target: "latest\n",
-			args: func(f followHub) []string {
-				return []string{"--binary", f.binary, "--follow-target", "--newest", f.newest, "--answer", f.answer}
-			},
-			names: "--release",
-		},
-		{
-			name:   "no --follow-target",
-			target: "latest\n",
-			args: func(f followHub) []string {
-				return []string{"--binary", f.binary, "--release", f.release, "--newest", f.newest, "--answer", f.answer}
-			},
-			names: "--follow-target",
-		},
-		{
-			name:   "a --newest that is not a version",
-			target: "latest\n",
-			args: func(f followHub) []string {
-				return []string{"--binary", f.binary, "--follow-target", "--release", f.release, "--newest", "v1.3.0", "--answer", f.answer}
-			},
-			names: "v1.3.0",
+			args:   with("--digest", strings.Repeat("A", 64)),
+			names:  strings.Repeat("A", 64),
 		},
 		{
 			name:   "an --answer naming no file",
 			target: "latest\n",
 			args: func(f followHub) []string {
-				return []string{"--binary", f.binary, "--follow-target", "--release", f.release, "--newest", f.newest, "--answer", f.answer + ".missing"}
+				return with("--answer", f.answer+".missing")(f)
 			},
 			names: "--answer",
 		},

@@ -45,6 +45,7 @@ One decision per file, each stating what was rejected and why. New records start
 | [0022](decisions/0022-updates-are-pulled.md) | Updates are pulled by an updater of their own; the hub names the version | accepted |
 | [0023](decisions/0023-proxy-holds-the-web-perimeter.md) | The proxy authenticates the web; the hub authenticates only ingest | accepted |
 | [0024](decisions/0024-the-hub-follows-a-target-with-a-kept-install-script.md) | The hub follows a target file with a kept copy of the install script | accepted |
+| [0025](decisions/0025-the-hub-checks-hourly-and-downloads-a-binary-to-install-it.md) | The hub checks hourly and downloads a binary only to install it | accepted |
 
 ## Behaviour specs
 
