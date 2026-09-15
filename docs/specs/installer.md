@@ -10,7 +10,8 @@
   [0020](../decisions/0020-agent-reads-its-environment-file.md),
   [0021](../decisions/0021-shell-is-linted-too.md),
   [0022](../decisions/0022-updates-are-pulled.md),
-  [0024](../decisions/0024-the-hub-follows-a-target-with-a-kept-install-script.md)
+  [0024](../decisions/0024-the-hub-follows-a-target-with-a-kept-install-script.md),
+  [0025](../decisions/0025-the-hub-checks-hourly-and-downloads-a-binary-to-install-it.md)
 
 ## Purpose
 
@@ -58,9 +59,14 @@ signature therefore says "this is what that release published under that name", 
 what makes a renamed or substituted asset detectable ([release.md](release.md)).
 
 **What is fetched is what is checked.** `monitor-install.sh` downloads the manifest, its
-signature, the archive and the one binary the machine needs, and verifies every one of them
-before the first is used. The installer downloads nothing and verifies nothing: giving it
-either would put a verifier inside the release, which is the release vouching for itself.
+signature, the archive and the one binary the machine needs, and verifies each of them before
+it is used; a follow run downloads the binary last, only once an installer asks for it, and
+checks it against the manifest it already verified for that release in the same run. The
+installer downloads nothing and verifies nothing: giving it either would put a verifier
+inside the release, which is the release vouching for itself. The digest it computes of the
+binary in place, with `openssl`, decides only whether there is anything to do: a false match
+would leave the same bytes where they are, and a false mismatch asks for a binary the kept
+script verifies.
 The rules it applies are `deploy/verify-release.sh`'s, and the two must agree
 ([release.md](release.md#verifying-an-artifact)).
 
@@ -94,26 +100,35 @@ sh <unpacked>/install.sh <role> --binary <verified path> [--hub <url> --node <na
 - The binary is already verified and already executable when the installer sees it.
 - The run exits with the installer's status, and passes its output through unchanged.
 
-A follow run adds four options to the same form. Only the hub's installer accepts them today;
-the form names no role of its own, so an agent's installer can take the same four:
+A follow run hands over with five options of its own and, at first, no binary. Only the
+hub's installer accepts them today; the form names no role of its own, so an agent's
+installer can take the same five
+([0025](../decisions/0025-the-hub-checks-hourly-and-downloads-a-binary-to-install-it.md)):
 
 ```
-sh <unpacked>/install.sh <role> --binary <verified path> \
-    --follow-target --release <this release's version> --newest <newest version> --answer <file>
+sh <unpacked>/install.sh <role> --follow-target --release <this release's version> \
+    --newest <newest version> --digest <sha256 of this release's binary for the role> \
+    --answer <file> [--binary <verified path>]
 ```
 
 - `--answer` names an empty file. An installer that exits 0 and leaves it empty has nothing
   further for the run to do — it installed, found nothing to change, or declined — and the
   run claims nothing of its own. One that writes into it installs nothing and exits 0; what
   it writes is one `MAJOR.MINOR.PATCH`, a trailing newline allowed, and anything else is
-  refused by the run. A non-zero exit is a refusal whatever the file holds.
-- The installer downloads nothing: `--newest` is how `latest` is resolved without asking the
-  origin, and both hand-overs of one run pass the same value.
-- The second hand-over runs the installer of the release the first one named, out of a
+  refused by the run. Another release's version asks for that release; its own `--release`
+  asks for this release's binary. A non-zero exit is a refusal whatever the file holds.
+- `--binary` is given only after an installer asked for it, together with the same five
+  options, and an installer handed it answers nothing: an answer then stops the run.
+- The installer downloads nothing. `--newest` is how `latest` is resolved without asking the
+  origin, and every hand-over of one run passes the same value; `--digest` is how it tells,
+  without the binary, whether the hub already runs this release.
+- A hand-over to the release an installer named runs that release's installer, out of a
   directory of its own, with an empty answer file.
 
 **What a kept script depends on is frozen from the first kept script on**, because it stays
-on its host until someone replaces it: these four options and the answer's meaning, the
+on its host until someone replaces it: these five options and the answer's meaning — at most
+three hand-overs, a binary only after an answer naming the installer's own release, and an
+answer after `--binary` stopping the run — the
 handover form above, the two URL shapes of [Where a release is fetched
 from](#where-a-release-is-fetched-from), the asset names and the manifest format of
 [release.md](release.md), the archive being one directory holding `install.sh`, the signature
@@ -131,7 +146,8 @@ creating the account and accepting an existing one, refusing one that can log in
 systemd about the unit and starting the service, correcting an owner, refusing a host with no
 systemd, ignoring an inherited `TMPDIR`, treating an installed binary owned by anyone but
 root as replaceable, stripping an archive's owner and setuid bits, which an unprivileged
-tar would not have restored anyway, refusing a target owned by anyone but root, and telling
+tar would not have restored anyway, refusing a target owned by anyone but root, not taking a
+hub binary owned by anyone but root for one already running, and telling
 a running hub on the release's binary from a stopped one or one still on the binary it
 replaced. They are proved on a real host; everything else in these
 tables is proved by the suite.
@@ -209,33 +225,36 @@ and [Unpacking](#unpacking) hold for each release a follow run fetches.
 | target naming the newest version | the same |
 | target naming an older release | that release's hub is installed, even over a newer one in place: a target is a deliberate choice, and the downgrade guard judges the newest release alone |
 | the newest release older than the hub in place | nothing is installed whatever the target, and the run says so: an origin serving an old release as the newest cannot roll the hub back |
-| any follow run | the newest release is downloaded and verified first, even when the target names another |
+| any follow run | the newest release's manifest and installer are downloaded and verified first, even when the target names another, and no binary is downloaded before an installer asks for it |
+| a hub already running the release its target resolves to | no binary is downloaded, and nothing is installed |
+| an installer that asks for its own release's binary | that binary is downloaded once, checked against the manifest this run already verified for that release, and handed over with the same options |
+| an installer handed its binary that answers anyway | nothing is installed, and the run says that installer answered after it was given its binary |
 | target naming a release whose manifest lists no installer archive | nothing is installed, and the run says that release predates the installer |
-| target naming a release whose installer does not follow a target | nothing is installed, and that installer's refusal is passed through |
+| target naming a release whose installer does not take this hand-over | nothing is installed, and that installer's refusal is passed through |
 | target naming a release that cannot be fetched once the newest one was verified | nothing is installed, and the run names the version |
-| the second hand-over | it runs the installer of the release the first one named, given the same newest version and an empty answer |
-| the named release's installer names a version in turn | nothing is installed, and the run names the version it followed and the one named after it |
-| an answer that is not one `MAJOR.MINOR.PATCH`, or names the release whose installer gave it | nothing more is fetched, nothing is installed, and the run names the answer |
+| a hand-over to the release an installer named | it runs that release's installer, given that release's own `--digest`, the same newest version and an empty answer |
+| the named release's installer names a version other than its own | nothing is installed, and the run names the version it followed and the one named after it |
+| an answer that is not one `MAJOR.MINOR.PATCH` | nothing more is fetched, nothing is installed, and the run names the answer |
 | an installer that exits 0 leaving the answer empty | the run ends with that installer's output and adds no claim of its own |
 | `--follow-target` with the `agent` role | the usage on stderr: an agent's target is the hub's to name, and that is not built |
 | `--follow-target` with `--version` or `--allow-downgrade` | the usage on stderr |
 
 ### Answering a follow run
 
-What `install.sh hub` does when it is handed the four options of [The handover](#the-handover).
+What `install.sh hub` does when it is handed the five options of [The handover](#the-handover).
 
 | Event | Outcome |
 |---|---|
-| a target that resolves to `--release` | it installs as [Installing the hub](#installing-the-hub) says, and the answer stays empty |
+| a target that resolves to `--release`, with the hub already running that release — the binary in place has the digest `--digest` names and the layout's mode and, on a real run, owner, the service definition is the release's and, on a real run, the service runs that binary | nothing is written, the answer stays empty, the run says the hub is already at that version, and no service command runs |
+| a target that resolves to `--release`, any of those not so — another binary, one whose mode or owner is not the layout's, a service definition that differs, a service that is stopped or still running the binary that was replaced — and no `--binary` | the answer holds `--release`, nothing is written outside it, and the exit is 0 |
+| the same, with `--binary` | it installs as [Installing the hub](#installing-the-hub) says and the answer stays empty, so a run stopped before its restart is finished by the next one |
 | a target that resolves to another version | the answer holds that version, nothing is written outside it, and the exit is 0 |
 | target `latest` | it resolves to `--newest` |
-| a target that resolves to `--release`, with the hub binary and service definition in place byte-identical to the release's and, on a real run, the service running that binary | nothing is written, the answer stays empty, the run says the hub is already at that version, and no service command runs |
-| the same, with any of those not so — a service definition that differs, a service that is stopped, or one still running the binary that was replaced | it installs as [Installing the hub](#installing-the-hub) says, so a run stopped before its restart is finished by the next one |
 | no target file | nothing is installed, and the run names the file and the two forms it may take |
 | a target that is empty, holds anything beside the value and one trailing newline, or holds neither `latest` nor `MAJOR.MINOR.PATCH` | nothing is installed, and the run names the file |
 | the target or `/etc/monitor` a symlink, writable by group or other, or on a real run owned by anyone but root | nothing is installed, and the run names the path: the target chooses what root installs |
-| only some of `--follow-target`, `--release`, `--newest` and `--answer` | nothing is installed, and the run names what is missing |
-| `--release` or `--newest` that is not `MAJOR.MINOR.PATCH`, or `--answer` naming no file or a file that is not empty | nothing is installed, and the run names the value |
+| only some of `--follow-target`, `--release`, `--newest`, `--digest` and `--answer` | nothing is installed, and the run names what is missing |
+| `--release` or `--newest` that is not `MAJOR.MINOR.PATCH`, `--digest` that is not 64 lowercase hexadecimal digits, or `--answer` naming no file or a file that is not empty | nothing is installed, and the run names the value |
 
 ### Installing the agent
 
@@ -320,14 +339,21 @@ What `install.sh hub` does when it is handed the four options of [The handover](
   one of the two runs left it. An operator's run while the timer's is in progress is the same
   case.
 - **The rollback floor.** A target can go back no further than the first release whose
-  installer follows a target: an older installer refuses `--follow-target` as an unknown
-  option, and a release older still carries no installer at all. Going below the floor is the
-  manual path.
+  installer takes `--digest`
+  ([0025](../decisions/0025-the-hub-checks-hourly-and-downloads-a-binary-to-install-it.md)):
+  v0.1.2's installer refuses `--digest` as an unknown option, an older one refuses
+  `--follow-target` the same way, and a release older still carries no installer at all. Going below the floor is the manual path.
+- **A hub that never counts as running** — one whose configuration is missing, so its service
+  is never started, one crash-looping between restarts, or one stopped by hand — gets its
+  binary downloaded and installed again every hour, and a configured one is started again. A
+  hub stopped for maintenance stays stopped only with its update timer stopped first
+  ([install.md](../install.md#keeping-the-hub-upgraded-unattended)). That is the cost of judging "already running" by the running
+  process rather than by the files.
 - **A broken newest installer blocks every target**, rollback included, because every run
   hands over to it first. The remedy is a fixed release, or the manual path.
-- **A target changed between the two hand-overs** is read afresh by the second installer; if
-  it no longer names that release, the run stops as for a second answer, and the next run
-  follows the new target.
+- **A target changed between hand-overs** is read afresh by every installer. If it no longer
+  names the release being handed over, the run stops — as for an answer naming yet another
+  version, or for an answer after `--binary` — and the next run follows the new target.
 - **An installer that neither installs nor answers** looks like a success to the run. It is
   the release's own business, and the installer's output says what it did.
 

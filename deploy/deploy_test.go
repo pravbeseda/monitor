@@ -411,22 +411,34 @@ func TestTheUpdateIsStartedByItsTimerAlone(t *testing.T) {
 	}
 }
 
-// spec: deployment.md#the-services — once a day, spread over an hour, caught up after the host
-// was down, and armed again on every boot.
-func TestTheTimerRunsTheUpdateDaily(t *testing.T) {
-	body := code(t, timerUnit)
+// spec: deployment.md#the-services — once an hour, spread over ten minutes, caught up after
+// the host was down, and armed again on every boot.
+func TestTheTimerRunsTheUpdateHourly(t *testing.T) {
+	// Whole lines, and each key once: a second OnCalendar= would add a schedule, not replace it.
+	lines := map[string]bool{}
+	keys := map[string]int{}
+	for _, line := range strings.Split(code(t, timerUnit), "\n") {
+		line = strings.TrimSpace(line)
+		lines[line] = true
+		if key, _, found := strings.Cut(line, "="); found {
+			keys[key]++
+		}
+	}
 	for _, line := range []string{
-		"OnCalendar=daily",
-		"RandomizedDelaySec=1h",
+		"OnCalendar=hourly",
+		"RandomizedDelaySec=10min",
 		"Persistent=true",
 		"[Install]",
 		"WantedBy=timers.target",
 	} {
-		if !strings.Contains(body, line) {
-			t.Errorf("%s has no %s", timerUnit, line)
+		if !lines[line] {
+			t.Errorf("%s has no line %s", timerUnit, line)
+		}
+		if key, _, found := strings.Cut(line, "="); found && keys[key] != 1 {
+			t.Errorf("%s sets %s %d times, want once", timerUnit, key, keys[key])
 		}
 	}
-	if strings.Contains(body, "OnBootSec=") {
+	if keys["OnBootSec"] != 0 {
 		t.Errorf("%s sets OnBootSec=; the update runs at boot only when a run was missed", timerUnit)
 	}
 }

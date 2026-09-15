@@ -46,13 +46,16 @@ trap 'on_exit 129' HUP
 usage() {
 	cat <<EOF
 usage: $program --binary <path>
-       [--follow-target --release X.Y.Z --newest X.Y.Z --answer <file>]
+       $program --follow-target --release X.Y.Z --newest X.Y.Z --digest <sha256> --answer <file>
+           [--binary <path>]
 
 Installs the hub binary, its service definition and the example configuration. The real
 configuration is the operator's: a run that does not find it leaves the service stopped.
 
-A follow run reads /etc/monitor/hub.target first. It installs only when the target names this
-release, and otherwise writes the version the target names into the answer file.
+A follow run reads /etc/monitor/hub.target first. When the target names another release it
+writes that version into the answer file; when it names this one and the hub already runs a
+binary of that digest it does nothing; otherwise it installs the binary it was given, or
+writes this release's version to ask for it.
 
 DESTDIR stages the whole installation under a prefix and registers no service.
 EOF
@@ -98,15 +101,17 @@ binary=
 follow=
 release=
 newest=
+digest=
 answer=
 while [ $# -gt 0 ]; do
 	case $1 in
-	--binary | --release | --newest | --answer)
+	--binary | --release | --newest | --digest | --answer)
 		[ "$#" -ge 2 ] || refuse "$1 needs a value"
 		case $1 in
 		--binary) binary=$2 ;;
 		--release) release=$2 ;;
 		--newest) newest=$2 ;;
+		--digest) digest=$2 ;;
 		--answer) answer=$2 ;;
 		esac
 		shift 2
@@ -125,21 +130,29 @@ while [ $# -gt 0 ]; do
 	esac
 done
 
-[ -n "$binary" ] || refuse "--binary is required"
-[ -f "$binary" ] || refuse "--binary names no file: $binary"
-[ -x "$binary" ] || refuse "--binary names a file that is not executable: $binary"
-
-# The four options of a follow run come together or not at all (installer.md#the-handover).
-if [ -n "$follow$release$newest$answer" ]; then
+# The five options of a follow run come together or not at all, and only a follow run may go
+# without a binary: it asks for one (installer.md#the-handover).
+if [ -n "$follow$release$newest$digest$answer" ]; then
 	[ -n "$follow" ] || refuse "a follow run needs --follow-target as well"
 	[ -n "$release" ] || refuse "a follow run needs --release as well"
 	[ -n "$newest" ] || refuse "a follow run needs --newest as well"
+	[ -n "$digest" ] || refuse "a follow run needs --digest as well"
 	[ -n "$answer" ] || refuse "a follow run needs --answer as well"
 	is_version "$release" || refuse "--release is not a version: $release"
 	is_version "$newest" || refuse "--newest is not a version: $newest"
+	case $digest in
+	*[!0-9a-f]*) refuse "--digest is not a SHA-256 in lowercase hexadecimal: $digest" ;;
+	esac
+	[ ${#digest} -eq 64 ] || refuse "--digest is not a SHA-256 in lowercase hexadecimal: $digest"
 	if [ ! -f "$answer" ] || [ -s "$answer" ]; then
 		refuse "--answer must name an empty file: $answer"
 	fi
+else
+	[ -n "$binary" ] || refuse "--binary is required"
+fi
+if [ -n "$binary" ]; then
+	[ -f "$binary" ] || refuse "--binary names no file: $binary"
+	[ -x "$binary" ] || refuse "--binary names a file that is not executable: $binary"
 fi
 
 # DESTDIR stages the whole installation under a prefix: no root, no account, no service. A
@@ -236,16 +249,24 @@ check_target_path() {
 	fi
 }
 
-# Whether the release handed over is already what is installed and, on a real run, what the
-# service is running. A run stopped between replacing the binary and restarting the service
-# leaves identical files behind, and the next run has to finish it rather than skip it.
+# The SHA-256 of a file, or nothing when it cannot be read.
+digest_of() {
+	line=$(openssl dgst -sha256 "$1" 2>/dev/null) || return 0
+	printf '%s' "${line##* }"
+}
+
+# Whether the release handed over is already what is installed, as the layout installs it, and
+# on a real run what the service is running. A run stopped between replacing the binary and
+# restarting the service leaves identical files behind, and the next run has to finish it.
 already_running() {
-	cmp -s "$1" "$destdir$binary_file" || return 1
+	[ "$(digest_of "$destdir$binary_file")" = "$digest" ] || return 1
+	[ -z "$(find "$destdir$binary_file" -maxdepth 0 ! -perm 0755)" ] || return 1
 	cmp -s "$service_source" "$destdir$service_file" || return 1
 	[ -z "$destdir" ] || return 0
+	[ -n "$(find "$binary_file" -maxdepth 0 -user root)" ] || return 1
 	pid=$(systemctl show -p MainPID --value monitor-hub.service 2>/dev/null) || return 1
 	[ "${pid:-0}" != 0 ] || return 1
-	cmp -s "$1" "/proc/$pid/exe"
+	[ "$(digest_of "/proc/$pid/exe")" = "$digest" ]
 }
 
 # A follow run decides from the target before anything is written: it answers with another
@@ -276,8 +297,14 @@ if [ -n "$follow" ]; then
 			"$program" "$target_file" "$wanted" "$release"
 		exit 0
 	fi
-	if already_running "$binary"; then
+	if already_running; then
 		printf '%s: monitor-hub %s is already installed; nothing to do\n' "$program" "$release"
+		exit 0
+	fi
+	if [ -z "$binary" ]; then
+		printf '%s\n' "$release" >"$answer"
+		printf '%s: %s names this release %s; asking for its binary\n' \
+			"$program" "$target_file" "$release"
 		exit 0
 	fi
 fi

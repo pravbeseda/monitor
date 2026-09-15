@@ -336,12 +336,14 @@ installed by hand is replaced at the next run by whatever the target names.
 
 ### Keeping the hub upgraded unattended
 
-A timer on the hub host runs a kept copy of `monitor-install.sh` once a day, and the hub
+A timer on the hub host runs a kept copy of `monitor-install.sh` once an hour, and the hub
 follows the version `/etc/monitor/hub.target` names
 ([ADR 0024](decisions/0024-the-hub-follows-a-target-with-a-kept-install-script.md),
 [specs/installer.md](specs/installer.md#following-a-target)). No release touches the kept
 script, its units or the target: they are placed once, like this, or by the host's
-provisioning.
+provisioning. Place them only once the newest release's installer takes `--digest`, the first
+release after [ADR 0025](decisions/0025-the-hub-checks-hourly-and-downloads-a-binary-to-install-it.md):
+until then every hourly run fails, because the newest installer refuses the hand-over.
 
 Download and check the script with the first lines of section 0's block — up to and including
 the fingerprint check, into `"$home/monitor"` — and fetch the two units beside it:
@@ -363,7 +365,7 @@ sudo systemctl daemon-reload
 sudo systemctl enable --now monitor-hub-update.timer
 ```
 
-Then one run now rather than tomorrow, and what it did:
+Then one run now rather than within the hour, and what it did:
 
 ```sh
 sudo systemctl start monitor-hub-update.service
@@ -373,7 +375,9 @@ sudo journalctl -u monitor-hub-update.service -n 20
 **The target** is `latest` or one version. Pinning or rolling back is writing a version into
 it — `printf '1.2.3\n' | sudo tee /etc/monitor/hub.target >/dev/null` — and it takes effect
 at the next run, or at once with the `systemctl start` above. It goes
-back no further than the first release that follows a target; below that is the manual path.
+back no further than the first release whose installer takes `--digest`
+([ADR 0025](decisions/0025-the-hub-checks-hourly-and-downloads-a-binary-to-install-it.md));
+below that is the manual path.
 A merge that should not reach the hub carries `release:none`
 ([specs/release.md](specs/release.md#tagging-a-merge)).
 

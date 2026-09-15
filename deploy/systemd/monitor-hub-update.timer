@@ -1,12 +1,12 @@
-# Runs the hub update once a day. Persistent catches up on a run missed while the host was
-# down; the randomized delay spreads it over an hour (docs/specs/deployment.md).
+# Runs the hub update once an hour. Persistent catches up on a run missed while the host was
+# down; the randomized delay spreads it over ten minutes (docs/specs/deployment.md).
 
 [Unit]
-Description=Monitor hub update, daily
+Description=Monitor hub update, hourly
 
 [Timer]
-OnCalendar=daily
-RandomizedDelaySec=1h
+OnCalendar=hourly
+RandomizedDelaySec=10min
 Persistent=true
 
 [Install]

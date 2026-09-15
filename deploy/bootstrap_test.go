@@ -76,7 +76,7 @@ func (o *origin) publish(t *testing.T, version string, archive []byte) {
 	t.Helper()
 	o.mu.Lock()
 	for _, role := range []string{"agent", "hub"} {
-		o.assets[version+"/"+binaryName(role, version)] = []byte("#!/bin/sh\necho monitor-" + role + " " + version + "\n")
+		o.assets[version+"/"+binaryName(role, version)] = syntheticBinary(role, version)
 	}
 	if archive != nil {
 		o.assets[version+"/monitor-installer-"+version+".tar.gz"] = archive
@@ -96,8 +96,8 @@ func newOrigin(t *testing.T) *origin {
 	dir := t.TempDir()
 	o := &origin{dir: dir, assets: map[string][]byte{}, version: "1.2.3"}
 	o.priv, o.pub = keyPair(t, dir, "origin")
-	o.set(o.binaryName("agent"), []byte("#!/bin/sh\necho monitor-agent 1.2.3\n"))
-	o.set(o.binaryName("hub"), []byte("#!/bin/sh\necho monitor-hub 1.2.3\n"))
+	o.set(o.binaryName("agent"), syntheticBinary("agent", o.version))
+	o.set(o.binaryName("hub"), syntheticBinary("hub", o.version))
 	o.set("monitor-installer-"+o.version+".tar.gz", installerArchive(t, nil))
 	o.sign(t)
 
@@ -136,6 +136,12 @@ func (o *origin) binaryName(role string) string {
 	o.mu.Lock()
 	defer o.mu.Unlock()
 	return binaryName(role, o.version)
+}
+
+// syntheticBinary is what a synthetic release publishes for a role: a script that reports its
+// version the way a real binary does.
+func syntheticBinary(role, version string) []byte {
+	return []byte("#!/bin/sh\necho monitor-" + role + " " + version + "\n")
 }
 
 func binaryName(role, version string) string {

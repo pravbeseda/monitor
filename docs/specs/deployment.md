@@ -8,7 +8,8 @@
   [0010](../decisions/0010-agent-configuration.md),
   [0019](../decisions/0019-deployment-layout.md),
   [0020](../decisions/0020-agent-reads-its-environment-file.md),
-  [0024](../decisions/0024-the-hub-follows-a-target-with-a-kept-install-script.md)
+  [0024](../decisions/0024-the-hub-follows-a-target-with-a-kept-install-script.md),
+  [0025](../decisions/0025-the-hub-checks-hourly-and-downloads-a-binary-to-install-it.md)
 
 ## Purpose
 
@@ -157,7 +158,7 @@ omitted.
 | hub | it exits, whatever the status | it is restarted after a short delay |
 | hub | it starts | it reads `/etc/monitor/hub.yaml` and `/var/lib/monitor/monitor.db`, and serves on the loopback address only |
 | hub | it writes to stdout or stderr | the lines reach the system log |
-| hub update | its timer is enabled | the update runs once a day, at a moment spread over an hour, and a run missed while the host was down happens soon after it is back |
+| hub update | its timer is enabled | the update runs once an hour, at a moment spread over ten minutes, and a run missed while the host was down happens soon after it is back ([0025](../decisions/0025-the-hub-checks-hourly-and-downloads-a-binary-to-install-it.md)) |
 | hub update | the host reboots | the timer is armed again; the update itself does not run at boot unless a run was missed |
 | hub update | it runs | the kept script runs as root with `hub --follow-target` ([installer.md](installer.md#following-a-target)), once the network is up, and its output reaches the system log |
 | hub update | the hub is stopped or failing | the update still runs: nothing ties it to the hub's service |
