@@ -32,7 +32,7 @@ content and no number's format.
 | Request | What the reader sees |
 |---|---|
 | a first visit, from a browser in `Europe/Moscow` | the page arrives a second time on its own, and from then on every time on it is Moscow, marked `MSK` |
-| any later visit from that browser | the same, and no second arrival |
+| a later visit from that browser, while it still holds what it stored | the same, and no second arrival |
 | a first visit carrying a query — a chart window, a language | that same query after the second arrival; nothing the reader asked for is lost, and no extra step appears in the browser's history |
 | a first visit with scripting turned off | every time in UTC, marked `UTC` |
 | a visit with scripting turned off, from a browser that has been here before | the zone that browser reported last time |
@@ -85,6 +85,8 @@ tell which of them they are.
   repeating or skipping one. No point moves and no point is dropped. The zone a chart names
   is the one its window ends in, so half such an axis is captioned by the other half's name —
   an hour's worth of imprecision in a caption, against a second caption on every chart.
+- **A browser that drops what it stored** — Safari caps a cookie written by a script at
+  seven days — is a first visit again, and converges the same way. Nothing accumulates.
 - **A page reached by the back button** is fetched again wherever a page that may not be
   stored is also not restored, and shows the current zone; where it is restored instead, it
   is the rendering it was left with, since nothing runs on a restore. Which of the two a

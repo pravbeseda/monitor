@@ -46,8 +46,9 @@ standard library's default, which prints the host's own clock.
   clock. Rendering the server's zone would be worse than UTC, because it looks right. A
   browser already in UTC reports the flat name `UTC` and is refused by the same rule, which
   costs it nothing — a refusal renders in UTC.
-- **The zone is stated once per page**, next to the time where there is one and on the chart
-  next to its time axis, where the per-tick labels have no room for a marker.
+- **The zone is stated, not assumed**: beside every time the page prints, which the layout
+  already carries, and once on the chart next to its time axis, where the per-tick labels
+  have no room for a marker.
 - **HTML pages answer `Cache-Control: no-store` and `Vary: Cookie, Accept-Language`.** A
   page now varies by a cookie, and a stored pre-cookie copy would pin a reader to UTC with
   nothing to correct it — the script does nothing once the cookie is already right. The
@@ -80,7 +81,9 @@ standard library's default, which prints the host's own clock.
 - The proxy must not put a `Content-Security-Policy` in front of the pages that blocks the
   shell's inline script; blocked, it degrades to UTC silently and nothing here reports it.
   Stated as a requirement in [nginx-requirements.md](../nginx-requirements.md).
-- A first visit from a new browser costs one extra round trip. Later visits cost nothing.
+- A first visit from a new browser costs one extra round trip, and so does a visit from a
+  browser that has since dropped the cookie — Safari caps one written by a script at seven
+  days. Every visit that still carries it costs nothing.
 - The hub binary does not grow: the zone database was already linked for the digest's
   configured zone, and building both heads differs by about half a kilobyte.
 - The cookie is attacker-controlled input reaching `time.LoadLocation`, which does open

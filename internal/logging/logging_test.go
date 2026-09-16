@@ -54,3 +54,15 @@ func TestLogLineKeepsItsAttributes(t *testing.T) {
 		}
 	}
 }
+
+// A caller's own attribute is theirs whatever it is called: reading a string as an instant
+// would panic, and a log statement must not be able to take the process down.
+func TestCallerOwnTimeAttributeSurvives(t *testing.T) {
+	var out bytes.Buffer
+
+	logging.New(&out).Info("probe", "time", "manual")
+
+	if line := out.String(); !strings.Contains(line, "time=manual") {
+		t.Errorf("log line = %q, want the caller's own time attribute in it", line)
+	}
+}
