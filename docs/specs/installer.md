@@ -11,7 +11,8 @@
   [0021](../decisions/0021-shell-is-linted-too.md),
   [0022](../decisions/0022-updates-are-pulled.md),
   [0024](../decisions/0024-the-hub-follows-a-target-with-a-kept-install-script.md),
-  [0025](../decisions/0025-the-hub-checks-hourly-and-downloads-a-binary-to-install-it.md)
+  [0025](../decisions/0025-the-hub-checks-hourly-and-downloads-a-binary-to-install-it.md),
+  [0027](../decisions/0027-the-hub-installer-reuses-the-binary-in-place.md)
 
 ## Purpose
 
@@ -64,9 +65,10 @@ it is used; a follow run downloads the binary last, only once an installer asks 
 checks it against the manifest it already verified for that release in the same run. The
 installer downloads nothing and verifies nothing: giving it either would put a verifier
 inside the release, which is the release vouching for itself. The digest it computes of the
-binary in place, with `openssl`, decides only whether there is anything to do: a false match
-would leave the same bytes where they are, and a false mismatch asks for a binary the kept
-script verifies.
+binary in place, with `openssl`, decides whether there is anything to do and whether that
+binary is kept: a match keeps bytes that only root could have put there
+([0027](../decisions/0027-the-hub-installer-reuses-the-binary-in-place.md)), and a false
+mismatch asks for a binary the kept script verifies.
 The rules it applies are `deploy/verify-release.sh`'s, and the two must agree
 ([release.md](release.md#verifying-an-artifact)).
 
@@ -121,7 +123,7 @@ sh <unpacked>/install.sh <role> --follow-target --release <this release's versio
   options, and an installer handed it answers nothing: an answer then stops the run.
 - The installer downloads nothing. `--newest` is how `latest` is resolved without asking the
   origin, and every hand-over of one run passes the same value; `--digest` is how it tells,
-  without the binary, whether the hub already runs this release.
+  without the binary, whether the binary in place is already this release's.
 - A hand-over to the release an installer named runs that release's installer, out of a
   directory of its own, with an empty answer file.
 
@@ -147,7 +149,7 @@ systemd about the unit and starting the service, correcting an owner, refusing a
 systemd, ignoring an inherited `TMPDIR`, treating an installed binary owned by anyone but
 root as replaceable, stripping an archive's owner and setuid bits, which an unprivileged
 tar would not have restored anyway, refusing a target owned by anyone but root, not taking a
-hub binary owned by anyone but root for one already running, and telling
+hub binary owned by anyone but root for the release's binary in place, and telling
 a running hub on the release's binary from a stopped one or one still on the binary it
 replaced. They are proved on a real host; everything else in these
 tables is proved by the suite.
@@ -227,6 +229,7 @@ and [Unpacking](#unpacking) hold for each release a follow run fetches.
 | the newest release older than the hub in place | nothing is installed whatever the target, and the run says so: an origin serving an old release as the newest cannot roll the hub back |
 | any follow run | the newest release's manifest and installer are downloaded and verified first, even when the target names another, and no binary is downloaded before an installer asks for it |
 | a hub already running the release its target resolves to | no binary is downloaded, and nothing is installed |
+| a hub whose binary in place is already the release its target resolves to, but that is not running it or whose service definition differs | no binary is downloaded, and the rest is installed around the binary in place |
 | an installer that asks for its own release's binary | that binary is downloaded once, checked against the manifest this run already verified for that release, and handed over with the same options |
 | an installer handed its binary that answers anyway | nothing is installed, and the run says that installer answered after it was given its binary |
 | target naming a release whose manifest lists no installer archive | nothing is installed, and the run says that release predates the installer |
@@ -245,9 +248,10 @@ What `install.sh hub` does when it is handed the five options of [The handover](
 
 | Event | Outcome |
 |---|---|
-| a target that resolves to `--release`, with the hub already running that release — the binary in place has the digest `--digest` names and the layout's mode and, on a real run, owner, the service definition is the release's and, on a real run, the service runs that binary | nothing is written, the answer stays empty, the run says the hub is already at that version, and no service command runs |
-| a target that resolves to `--release`, any of those not so — another binary, one whose mode or owner is not the layout's, a service definition that differs, a service that is stopped or still running the binary that was replaced — and no `--binary` | the answer holds `--release`, nothing is written outside it, and the exit is 0 |
-| the same, with `--binary` | it installs as [Installing the hub](#installing-the-hub) says and the answer stays empty, so a run stopped before its restart is finished by the next one |
+| a target that resolves to `--release`, with the hub already running that release — the binary in place is a regular file with the digest `--digest` names and the layout's mode and, on a real run, owner, the service definition is the release's and, on a real run, the service runs that binary | nothing is written, the answer stays empty, the run says the hub is already at that version, and no service command runs |
+| a target that resolves to `--release`, the binary in place already that release — a regular file with the digest, mode and owner above — but the rest not so — a service definition that differs, a service that is stopped or still running the binary that was replaced — and no `--binary` | the answer stays empty, the run says it keeps the binary in place, and it installs as [Installing the hub](#installing-the-hub) says with that binary left untouched and its path not among those printed, so a configured hub is started and a run stopped before its restart is finished by the next one ([0027](../decisions/0027-the-hub-installer-reuses-the-binary-in-place.md)) |
+| a target that resolves to `--release`, the binary in place not that release — another binary, a symlink or anything but a regular file, one whose mode or, on a real run, owner is not the layout's, or none — and no `--binary` | the answer holds `--release`, nothing is written outside it, and the exit is 0 |
+| a target that resolves to `--release`, the hub not already running it, with `--binary` | it installs as [Installing the hub](#installing-the-hub) says and the answer stays empty, so a run stopped before its restart is finished by the next one |
 | a target that resolves to another version | the answer holds that version, nothing is written outside it, and the exit is 0 |
 | target `latest` | it resolves to `--newest` |
 | no target file | nothing is installed, and the run names the file and the two forms it may take |
@@ -344,11 +348,13 @@ What `install.sh hub` does when it is handed the five options of [The handover](
   v0.1.2's installer refuses `--digest` as an unknown option, an older one refuses
   `--follow-target` the same way, and a release older still carries no installer at all. Going below the floor is the manual path.
 - **A hub that never counts as running** — one whose configuration is missing, so its service
-  is never started, one crash-looping between restarts, or one stopped by hand — gets its
-  binary downloaded and installed again every hour, and a configured one is started again. A
-  hub stopped for maintenance stays stopped only with its update timer stopped first
-  ([install.md](../install.md#keeping-the-hub-upgraded-unattended)). That is the cost of judging "already running" by the running
-  process rather than by the files.
+  is never started, one crash-looping between restarts, or one stopped by hand — is installed
+  again around the binary in place at every run, and a configured one is started again. Each
+  such run rewrites the service definition and the examples, reloads systemd, and names what an
+  unconfigured hub is missing. Its binary is downloaded only when the one in place is not the release's
+  ([0027](../decisions/0027-the-hub-installer-reuses-the-binary-in-place.md)). A hub stopped
+  for maintenance stays stopped only with its update timer stopped first
+  ([install.md](../install.md#keeping-the-hub-upgraded-unattended)).
 - **A broken newest installer blocks every target**, rollback included, because every run
   hands over to it first. The remedy is a fixed release, or the manual path.
 - **A target changed between hand-overs** is read afresh by every installer. If it no longer

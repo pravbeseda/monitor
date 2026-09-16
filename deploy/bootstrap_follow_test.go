@@ -466,3 +466,33 @@ func TestTheWholeChainFollowsTheTarget(t *testing.T) {
 		})
 	}
 }
+
+// spec: installer.md#following-a-target — a hub whose binary in place is already the release
+// its target resolves to, but whose service definition differs, is finished without a second
+// download of that binary.
+func TestAFollowRunDownloadsNoBinaryToFinishAHubAtItsTarget(t *testing.T) {
+	o := newOrigin(t)
+	o.set("monitor-installer-1.2.3.tar.gz", realArchive(t))
+	o.sign(t)
+	run := newBootstrapRun(t, o, "hub", "--follow-target")
+	writeTarget(t, run.destDir, "latest\n")
+	if stdout, stderr, err := run.start(t); err != nil {
+		t.Fatalf("the first run failed: %v\n%s%s", err, stdout, stderr)
+	}
+	unit := filepath.Join(run.destDir, "etc/systemd/system/monitor-hub.service")
+	if err := os.WriteFile(unit, []byte("# an older unit\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	stdout, stderr, err := run.start(t)
+	if err != nil {
+		t.Fatalf("the second run failed: %v\n%s%s", err, stdout, stderr)
+	}
+
+	if n := fetchedCount(o, "1.2.3", binaryName("hub", "1.2.3")); n != 1 {
+		t.Errorf("two runs downloaded the binary %d times, want once", n)
+	}
+	if body, _ := os.ReadFile(unit); string(body) == "# an older unit\n" {
+		t.Errorf("the service definition was not installed:\n%s", stdout)
+	}
+}

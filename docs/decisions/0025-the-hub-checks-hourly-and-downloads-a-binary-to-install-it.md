@@ -1,6 +1,9 @@
 # 0025. The hub checks hourly and downloads a binary only to install it
 
 - **Status:** accepted
+- **Amended by:** [0027](0027-the-hub-installer-reuses-the-binary-in-place.md), for point 3's
+  test of when a binary is asked for, and the consequence that a hub never counting as running
+  is downloaded again
 - **Amends:** [0022](0022-updates-are-pulled.md) point 6 (an installer installs itself when
   the target is its own version, for the hub's installer), point 7 (the stub runs daily) and
   the consequence that every run downloads the newest release;

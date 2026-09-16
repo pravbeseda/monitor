@@ -91,8 +91,9 @@ Downloads the newest release, checks its signature and installs from it. The age
 read from MONITOR_TOKEN or from stdin, which the one-line form cannot offer.
 
 --follow-target is what the hub's update timer runs: the installer of the newest release reads
-/etc/monitor/hub.target and does nothing, asks for its binary, or names another release to
-fetch; a binary is downloaded only when an installer asks for it.
+/etc/monitor/hub.target and does nothing, installs around the binary already in place, asks
+for its binary, or names another release to fetch; a binary is downloaded only when an
+installer asks for it.
 EOF
 }
 

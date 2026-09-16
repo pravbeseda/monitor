@@ -202,21 +202,65 @@ func TestAFollowRunLeavesAnUnchangedHubAlone(t *testing.T) {
 	}
 }
 
-// spec: installer.md#answering-a-follow-run — a hub that is not quite the release asks for its
-// binary rather than being taken for up to date, and the binary then finishes it.
+// spec: installer.md#answering-a-follow-run — a hub whose binary in place is the release's but
+// whose service definition differs keeps that binary: nothing is asked, and the rest of the
+// hub is installed around it.
+func TestAFollowRunKeepsTheReleasesBinaryInPlace(t *testing.T) {
+	f := newFollowHub(t, "1.2.3\n", "1.2.3", "1.2.3")
+	f.installed(t)
+	binary := filepath.Join(f.destDir, "usr/local/bin/monitor-hub")
+	before, err := os.Stat(binary)
+	if err != nil {
+		t.Fatal(err)
+	}
+	unit := filepath.Join(f.destDir, "etc/systemd/system/monitor-hub.service")
+	if err := os.WriteFile(unit, []byte("# an older unit\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	stdout := f.mustStart(t)
+
+	if got := f.answered(t); got != "" {
+		t.Errorf("the answer holds %q; a binary in place that is the release's needs no download", got)
+	}
+	if !strings.Contains(stdout, "keeping the binary in place") {
+		t.Errorf("the run does not say it keeps the binary in place:\n%s", stdout)
+	}
+	if strings.Contains(stdout, "/usr/local/bin/monitor-hub") {
+		t.Errorf("the run names the binary among the paths it wrote:\n%s", stdout)
+	}
+	assertHubLayout(t, f.destDir, "etc/monitor/hub.target")
+	if body, _ := os.ReadFile(unit); string(body) == "# an older unit\n" {
+		t.Error("the service definition was not installed")
+	}
+	after, err := os.Stat(binary)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !os.SameFile(before, after) {
+		t.Error("the binary in place was replaced")
+	}
+}
+
+// spec: installer.md#answering-a-follow-run — a binary in place that is not the release's asks
+// for its binary rather than being kept, and the binary then finishes the hub.
 func TestAFollowRunAsksAgainForAnUnfinishedHub(t *testing.T) {
 	for _, test := range []struct {
 		name  string
 		spoil func(t *testing.T, destDir string)
 	}{
-		{"a service definition that differs", func(t *testing.T, destDir string) {
-			path := filepath.Join(destDir, "etc/systemd/system/monitor-hub.service")
-			if err := os.WriteFile(path, []byte("# an older unit\n"), 0o644); err != nil {
-				t.Fatal(err)
-			}
-		}},
 		{"a binary its group may write to", func(t *testing.T, destDir string) {
 			chmod(t, filepath.Join(destDir, "usr/local/bin/monitor-hub"), 0o775)
+		}},
+		{"a symlink to the release's binary", func(t *testing.T, destDir string) {
+			path := filepath.Join(destDir, "usr/local/bin/monitor-hub")
+			elsewhere := filepath.Join(t.TempDir(), "monitor-hub")
+			if err := os.Rename(path, elsewhere); err != nil {
+				t.Fatal(err)
+			}
+			if err := os.Symlink(elsewhere, path); err != nil {
+				t.Fatal(err)
+			}
 		}},
 		{"another binary", func(t *testing.T, destDir string) {
 			path := filepath.Join(destDir, "usr/local/bin/monitor-hub")

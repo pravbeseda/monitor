@@ -47,6 +47,7 @@ One decision per file, each stating what was rejected and why. New records start
 | [0024](decisions/0024-the-hub-follows-a-target-with-a-kept-install-script.md) | The hub follows a target file with a kept copy of the install script | accepted |
 | [0025](decisions/0025-the-hub-checks-hourly-and-downloads-a-binary-to-install-it.md) | The hub checks hourly and downloads a binary only to install it | accepted |
 | [0026](decisions/0026-reader-time-zone-from-the-browser.md) | The reader's time zone comes from the browser in a cookie; pages stay server-rendered | accepted |
+| [0027](decisions/0027-the-hub-installer-reuses-the-binary-in-place.md) | The hub's installer reuses a binary in place that is already its release | accepted |
 
 ## Behaviour specs
 
