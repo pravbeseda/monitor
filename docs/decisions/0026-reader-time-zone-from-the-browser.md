@@ -50,11 +50,14 @@ build, and more pages are planned. Whatever is decided has to hold for pages not
   pages already varied by `Accept-Language` and said so to nobody; one header closes both.
 - **Nothing else moves.** `/api/v1/history` and `/api/v1/series` stay RFC 3339 UTC, the
   stored measurement is untouched, notification timestamps stay UTC as they are today — the
-  configured zone still only picks the digest's hour — and log lines and CLI output stay UTC.
+  configured zone still only picks the digest's hour — and log lines and CLI output are left
+  exactly where they are, which is the host's own clock, since nothing here goes near `slog`.
   Where the chart's axis ticks sit does not change either; only the labels' zone does.
 - **The zone database ships in the hub binary** (`time/tzdata`), so a host carrying none
-  still formats correctly. A host with its own copy keeps using it, which is Go's ordering
-  and not worth overriding.
+  still formats correctly. `cmd/hub` already linked it so that `digest.timezone` resolves;
+  `internal/hub` links it too, so the pages do not depend on which binary they are built
+  into. A host with its own copy keeps using it, which is Go's ordering and not worth
+  overriding.
 
 ## Consequences
 
@@ -70,7 +73,8 @@ build, and more pages are planned. Whatever is decided has to hold for pages not
   shell's inline script; blocked, it degrades to UTC silently and nothing here reports it.
   Stated as a requirement in [nginx-requirements.md](../nginx-requirements.md).
 - A first visit from a new browser costs one extra round trip. Later visits cost nothing.
-- The hub binary grows by the embedded zone database (~450 KB).
+- The hub binary does not grow: the zone database was already linked for the digest's
+  configured zone, and building both heads differs by about half a kilobyte.
 - The cookie is attacker-controlled input reaching `time.LoadLocation`, which does open
   files. It cannot escape the zone directory, and the bound above is what keeps the rest
   honest.
@@ -91,7 +95,8 @@ build, and more pages are planned. Whatever is decided has to hold for pages not
   the one that matters, and a panel that is right only on the second look is a panel that is
   wrong.
 - **The browser's UTC offset instead of an IANA name** (`getTimezoneOffset`) — needs no zone
-  database at all and would delete the 450 KB. Rejected: one offset is wrong for every
+  database at all. Rejected, and not for the size — the binary carries that database anyway,
+  because `digest.timezone` names an IANA zone. One offset is wrong for every
   instant on the other side of a daylight-saving change, which a 7-day window routinely
   spans. A chart that bends by an hour in the middle is worse than UTC.
 - **A display zone in the hub's configuration** — rejected: it describes an installation,
