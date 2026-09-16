@@ -11,6 +11,7 @@ import (
 	"flag"
 	"fmt"
 	"io"
+	"log/slog"
 	"net"
 	"net/http"
 	"os"
@@ -21,6 +22,7 @@ import (
 	"github.com/pravbeseda/monitor/internal/config"
 	"github.com/pravbeseda/monitor/internal/evaluate"
 	"github.com/pravbeseda/monitor/internal/hub"
+	"github.com/pravbeseda/monitor/internal/logging"
 	"github.com/pravbeseda/monitor/internal/notify"
 	"github.com/pravbeseda/monitor/internal/storage"
 	"github.com/pravbeseda/monitor/internal/version"
@@ -44,6 +46,9 @@ const listenEnv = "MONITOR_LISTEN"
 var errVersionRequested = errors.New("version requested")
 
 func main() {
+	// Installed before anything can log, so that every line carries UTC (ADR 0026).
+	slog.SetDefault(logging.New(os.Stderr))
+
 	if err := run(os.Args[1:], os.Stdout); err != nil {
 		// -h and --version have already printed their answer; both are requests.
 		if errors.Is(err, flag.ErrHelp) || errors.Is(err, errVersionRequested) {

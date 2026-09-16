@@ -22,6 +22,10 @@ server's, not the reader's. Only the browser knows, through
 [0005](0005-poc-stack.md) put rendering on the server with `html/template` and no frontend
 build, and more pages are planned. Whatever is decided has to hold for pages not written yet.
 
+The pages are not the only surface with a zone, and the question turned out to be open on
+another one: nothing in the tree builds a `slog` handler, so both binaries log through the
+standard library's default, which prints the host's own clock.
+
 ## Decision
 
 - **The browser states its zone in a `tz` cookie**, an IANA name, written by a few lines of
@@ -50,9 +54,13 @@ build, and more pages are planned. Whatever is decided has to hold for pages not
   pages already varied by `Accept-Language` and said so to nobody; one header closes both.
 - **Nothing else moves.** `/api/v1/history` and `/api/v1/series` stay RFC 3339 UTC, the
   stored measurement is untouched, notification timestamps stay UTC as they are today — the
-  configured zone still only picks the digest's hour — and log lines and CLI output are left
-  exactly where they are, which is the host's own clock, since nothing here goes near `slog`.
+  configured zone still only picks the digest's hour.
   Where the chart's axis ticks sit does not change either; only the labels' zone does.
+- **A log line carries its own instant in UTC.** Both binaries install a `slog` handler at
+  startup that writes the line's timestamp in UTC; until now neither built a handler at all,
+  so both logged through the standard library's default one, in whatever zone the host
+  keeps. A log line is read beside a measurement's timestamp and beside another host's log,
+  and both of those are UTC. CLI output carries no timestamp and needs nothing.
 - **The zone database ships in the hub binary** (`time/tzdata`), so a host carrying none
   still formats correctly. `cmd/hub` already linked it so that `digest.timezone` resolves;
   `internal/hub` links it too, so the pages do not depend on which binary they are built
@@ -81,6 +89,10 @@ build, and more pages are planned. Whatever is decided has to hold for pages not
 - **There is no way for a reader to choose a zone other than their browser's.** A work
   laptop pinned to UTC, or someone watching a machine in another country, has no override.
   The first reader who needs one reopens this decision.
+- The shape of a log line changes with the handler: `2026/09/16 13:56:58 ERROR read node
+  states error=…` becomes `time=2026-09-16T04:56:58.123Z level=ERROR msg="read node states"
+  error=…`. The pairs the code already logs become real attributes, and `journalctl` keeps
+  stamping its own line in the host's zone regardless — the change is inside the line.
 - Two pages of the hub now share one shell — the head and the script — rather than each
   carrying a copy of it. A third page starts from that shell.
 
@@ -108,5 +120,10 @@ build, and more pages are planned. Whatever is decided has to hold for pages not
 - **Guessing the zone from the language, or from what the nodes report** — rejected: a
   Russian-speaking reader is not necessarily in a Russian zone, and a wrong guess is worse
   than UTC, which is at least unambiguous.
+- **Pinning the whole process to UTC** — one assignment to `time.Local` in each `main`,
+  which would make the default handler print UTC and cost two lines instead of a package.
+  Rejected: it fixes the logs by changing what "local" means everywhere, so a later feature
+  that legitimately wants the host's clock gets UTC without anything saying so. A handler
+  states the decision where the decision applies.
 - **A client hint for the zone** — rejected: none is standardised, and a header no browser
   sends is a cookie with extra steps.
