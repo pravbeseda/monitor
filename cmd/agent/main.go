@@ -8,12 +8,14 @@ import (
 	"flag"
 	"fmt"
 	"io"
+	"log/slog"
 	"os"
 	"os/signal"
 	"syscall"
 	"time"
 
 	"github.com/pravbeseda/monitor/internal/agent"
+	"github.com/pravbeseda/monitor/internal/logging"
 	"github.com/pravbeseda/monitor/internal/sensor"
 	"github.com/pravbeseda/monitor/internal/sensor/disk"
 	"github.com/pravbeseda/monitor/internal/version"
@@ -34,6 +36,9 @@ const requestTimeout = 30 * time.Second
 var errVersionRequested = errors.New("version requested")
 
 func main() {
+	// Installed before anything can log, so that every line carries UTC (ADR 0026).
+	slog.SetDefault(logging.New(os.Stderr))
+
 	if err := start(); err != nil {
 		// -h and --version have already printed their answer; both are requests.
 		if errors.Is(err, flag.ErrHelp) || errors.Is(err, errVersionRequested) {

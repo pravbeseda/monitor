@@ -11,7 +11,8 @@
   [0005](../decisions/0005-poc-stack.md),
   [0007](../decisions/0007-public-repository.md),
   [0008](../decisions/0008-english-repo-bilingual-ui.md),
-  [0018](../decisions/0018-history-through-the-api.md)
+  [0018](../decisions/0018-history-through-the-api.md),
+  [0026](../decisions/0026-reader-time-zone-from-the-browser.md)
 
 ## Purpose
 
@@ -202,6 +203,7 @@ subject's values stale; one definition of "this node was not reporting", not two
 | a query the endpoint refuses, or a read that fails | the same status the endpoint answers, as a translated page |
 | a value on `/` | a link to the history page of its series, carrying the node, the metric and every label |
 | `&lang=ru` | axis labels, dates, byte sizes and percentages in Russian |
+| any time on the page, and every axis label | the reader's time zone, named once on the chart ([web.md](web.md#zone)); which day a tick is labelled with follows that zone, where the ticks sit does not |
 
 The value axis starts at zero: a free-space chart scaled to its own minimum turns a quiet
 week into a cliff. Each axis carries at most six labelled ticks, spaced so the window's own

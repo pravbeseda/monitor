@@ -3,6 +3,9 @@ package i18n_test
 import (
 	"testing"
 	"time"
+	// A zone name has to resolve here too, on a host that carries no zone database of its
+	// own; the hub reaches the same database through internal/hub (ADR 0026).
+	_ "time/tzdata"
 
 	"github.com/pravbeseda/monitor/internal/i18n"
 )
@@ -132,5 +135,59 @@ func TestPrinterFallsBackToEnglish(t *testing.T) {
 	}
 	if got := p.T("page.title"); got != "Monitor" {
 		t.Errorf("T = %q, want the English text", got)
+	}
+}
+
+// spec: web.md#zone — a printer writes instants in the reader's zone, marked with it.
+func TestPrinterWritesInTheReaderZone(t *testing.T) {
+	at := time.Date(2026, 8, 28, 22, 5, 0, 0, time.UTC)
+	moscow, err := time.LoadLocation("Europe/Moscow")
+	if err != nil {
+		t.Fatalf("load the zone: %v", err)
+	}
+	p := i18n.For(i18n.English).In(moscow)
+
+	if got := p.Time(at); got != "2026-08-29 01:05 MSK" {
+		t.Errorf("Time = %q, want the Moscow reading", got)
+	}
+	if got := p.Clock(at); got != "01:05" {
+		t.Errorf("Clock = %q, want the Moscow hour", got)
+	}
+	if got := p.Day(at); got != "Aug 29" {
+		t.Errorf("Day = %q, want the Moscow day", got)
+	}
+	if got := p.Zone(at); got != "MSK" {
+		t.Errorf("Zone = %q, want the abbreviation", got)
+	}
+	if got := p.Locale(); got != i18n.English {
+		t.Errorf("Locale = %q, want the locale to survive In", got)
+	}
+}
+
+// spec: web.md#zone — a printer nobody gave a zone writes UTC, and says so.
+func TestPrinterWithoutAZoneWritesUTC(t *testing.T) {
+	at := time.Date(2026, 8, 28, 22, 5, 0, 0, time.UTC)
+	p := i18n.For(i18n.English)
+
+	if got := p.Time(at); got != "2026-08-28 22:05 UTC" {
+		t.Errorf("Time = %q, want UTC", got)
+	}
+	if got := p.Zone(at); got != "UTC" {
+		t.Errorf("Zone = %q, want UTC", got)
+	}
+	if got := p.In(nil).Time(at); got != "2026-08-28 22:05 UTC" {
+		t.Errorf("Time = %q, want UTC for a zone that is not there", got)
+	}
+}
+
+// spec: web.md#zone — a zone with no abbreviation is marked by its offset.
+func TestPrinterMarksAnOffsetOnlyZone(t *testing.T) {
+	zone, err := time.LoadLocation("Asia/Novosibirsk")
+	if err != nil {
+		t.Fatalf("load the zone: %v", err)
+	}
+	at := time.Date(2026, 8, 28, 10, 5, 0, 0, time.UTC)
+	if got := i18n.For(i18n.English).In(zone).Zone(at); got != "+07" {
+		t.Errorf("Zone = %q, want the offset", got)
 	}
 }

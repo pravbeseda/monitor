@@ -46,6 +46,7 @@ One decision per file, each stating what was rejected and why. New records start
 | [0023](decisions/0023-proxy-holds-the-web-perimeter.md) | The proxy authenticates the web; the hub authenticates only ingest | accepted |
 | [0024](decisions/0024-the-hub-follows-a-target-with-a-kept-install-script.md) | The hub follows a target file with a kept copy of the install script | accepted |
 | [0025](decisions/0025-the-hub-checks-hourly-and-downloads-a-binary-to-install-it.md) | The hub checks hourly and downloads a binary only to install it | accepted |
+| [0026](decisions/0026-reader-time-zone-from-the-browser.md) | The reader's time zone comes from the browser in a cookie; pages stay server-rendered | accepted |
 
 ## Behaviour specs
 
@@ -66,6 +67,7 @@ can see ([ADR 0017](decisions/0017-one-spec-and-decision-gates.md)). New specs s
 | [release.md](specs/release.md) | How a merge tags itself, what a tag publishes, how a release is signed, and how an artifact is checked | approved |
 | [installer.md](specs/installer.md) | One command that installs or upgrades a hub or an agent from a signed release, and the hub following the version its host names | approved |
 | [deployment.md](specs/deployment.md) | The install layout, the units — the hub's update timer among them — and what `install-agent.sh` does to a node | approved |
+| [web.md](specs/web.md) | What every hub page shares: the reader's time zone, how a page says which zone it used, and the shell | approved |
 
 ## Design notes
 

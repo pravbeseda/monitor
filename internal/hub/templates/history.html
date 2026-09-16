@@ -1,9 +1,7 @@
 <!DOCTYPE html>
 <html lang="{{ .Locale }}">
 <head>
-  <meta charset="utf-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>{{ .Title }}</title>
+{{ template "shell" . }}
   <style>
     body { font-family: system-ui, sans-serif; margin: 2rem auto; max-width: 60rem; }
     h1 { font-size: 1.4rem; }
@@ -16,6 +14,7 @@
     .line { fill: none; stroke: #2a6; stroke-width: 2; }
     .dot { fill: #2a6; }
     text { font-size: 11px; fill: #555; }
+    text.zone { fill: #999; }
     ul { padding-left: 1.2rem; }
   </style>
 </head>
@@ -39,6 +38,7 @@
         <line class="grid" x1="{{ $c.Left }}" y1="{{ .At }}" x2="{{ $c.RightEdge }}" y2="{{ .At }}"></line>
         <text x="{{ $c.Left }}" y="{{ .LabelAt }}" dx="-8" text-anchor="end">{{ .Label }}</text>
       {{ end }}
+      <text class="zone" x="{{ .RightEdge }}" y="{{ .Top }}" dy="-5" text-anchor="end">{{ .Zone }}</text>
       {{ range .XTicks }}
         <text x="{{ .At }}" y="{{ .LabelAt }}" text-anchor="middle">{{ .Label }}</text>
       {{ end }}

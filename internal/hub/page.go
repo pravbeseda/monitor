@@ -16,7 +16,7 @@ import (
 //go:embed templates/*.html
 var templates embed.FS
 
-var pageTemplate = template.Must(template.ParseFS(templates, "templates/index.html"))
+var pageTemplate = template.Must(template.ParseFS(templates, "templates/index.html", "templates/shell.html"))
 
 // view is the page as the template sees it: every string is already translated and every
 // number already formatted, so the template holds no logic and no English.
@@ -54,16 +54,18 @@ type valueView struct {
 func Page(store storage.Storage) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		values := r.URL.Query()
-		printer := i18n.For(i18n.Negotiate(values.Get("lang"), r.Header.Get("Accept-Language")))
+		printer := i18n.For(i18n.Negotiate(values.Get("lang"), r.Header.Get("Accept-Language"))).In(zoneOf(r))
 
 		states, err := store.States(r.Context())
 		if err != nil {
 			slog.Error("read node states", "error", err)
+			// Plain text rather than a page, but a failure is still live state.
+			w.Header().Set("Cache-Control", "no-store")
 			http.Error(w, printer.T("error.storage"), http.StatusInternalServerError)
 			return
 		}
 
-		w.Header().Set("Content-Type", "text/html; charset=utf-8")
+		shellHeaders(w)
 		if err := pageTemplate.Execute(w, index(printer, states, language(values))); err != nil {
 			slog.Error("render the page", "error", err)
 		}

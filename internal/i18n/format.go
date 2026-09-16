@@ -47,17 +47,31 @@ func (p *Printer) Percent(value float64) string {
 	return p.number(value, 1) + "%"
 }
 
-// Time renders an instant in UTC: the hub stores UTC and the reader is one person.
+// Time renders an instant in the printer's zone, marked with it: the hub stores UTC, so a
+// page that does not say which zone it is written in says nothing (spec: web.md#zone).
 func (p *Printer) Time(at time.Time) string {
-	return at.UTC().Format(timeLayouts[p.locale])
+	return p.at(at).Format(timeLayouts[p.locale])
 }
 
 // Clock labels a chart axis spanning hours, where the full timestamp of Time would not fit.
-func (p *Printer) Clock(at time.Time) string { return at.UTC().Format("15:04") }
+func (p *Printer) Clock(at time.Time) string { return p.at(at).Format("15:04") }
 
 // Day labels a chart axis spanning days, in the order each language writes a date.
 func (p *Printer) Day(at time.Time) string {
-	return at.UTC().Format(dayLayouts[p.locale])
+	return p.at(at).Format(dayLayouts[p.locale])
+}
+
+// Zone names the zone the labels around it are read in, for the one place a page states it
+// rather than repeating it on every tick. Zones without an abbreviation name their offset.
+func (p *Printer) Zone(at time.Time) string { return p.at(at).Format("MST") }
+
+// at moves an instant into the printer's zone. A printer nobody gave one writes UTC, which
+// is also what a zero Printer does.
+func (p *Printer) at(instant time.Time) time.Time {
+	if p.zone == nil {
+		return instant.UTC()
+	}
+	return instant.In(p.zone)
 }
 
 // Number renders a plain value: a metric whose id carries no unit still has to be shown.

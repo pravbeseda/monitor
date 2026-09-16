@@ -1,6 +1,8 @@
 # 0023. The reverse proxy authenticates the web; the hub authenticates only ingest
 
-- **Status:** accepted
+- **Status:** accepted; the "no cookie" clause is amended by
+  [0026](0026-reader-time-zone-from-the-browser.md), where the hub reads one cookie carrying
+  the reader's time zone and nothing else. The perimeter itself stands.
 - **Date:** 2026-09-12
 - **Source:** [POC](../poc.md) stage 3,
   [proxy requirements](../nginx-requirements.md), [ADR 0007](0007-public-repository.md)

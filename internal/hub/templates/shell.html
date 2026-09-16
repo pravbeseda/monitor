@@ -1,0 +1,25 @@
+{{ define "shell" }}
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>{{ .Title }}</title>
+  <script>
+    // The reader's time zone is the one thing the server cannot know (ADR 0026): state it,
+    // then fetch the page again in it. The cookie is read back first, so a browser that
+    // will not store it keeps the UTC page instead of fetching forever. reload() keeps the
+    // address whole, fragment included, where replacing it would only jump to the anchor.
+    (function () {
+      try {
+        var zone = Intl.DateTimeFormat().resolvedOptions().timeZone;
+        if (!zone || holds(zone)) return;
+        document.cookie = "tz=" + zone + "; path=/; max-age=31536000; samesite=lax" +
+          (location.protocol === "https:" ? "; secure" : "");
+        if (holds(zone)) location.reload();
+      } catch (e) {
+        // A browser that refuses to answer about its zone or its cookies reads UTC.
+      }
+      function holds(zone) {
+        return document.cookie.split("; ").indexOf("tz=" + zone) >= 0;
+      }
+    })();
+  </script>
+{{ end }}

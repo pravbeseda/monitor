@@ -37,6 +37,9 @@ type chart struct {
 	Lines               []string
 	Dots                []dot
 	XTicks, YTicks      []tick
+	// Zone names the reading of the time axis once: a tick label has no room for it
+	// (spec: web.md#zone).
+	Zone string
 }
 
 type dot struct{ X, Y float64 }
@@ -55,6 +58,7 @@ func draw(printer *i18n.Printer, series history.Series, window history.Window) c
 		Width: chartWidth, Height: chartHeight,
 		Left: plotLeft, Top: plotTop,
 		Baseline: chartHeight - plotBottom, RightEdge: chartWidth - plotRight,
+		Zone: printer.Zone(window.To),
 	}
 	span := window.To.Sub(window.From)
 	if span <= 0 {
