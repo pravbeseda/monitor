@@ -12,7 +12,7 @@ import (
 	"github.com/pravbeseda/monitor/internal/i18n"
 )
 
-var historyTemplate = template.Must(template.ParseFS(templates, "templates/history.html"))
+var historyTemplate = template.Must(template.ParseFS(templates, "templates/history.html", "templates/shell.html"))
 
 // historyView is the drill-down page as the template sees it: every string translated,
 // every number formatted, no logic left.
@@ -50,7 +50,7 @@ var offered = []string{"24h", "7d", "30d"}
 func HistoryPage(reader history.Reader) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		values := r.URL.Query()
-		printer := i18n.For(i18n.Negotiate(values.Get("lang"), r.Header.Get("Accept-Language")))
+		printer := i18n.For(i18n.Negotiate(values.Get("lang"), r.Header.Get("Accept-Language"))).In(zoneOf(r))
 
 		query, err := history.ParseQuery(values, "lang")
 		if err != nil {
@@ -162,10 +162,10 @@ func refuse(w http.ResponseWriter, printer *i18n.Printer, err error) {
 	render(w, http.StatusInternalServerError, page)
 }
 
-// render writes the page. The content type is set before the status line, because a header
-// set after it is discarded.
+// render writes the page. The headers are set before the status line, because a header set
+// after it is discarded.
 func render(w http.ResponseWriter, status int, page historyView) {
-	w.Header().Set("Content-Type", "text/html; charset=utf-8")
+	shellHeaders(w)
 	w.WriteHeader(status)
 	if err := historyTemplate.Execute(w, page); err != nil {
 		slog.Error("render the history page", "error", err)

@@ -180,7 +180,9 @@ func TestHistoryPageLabelsTheTimeAxisForItsWindow(t *testing.T) {
 func TestHistoryPageKeepsTheAxesReadable(t *testing.T) {
 	_, body := page(t, served{series: []storage.SeriesPoints{volume()}}, oneVolume)
 
-	if ticks := strings.Count(body, "<text"); ticks != 12 {
+	// The zone the axis is read in is a caption, not a tick (spec: web.md#zone).
+	ticks := strings.Count(body, "<text") - strings.Count(body, `class="zone"`)
+	if ticks != 12 {
 		t.Errorf("chart carries %d axis labels, want six on each axis", ticks)
 	}
 }

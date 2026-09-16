@@ -94,8 +94,7 @@ path list grows; do not enumerate paths where a prefix rule will do.
 
 9. **The proxy caches nothing.** Every page and every API response is live state; a cached one
    shows a healthy disk that filled up ten minutes ago. What a *browser* caches is the hub's
-   own business — its JSON already says `no-store` and its pages will
-   ([#23](https://github.com/pravbeseda/monitor/issues/23)); nothing in nginx can fix that.
+   own business — its JSON and its pages both say `no-store`; nothing in nginx can fix that.
 
 10. **The proxy does not depend on the hub being up.** It starts, reloads and survives on its
     own. While the hub restarts — a version upgrade, a configuration change — the proxy
@@ -107,7 +106,13 @@ path list grows; do not enumerate paths where a prefix rule will do.
     week". It must not log the `Authorization` header, and nothing that carries a credential
     should end up in a query string.
 
-12. **Generated credentials reach us out of band** — not in this repository, not in an issue,
+12. **No `Content-Security-Policy` that blocks inline script on the HTML pages.** The pages
+    carry one small inline block, which is how the hub learns the reader's time zone
+    ([0026](decisions/0026-reader-time-zone-from-the-browser.md)). Blocked, every page
+    silently falls back to UTC and nothing on our side reports it. A policy is welcome as
+    long as its `script-src` admits that block.
+
+13. **Generated credentials reach us out of band** — not in this repository, not in an issue,
     not in a pull request. What we need back is the public name, the credential for a person
     and the credential for a program.
 

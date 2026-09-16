@@ -3,7 +3,10 @@
 // stay English and never come from here.
 package i18n
 
-import "strings"
+import (
+	"strings"
+	"time"
+)
 
 // Locale is one of the two languages the interface speaks.
 type Locale string
@@ -52,13 +55,15 @@ func Parse(tag string) (Locale, bool) {
 	}
 }
 
-// Printer renders text and numbers in one locale.
+// Printer renders text and numbers in one locale, and instants in one zone.
 type Printer struct {
 	locale Locale
+	zone   *time.Location
 }
 
-// For returns the printer of a locale. A locale the catalogue does not know becomes
-// English here, so every printer speaks a language the tables and the catalogue hold.
+// For returns the printer of a locale, writing instants in UTC until a reader's zone is
+// known. A locale the catalogue does not know becomes English here, so every printer speaks
+// a language the tables and the catalogue hold.
 func For(locale Locale) *Printer {
 	switch locale {
 	case English, Russian:
@@ -66,6 +71,13 @@ func For(locale Locale) *Printer {
 	default:
 		return &Printer{locale: English}
 	}
+}
+
+// In returns the same printer writing instants in the reader's zone (spec: web.md#zone).
+func (p *Printer) In(zone *time.Location) *Printer {
+	out := *p
+	out.zone = zone
+	return &out
 }
 
 // Locale is the language this printer speaks.
