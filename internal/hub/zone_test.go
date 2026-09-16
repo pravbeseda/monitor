@@ -76,8 +76,9 @@ func TestPageFallsBackToUTCForAZoneItWillNotAccept(t *testing.T) {
 	}
 }
 
-// spec: web.md#zone — UTC is a zone a browser may report, flat name and all.
-func TestPageAcceptsUTCItself(t *testing.T) {
+// spec: web.md#zone — a browser already in UTC reads UTC. It gets there through the refusal
+// of its flat name rather than past it, which is the same page either way.
+func TestPageReadsUTCForABrowserInUTC(t *testing.T) {
 	if want := "2026-08-28 10:05 UTC"; !strings.Contains(indexFrom(t, "UTC").Body.String(), want) {
 		t.Errorf("page does not show %q", want)
 	}

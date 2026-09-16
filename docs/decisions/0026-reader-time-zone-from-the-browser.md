@@ -1,9 +1,9 @@
 # 0026. The reader's time zone comes from the browser in a cookie; pages stay server-rendered
 
 - **Status:** accepted
-- **Amends:** the "no cookie" clause of [0023](0023-proxy-holds-the-web-perimeter.md) — the
-  hub now sets exactly one cookie, carrying the reader's time zone and nothing else. The
-  perimeter decision itself stands untouched.
+- **Amends:** the "no cookie" clause of [0023](0023-proxy-holds-the-web-perimeter.md) — one
+  cookie is now in play, written by the page and read by the hub, carrying the reader's time
+  zone and nothing else. The perimeter decision itself stands untouched.
 - **Date:** 2026-09-16
 - **Source:** [web spec](../specs/web.md), [ADR 0005](0005-poc-stack.md),
   [ADR 0008](0008-english-repo-bilingual-ui.md)
@@ -37,10 +37,11 @@ build, and more pages are planned. Whatever is decided has to hold for pages not
   one that names the zone for a chart — all render in it.
 - **A zone the hub will not accept is UTC.** The name is bounded before it reaches
   `time.LoadLocation`: at most 64 bytes, characters `A-Za-z0-9_+-` and `/`, no leading `/`,
-  and it must name a region — contain a `/`, or be exactly `UTC`. That last clause is the one with teeth: a
-  zone database also answers to flat names, `Local` among them, and `Local` is the hub
-  host's own clock. Rendering the server's zone would be worse than UTC, because it looks
-  right.
+  and it must name a region — contain a `/`. That clause is the one with teeth: a zone
+  database also answers to flat names, `Local` among them, and `Local` is the hub host's own
+  clock. Rendering the server's zone would be worse than UTC, because it looks right. A
+  browser already in UTC reports the flat name `UTC` and is refused by the same rule, which
+  costs it nothing — a refusal renders in UTC.
 - **The zone is stated once per page**, next to the time where there is one and on the chart
   next to its time axis, where the per-tick labels have no room for a marker.
 - **HTML pages answer `Cache-Control: no-store` and `Vary: Cookie, Accept-Language`.** A

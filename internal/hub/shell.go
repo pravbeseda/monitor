@@ -34,11 +34,9 @@ func zoneOf(r *http.Request) *time.Location {
 // addressesARegion holds the line in front of time.LoadLocation, which opens files for the
 // name it is given. A name has to address a region: the flat names a zone database also
 // answers to include "Local", the hub host's own clock, and a page written in the server's
-// zone is wrong in the one way that looks right.
+// zone is wrong in the one way that looks right. A browser already in UTC reports the flat
+// name "UTC" and is refused here, which costs it nothing — a refusal renders in UTC.
 func addressesARegion(name string) bool {
-	if name == "UTC" {
-		return true
-	}
 	if len(name) > maxZoneName || strings.HasPrefix(name, "/") || !strings.Contains(name, "/") {
 		return false
 	}

@@ -3,8 +3,8 @@
 - **Status:** approved
 - **Owns:** what every hub HTML page shares — how it learns the time zone the reader is in,
   how it says which zone it used, and the shell that carries both: `internal/hub/shell.go`,
-  `internal/hub/templates/shell.html` and the printer's zone in `internal/i18n`. Formatting itself stays
-  with `internal/i18n`; what a page *contains* stays with that page's own spec
+  `internal/hub/templates/shell.html` and the printer's zone in `internal/i18n`. Formatting
+  itself stays with `internal/i18n`; what a page *contains* stays with that page's own spec
   ([history.md](history.md) for `/history` and for the values on `/`); the reader's language
   is settled by [0008](../decisions/0008-english-repo-bilingual-ui.md) and needs nothing
   here. The JSON API is not a reader: nothing here touches it.
@@ -71,10 +71,11 @@ tell which of them they are.
 ## Edge cases
 
 - **A zone name the hub will not accept** — longer than 64 bytes, carrying anything outside
-  `A-Za-z0-9_+-` and `/`, opening with a `/`, or naming no region (no `/` in it, and not the
-  exact name `UTC`) — is UTC. The last of those is the one that matters: the flat names a zone database also
-  answers to include one meaning "this machine's own clock", which would render the hub
-  host's zone and satisfy nobody.
+  `A-Za-z0-9_+-` and `/`, opening with a `/`, or naming no region (no `/` in it) — is UTC.
+  The last of those is the one that matters: the flat names a zone database also answers to
+  include one meaning "this machine's own clock", which would render the hub host's zone and
+  satisfy nobody. A browser already in UTC reports a flat name too and is refused by the
+  same rule, which costs it nothing: what a refusal renders in is the zone it asked for.
 - **A zone with no abbreviation** — most of the world outside the Americas and Europe — is
   marked by its offset, `+07`, which is what its readers recognise anyway.
 - **A day boundary inside a chart's window** falls where the reader's zone puts it, so the
@@ -84,8 +85,10 @@ tell which of them they are.
   repeating or skipping one. No point moves and no point is dropped. The zone a chart names
   is the one its window ends in, so half such an axis is captioned by the other half's name —
   an hour's worth of imprecision in a caption, against a second caption on every chart.
-- **A page restored by the back button** is the rendering it had when it was left, since
-  nothing runs on a restore; the next real navigation shows the current zone.
+- **A page reached by the back button** is fetched again wherever a page that may not be
+  stored is also not restored, and shows the current zone; where it is restored instead, it
+  is the rendering it was left with, since nothing runs on a restore. Which of the two a
+  reader gets is their browser's to decide, and neither is wrong.
 - **A storage failure on the index** is plain text rather than a page, as it was before any
   of this, so it carries no shell and leaves the reader's zone unlearnt until the hub answers
   again. It is not cached either way.
