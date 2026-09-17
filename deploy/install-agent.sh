@@ -264,7 +264,9 @@ write_env_file() {
 binary=
 hub=
 node=
-token=
+# unset, not emptied: an exported variable of this name keeps its export through an assignment,
+# and would hand the token to every child process.
+unset token
 follow=
 release=
 newest=

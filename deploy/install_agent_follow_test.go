@@ -291,7 +291,8 @@ func TestAnAgentFollowRunInstallsTheBinaryItAskedFor(t *testing.T) {
 }
 
 // spec: installer.md#answering-a-follow-run-for-the-agent — the token reaches curl on its
-// stdin, never in its arguments or its environment.
+// stdin, never in its arguments or its environment, even when the caller exported a variable of
+// the name the script keeps the token in.
 func TestAnAgentFollowRunKeepsTheTokenOutOfCurlsArgumentsAndEnvironment(t *testing.T) {
 	f := newFollowAgent(t, newFakeHub(t, http.StatusOK, "1.1.0\n"), "1.2.3", "1.2.3")
 	realCurl, err := exec.LookPath("curl")
@@ -306,7 +307,7 @@ func TestAnAgentFollowRunKeepsTheTokenOutOfCurlsArgumentsAndEnvironment(t *testi
 		"exec '"+realCurl+"' \"$@\"\n")
 	chmod(t, filepath.Join(shims, "curl"), 0o755)
 
-	f.mustStart(t, run{pathDir: shims, token: testToken})
+	f.mustStart(t, run{pathDir: shims, token: testToken, env: []string{"token=planted"}})
 
 	body, err := os.ReadFile(record)
 	if err != nil {

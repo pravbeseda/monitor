@@ -80,6 +80,7 @@ type run struct {
 	pathDir string // prepended to PATH, to catch a service command being run
 	onlyDir bool   // PATH is pathDir alone, so what is missing from it is really missing
 	umask   string // the caller's umask, when the run has to survive a hostile one
+	env     []string
 }
 
 func (r run) start(t *testing.T) (stdout, stderr string, err error) {
@@ -101,6 +102,7 @@ func (r run) start(t *testing.T) (stdout, stderr string, err error) {
 	if r.token != "" {
 		cmd.Env = append(cmd.Env, "MONITOR_TOKEN="+r.token)
 	}
+	cmd.Env = append(cmd.Env, r.env...)
 	cmd.Stdin = strings.NewReader(r.stdin)
 	var out, errs bytes.Buffer
 	cmd.Stdout, cmd.Stderr = &out, &errs
