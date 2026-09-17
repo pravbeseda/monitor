@@ -9,7 +9,8 @@
   [0019](../decisions/0019-deployment-layout.md),
   [0020](../decisions/0020-agent-reads-its-environment-file.md),
   [0024](../decisions/0024-the-hub-follows-a-target-with-a-kept-install-script.md),
-  [0025](../decisions/0025-the-hub-checks-hourly-and-downloads-a-binary-to-install-it.md)
+  [0025](../decisions/0025-the-hub-checks-hourly-and-downloads-a-binary-to-install-it.md),
+  [0028](../decisions/0028-agents-follow-a-target-the-hub-serves.md)
 
 ## Purpose
 
@@ -43,19 +44,22 @@ per installation, which is what lets the unit files be constants.
 | configuration directory | `/etc/monitor` | `/usr/local/etc/monitor` | root, 0755 |
 | hub service | `/etc/systemd/system/monitor-hub.service` | — | root, 0644 |
 | hub target | `/etc/monitor/hub.target` | — | root, 0644 |
-| kept install script | `/usr/local/libexec/monitor/monitor-install.sh` | — | root, 0755 |
-| kept install script directory | `/usr/local/libexec/monitor` | — | root, 0755 |
+| kept install script | `/usr/local/libexec/monitor/monitor-install.sh` | `/usr/local/libexec/monitor/monitor-install.sh` | root, 0755 |
+| kept install script directory | `/usr/local/libexec/monitor` | `/usr/local/libexec/monitor` | root, 0755 |
 | hub update service and timer | `/etc/systemd/system/monitor-hub-update.service`, `monitor-hub-update.timer` | — | root, 0644 |
+| agent update service and timer | `/etc/systemd/system/monitor-agent-update.service`, `monitor-agent-update.timer` | `/Library/LaunchDaemons/io.github.pravbeseda.monitor-agent-update.plist` | root, 0644 |
+| agent update log, macOS only | — | `/var/log/monitor-agent-update.log` | root, 0600 |
 
 The hub is a Debian service only ([0005](../decisions/0005-poc-stack.md)); the agent runs on
 both.
 
-The last four rows are the target and the resident half of
-[0024](../decisions/0024-the-hub-follows-a-target-with-a-kept-install-script.md). No
-installer writes them: the manual path of [install.md](../install.md) or the host's
-provisioning places them, so a release cannot break what repairs it. The two update units
-travel in the installer archive beside the other service definitions, and are still not
-installed from it.
+The hub target, the kept script, the update units and the macOS update log are the resident half of
+[0024](../decisions/0024-the-hub-follows-a-target-with-a-kept-install-script.md) and
+[0028](../decisions/0028-agents-follow-a-target-the-hub-serves.md). No installer writes them:
+the manual path of [install.md](../install.md) or the host's provisioning places them, so a
+release cannot break what repairs it. A host that is both hub and node keeps one script for
+both roles. The update units travel in the installer archive beside the other service
+definitions, and are still not installed from it.
 
 **The agent runs as root** — it stats every mounted volume, and a launchd daemon is a root
 process by definition. **The hub runs as the unprivileged `monitor` account**: it listens on
@@ -125,6 +129,7 @@ Every refusal below is decided before the first file is written, so the node is 
 | any | a value the agent would read back as something else — padded with blanks, or wrapped in quotes the format strips | refuses, naming no value |
 | any | a value holding a character outside printable ASCII, which the agent trims as whitespace or reads differently | refuses, naming no value |
 | already installed | a line of the existing file is neither blank, a comment, nor an assignment the agent accepts | refuses, naming the file and the line number |
+| already installed | a line of the existing file, a comment included, holds a carriage return anywhere but at its end | refuses, naming the file and the line number: the agent reads what follows it as a line of its own |
 | any | an unknown flag | refuses, printing the usage |
 | any | the service definition it installs is not beside the script | refuses, naming the path |
 | a real install | the host has neither systemd nor launchd | refuses, naming what is supported |
@@ -163,6 +168,12 @@ omitted.
 | hub update | it runs | the kept script runs as root with `hub --follow-target` ([installer.md](installer.md#following-a-target)), once the network is up, and its output reaches the system log |
 | hub update | the hub is stopped or failing | the update still runs: nothing ties it to the hub's service |
 | hub update | the run fails | the unit is reported failed, and the host is left as [installer.md](installer.md#invariants) says a failed run leaves it |
+| agent update, Debian | its timer is enabled | the update runs once an hour, at a moment spread over ten minutes, and a run missed while the node was down happens soon after it is back ([0028](../decisions/0028-agents-follow-a-target-the-hub-serves.md)) |
+| agent update, Debian | the node reboots | the timer is armed again; the update itself does not run at boot unless a run was missed |
+| agent update, macOS | the daemon is loaded, at boot or by hand | the update runs at once, and then once an hour counted from that moment, with no calendar schedule, and a run that fails is not started again until the next hour |
+| agent update | it runs | the kept script runs as root with `agent --follow-target` ([installer.md](installer.md#following-a-target)) — on Debian once the network is up — and both of its streams reach the journal on Debian and `/var/log/monitor-agent-update.log` on macOS, which is placed root 0600 before the daemon is loaded, since launchd would create it readable by everyone |
+| agent update | the agent is stopped or failing | the update still runs: nothing ties it to the agent's service |
+| agent update | the run fails | on Debian the unit is reported failed; on macOS the log says why; the next run tries again either way |
 
 A *wrong* token is not a service concern: the agent keeps ticking and the hub refuses its
 batches ([agent.md](agent.md#edge-cases)), which surfaces as a silent node rather than as a
@@ -206,6 +217,9 @@ makes the behaviour above testable without touching the machine running the test
   alone, the stored token included. A line the agent would refuse is refused here instead,
   because the agent refuses the whole file over one of them and the install would otherwise
   report success on a node that never starts.
+- **A Mac asleep or offline** — launchd skips an interval that ends while the Mac sleeps, and
+  the run at boot usually comes before the network, so it fails and says so in its log. The
+  next run is within the hour the Mac is awake.
 - **A binary for the wrong operating system** — not detected. It installs, the service fails
   to start, and the system log says so.
 - **`sudo` stripping `MONITOR_TOKEN`** — the default on both systems, and the reason stdin

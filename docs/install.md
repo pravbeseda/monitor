@@ -304,6 +304,9 @@ for a token that is never coming.
 
 A rotation is the same run with the new token piped in, exactly as in step 3.
 
+On a node with the update timer below, the hub's `agent_target` is what chooses the version: an
+agent installed by hand is replaced at the next run by whatever the hub names for that node.
+
 A re-run **replaces** the binary, the service definition, `MONITOR_HUB` and `MONITOR_NODE`
 from the flags, and the token when one is supplied. It **keeps** the stored token when none
 is, and every other line of a hand-edited environment file. It ends by restarting the
@@ -391,23 +394,105 @@ next run installs a stopped hub again and starts it. `enable --now` turns it bac
 sudo systemctl disable --now monitor-hub-update.timer
 ```
 
+### Keeping a node upgraded unattended
+
+The same kept script runs on a node, from a timer of its own, and installs the version the hub
+names for that node ([ADR 0028](decisions/0028-agents-follow-a-target-the-hub-serves.md),
+[specs/installer.md](specs/installer.md#answering-a-follow-run-for-the-agent)). Three things
+come first:
+
+1. **The hub names a target.** `agent_target` in `hub.yaml` — `latest` or a version, at the
+   top, per class or per node ([specs/hub-config.md](specs/hub-config.md)) — and a restart of
+   the hub. With none, a node's run installs nothing and says so.
+2. **The hub is reachable for it.** The proxy passes `/api/v1/agent/` through like ingest
+   ([nginx-requirements.md](nginx-requirements.md), requirement 4), and the node's
+   `MONITOR_HUB` is `https://`, or `http://` to loopback on the hub's own host: the run sends
+   the token nowhere else.
+3. **The releases can answer.** The hub and the newest release carry this change; an older hub
+   answers `404`, an older installer refuses the hand-over, and every run fails until both are
+   there.
+
+The node keeps reading its hub, name and token from `agent.env`, so it is installed by hand
+once, as in step 3 or section 0. Then download and check the script with the first lines of
+section 0's block — up to and including the fingerprint check, into `"$home/monitor"`. On a
+host that already keeps a copy for its hub timer, this replaces it: an older copy refuses
+`agent --follow-target`.
+
+A Debian node:
+
+```sh
+for unit in monitor-agent-update.service monitor-agent-update.timer; do
+    sudo curl -fsSLo "$home/monitor/$unit" \
+        "https://raw.githubusercontent.com/pravbeseda/monitor/main/deploy/systemd/$unit"
+done
+sudo install -d -o root -g root -m 0755 /usr/local/libexec/monitor
+sudo install -o root -g root -m 0755 "$home/monitor/install.sh" \
+    /usr/local/libexec/monitor/monitor-install.sh
+sudo install -o root -g root -m 0644 "$home/monitor/monitor-agent-update.service" \
+    "$home/monitor/monitor-agent-update.timer" /etc/systemd/system/
+sudo rm -r "$home/monitor"
+sudo systemctl daemon-reload
+sudo systemctl enable --now monitor-agent-update.timer
+sudo systemctl start monitor-agent-update.service
+sudo journalctl -u monitor-agent-update.service -n 20
+```
+
+A macOS node. The log is created root-only before the daemon is loaded, because launchd would
+create it readable by everyone, and loading the daemon runs it once:
+
+```sh
+plist=io.github.pravbeseda.monitor-agent-update.plist
+sudo curl -fsSLo "$home/monitor/$plist" \
+    "https://raw.githubusercontent.com/pravbeseda/monitor/main/deploy/launchd/$plist"
+sudo install -d -o root -g wheel -m 0755 /usr/local/libexec/monitor
+sudo install -o root -g wheel -m 0755 "$home/monitor/install.sh" \
+    /usr/local/libexec/monitor/monitor-install.sh
+sudo install -o root -g wheel -m 0600 /dev/null /var/log/monitor-agent-update.log
+sudo install -o root -g wheel -m 0644 "$home/monitor/$plist" /Library/LaunchDaemons/
+sudo rm -r "$home/monitor"
+sudo launchctl bootstrap system "/Library/LaunchDaemons/$plist"
+sudo tail -n 20 /var/log/monitor-agent-update.log
+```
+
+On an Intel Mac with Homebrew, `/usr/local` belongs to an admin account, and so does what root
+runs from under it — the binary and this script alike
+([issue #17](https://github.com/pravbeseda/monitor/issues/17)).
+
+**Pinning a node, a class or the fleet** is an `agent_target` edit and a hub restart; every
+node takes it within the hour. **Stop the timer first** before stopping an agent on purpose, or
+after a leaked key:
+
+```sh
+sudo systemctl disable --now monitor-agent-update.timer                        # Debian
+sudo launchctl bootout system/io.github.pravbeseda.monitor-agent-update        # macOS
+```
+
 ## 6. Uninstall
 
 Deliberately not a mode of the script — it is these commands
 ([specs/deployment.md](specs/deployment.md#out-of-scope)).
 
-A Debian node:
+A Debian node — its update timer first, when it has one, or the timer could install the agent
+again in between:
 
 ```sh
+sudo systemctl disable --now monitor-agent-update.timer
+sudo rm /etc/systemd/system/monitor-agent-update.service \
+    /etc/systemd/system/monitor-agent-update.timer
+sudo rm -r /usr/local/libexec/monitor       # unless the hub's timer on this host uses it
 sudo systemctl disable --now monitor-agent.service
 sudo rm /etc/systemd/system/monitor-agent.service /usr/local/bin/monitor-agent \
     /etc/monitor/agent.env
 sudo systemctl daemon-reload
 ```
 
-A macOS node:
+A macOS node, the same way:
 
 ```sh
+sudo launchctl bootout system/io.github.pravbeseda.monitor-agent-update
+sudo rm /Library/LaunchDaemons/io.github.pravbeseda.monitor-agent-update.plist \
+    /var/log/monitor-agent-update.log
+sudo rm -r /usr/local/libexec/monitor
 sudo launchctl bootout system/io.github.pravbeseda.monitor-agent
 sudo rm /Library/LaunchDaemons/io.github.pravbeseda.monitor-agent.plist \
     /usr/local/bin/monitor-agent /usr/local/etc/monitor/agent.env /var/log/monitor-agent.log
@@ -438,8 +523,3 @@ and authentication on the web page. Until they land, the hub is reachable on its
 only, over loopback. What that proxy has to do is written down in
 [nginx-requirements.md](nginx-requirements.md) and applied from the Ansible repository that
 owns the hub host ([ADR 0023](decisions/0023-proxy-holds-the-web-perimeter.md)).
-
-Only the hub updates itself ([Keeping the hub upgraded
-unattended](#keeping-the-hub-upgraded-unattended)). A node gets a new version from section 0's
-command or step 5's, run by hand; the hub naming a node's target is the rest of
-[ADR 0022](decisions/0022-updates-are-pulled.md), and it is not built.

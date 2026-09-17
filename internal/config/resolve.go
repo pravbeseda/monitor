@@ -78,6 +78,7 @@ func resolve(f file, name string, entry fileNode) (Node, error) {
 		Class:        entry.Class,
 		Token:        secret,
 		SilenceAfter: silenceAfter,
+		AgentTarget:  last(f.AgentTarget.Value, custom.AgentTarget.Value, entry.AgentTarget.Value),
 		Agent:        agent,
 		Version:      version,
 		target: evaluate.Target{

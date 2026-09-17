@@ -156,7 +156,7 @@ jobs:
         run: |
           staging=$RUNNER_TEMP/monitor-installer
           mkdir -p "$staging"
-          cp deploy/install.sh deploy/install-hub.sh deploy/install-agent.sh "$staging/"
+          cp deploy/install.sh deploy/install-hub.sh deploy/install-agent.sh deploy/install-follow.sh "$staging/"
           cp -r deploy/systemd deploy/launchd "$staging/"
           cp deploy/hub.env.example deploy/agent.env.example "$staging/"
           cp config.example.yaml "$staging/hub.yaml.example"

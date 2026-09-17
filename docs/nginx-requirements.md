@@ -33,6 +33,7 @@ Its whole HTTP surface:
 | Path | Method | Who calls it | Authenticated by the hub |
 |---|---|---|---|
 | `/api/v1/ingest` | POST | the agent on every node | yes — a per-node bearer token |
+| `/api/v1/agent/target`, and every later path under `/api/v1/agent/` | GET | the update timer on every node | yes — the same per-node bearer token ([ADR 0028](decisions/0028-agents-follow-a-target-the-hub-serves.md)) |
 | `/` | GET | a person in a browser | no |
 | `/history` | GET | a person in a browser | no |
 | `/api/v1/series` | GET | a program, a chart renderer | no |
@@ -45,9 +46,9 @@ path list grows; do not enumerate paths where a prefix rule will do.
 
 1. **One HTTPS name, and nothing served over plain HTTP.** The public name answers over TLS
    with a certificate that renews itself. Port 80 exists only to redirect to the same URL over
-   HTTPS — except on `/api/v1/ingest`, which is better refused there outright: an agent
-   misconfigured with `http://` sends its node token in clear *before* it ever sees the
-   redirect, and a redirect makes that look like it worked. A token that has crossed port 80
+   HTTPS — except on `/api/v1/ingest` and under `/api/v1/agent/`, which are better refused
+   there outright: a node misconfigured with `http://` sends its token in clear *before* it
+   ever sees the redirect, and a redirect makes that look like it worked. A token that has crossed port 80
    is rotated, not reused.
 
 2. **Every request goes to the hub, unchanged.** Method, path, query string, body **and
@@ -63,12 +64,14 @@ path list grows; do not enumerate paths where a prefix rule will do.
    failure publishes the read API to anyone, and no debugging shortcut should end up undoing
    it.
 
-4. **Ingest needs no credential from the proxy.** `POST /api/v1/ingest` passes through with its
-   `Authorization` header delivered to the hub byte for byte — the hub authenticates the node
-   itself, and a proxy-level challenge there would lock out every agent. No other method on
-   that path needs to work.
+4. **Ingest and the node's prefix need no credential from the proxy.** `POST /api/v1/ingest`
+   and every request under `/api/v1/agent/` pass through with their `Authorization` header
+   delivered to the hub byte for byte — the hub authenticates the node itself, and a
+   proxy-level challenge there would lock out every agent and every update. No other method on
+   the ingest path needs to work. The prefix is matched on the normalised path, so
+   `/api/v1/agent/../series` is not under it and still needs the proxy's credential.
 
-5. **Everything except ingest needs a credential the proxy checks.** Missing or wrong gets
+5. **Everything else needs a credential the proxy checks.** Missing or wrong gets
    `401` and never reaches the hub. Two things must both work: a person opening
    `https://hub.example.com/` gets a prompt in the browser, and a program reaches
    `/api/v1/series` by sending one request header. The credential is generic HTTP
@@ -118,7 +121,7 @@ path list grows; do not enumerate paths where a prefix rule will do.
 
 ## What we are not asking for
 
-- No authentication in front of `/api/v1/ingest` (requirement 4).
+- No authentication in front of `/api/v1/ingest` or `/api/v1/agent/` (requirement 4).
 - No IP allow-list: nodes are laptops on changing networks.
 - No websockets, no HTTP/2 server push, no static hosting, no CDN.
 - No unauthenticated health path. The hub has none today, so an external uptime check needs
@@ -157,6 +160,17 @@ curl -sS -i -X POST -H 'Authorization: Bearer wrong' -H 'Content-Type: applicati
 
 `401` with a JSON body from the hub is right. `401` with a `WWW-Authenticate` header means the
 proxy answered and **every agent is locked out**.
+
+The same for the node's prefix, and that the prefix does not leak what it is not:
+
+```sh
+curl -sS -i -H 'Authorization: Bearer wrong' https://hub.example.com/api/v1/agent/target
+                                                    # 401 with a JSON body from the hub
+curl -sS -i --path-as-is https://hub.example.com/api/v1/agent/../series
+                                                    # 401 with WWW-Authenticate: the proxy's
+curl -s -o /dev/null -w '%{http_code}\n' http://hub.example.com/api/v1/agent/target
+                                                    # refused, not redirected
+```
 
 Requirements 7 and 8 — the caps:
 

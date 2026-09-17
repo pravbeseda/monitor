@@ -80,6 +80,7 @@ type run struct {
 	pathDir string // prepended to PATH, to catch a service command being run
 	onlyDir bool   // PATH is pathDir alone, so what is missing from it is really missing
 	umask   string // the caller's umask, when the run has to survive a hostile one
+	env     []string
 }
 
 func (r run) start(t *testing.T) (stdout, stderr string, err error) {
@@ -101,6 +102,7 @@ func (r run) start(t *testing.T) (stdout, stderr string, err error) {
 	if r.token != "" {
 		cmd.Env = append(cmd.Env, "MONITOR_TOKEN="+r.token)
 	}
+	cmd.Env = append(cmd.Env, r.env...)
 	cmd.Stdin = strings.NewReader(r.stdin)
 	var out, errs bytes.Buffer
 	cmd.Stdout, cmd.Stderr = &out, &errs
@@ -729,6 +731,16 @@ func TestARerunRefusesAFileTheAgentWouldRefuse(t *testing.T) {
 	}
 	if !strings.Contains(stderr, "line 4") {
 		t.Errorf("the refusal does not name the line; it said:\n%s", stderr)
+	}
+
+	for _, line := range []string{"MONITOR_NODE=server-b\rMONITOR_EXTRA=1", "# a note\rMONITOR_HUB=https://elsewhere.example.com"} {
+		if err := os.WriteFile(envFile, []byte(kept+line+"\n"), 0o600); err != nil {
+			t.Fatalf("edit the environment file: %v", err)
+		}
+		_, stderr, err := run{destDir: destDir, args: []string{"--binary", binary, "--hub", exampleHub, "--node", testNode}, stdin: testToken}.start(t)
+		if err == nil || !strings.Contains(stderr, "line 4") {
+			t.Errorf("a carriage return inside line 4 was not refused by its number: %v\n%s", err, stderr)
+		}
 	}
 
 	if err := os.WriteFile(envFile, []byte("# a note\n\n"+kept), 0o600); err != nil {

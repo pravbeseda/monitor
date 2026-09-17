@@ -891,6 +891,7 @@ func realArchive(t *testing.T) []byte {
 		"install.sh":             "install.sh",
 		"install-hub.sh":         "install-hub.sh",
 		"install-agent.sh":       "install-agent.sh",
+		"install-follow.sh":      "install-follow.sh",
 		"hub.env.example":        "hub.env.example",
 		"agent.env.example":      "agent.env.example",
 		"../config.example.yaml": "hub.yaml.example",

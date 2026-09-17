@@ -1,17 +1,27 @@
 # Spec: Ingest
 
 - **Status:** approved
-- **Owns:** `internal/ingest` (hub), the `/api/v1/ingest` contract both binaries implement
+- **Owns:** `internal/ingest` (hub), the `/api/v1/ingest` contract both binaries implement,
+  and `/api/v1/agent/target`, which the agent's installer reads
 - **Decisions:** [0002](../decisions/0002-push-not-pull.md),
   [0007](../decisions/0007-public-repository.md),
-  [0010](../decisions/0010-agent-configuration.md)
+  [0010](../decisions/0010-agent-configuration.md),
+  [0022](../decisions/0022-updates-are-pulled.md),
+  [0028](../decisions/0028-agents-follow-a-target-the-hub-serves.md)
 
 ## Purpose
 
 The ingest endpoint receives measurements from agents, stores them, and delivers the
-agent's configuration in the response. It is the only channel between an agent and the
-hub. It validates shape, not meaning: whether a value crosses a threshold is the
+agent's configuration in the response. It is the only channel between a running agent and
+the hub. It validates shape, not meaning: whether a value crosses a threshold is the
 evaluation engine's business, not ingest's.
+
+Beside it, under `/api/v1/agent/`, the hub answers what a node asks without a running agent:
+the version its updater should install ([0022](../decisions/0022-updates-are-pulled.md),
+[0028](../decisions/0028-agents-follow-a-target-the-hub-serves.md)). Both authenticate the
+same way, and nothing else on the hub accepts a node's token. Everything under that prefix is
+authenticated before it is routed, so a path added there later cannot be reached without a
+token by forgetting to wrap it.
 
 ## Wire format
 
@@ -132,15 +142,44 @@ One row = one test. Anchors: `spec: ingest.md#<heading>`.
 |---|---|---|
 | more than 60 requests per minute from one node | 429 | nothing stored |
 
+### The agent's target
+
+```
+GET /api/v1/agent/target
+Authorization: Bearer <per-node token>
+
+200 OK
+Content-Type: text/plain; charset=utf-8
+
+latest
+```
+
+The body is the grammar of the hub host's `hub.target`: exactly `latest` or one
+`MAJOR.MINOR.PATCH`, and one newline. The hub passes `latest` through unresolved; the
+installer resolves it ([installer.md](installer.md#answering-a-follow-run-for-the-agent)).
+
+| Request | Response |
+|---|---|
+| no `Authorization` header, or a token unknown to the hub, on any path under `/api/v1/agent/`, served or not | 401, a JSON error as ingest's, no `WWW-Authenticate` header — that header is how the installer tells the proxy's refusal from the hub's — and no target |
+| a valid token, a path under `/api/v1/agent/` the hub does not serve | 404 |
+| a valid token, its node resolving `agent_target` to `latest` | 200, body `latest` and a newline |
+| a valid token, its node resolving it to a version | 200, body that version and a newline |
+| a valid token, no layer naming one for its node | 204, empty body: the hub names no target |
+| a query string, `?node=` another node's name included | ignored: the answer is the token's node's alone |
+| a valid token, a method other than `GET` or `HEAD` | 405 |
+| any 200 or 204 | `Cache-Control: no-store`: a cached target is a rollback that never arrives |
+| any request | nothing is stored: the node's last-seen, agent version and manifest are unchanged, and the request does not count toward ingest's limit |
+
 ## Invariants
 
 - Nothing is stored unless the response is 200: a request is atomic.
-- Every 200 advances the node's last-seen, measurements or not — arrival of an
-  authenticated request is what "the agent is alive" means.
+- Every 200 from `/api/v1/ingest` advances the node's last-seen, measurements or not —
+  arrival of an agent's request is what "the agent is alive" means. A node's updater asking
+  for its target says nothing about its agent, and advances nothing.
 - Re-sending an identical batch (agent retry) changes nothing: ingest is idempotent
   over (node, metric, labels, ts), with `ts` taken to the millisecond.
-- A response contains only the requesting node's configuration, never another node's
-  ([0007](../decisions/0007-public-repository.md)).
+- A response contains only the requesting node's configuration or target, never another
+  node's ([0007](../decisions/0007-public-repository.md)).
 - The agent's clock never sets last-seen; silence detection runs on hub receipt time.
 
 ## Edge cases
@@ -161,6 +200,17 @@ One row = one test. Anchors: `spec: ingest.md#<heading>`.
   last-seen) is in storage or the config file, never only in memory.
 - **Newer agent, older hub**: unknown request fields are ignored; the agent must likewise
   ignore unknown response fields.
+- **A hub older than the target endpoint** answers it `404`, which the installer reports as a
+  failed run rather than as "no target": the hub is upgraded first
+  ([0022](../decisions/0022-updates-are-pulled.md), point 5), so a `404` is a hub nobody
+  upgraded.
+- **The target endpoint is a contract with installers newer than the hub.** A node's run asks
+  the newest release's installer first, and the hub may be pinned below it, so a later
+  installer meets an older hub. The path and its answer therefore change only by adding a path
+  beside them under the same prefix.
+- **The target endpoint is not rate limited by the hub.** A node asks once an hour, a wrong
+  token is refused before anything is resolved, and the proxy limits every source address
+  ([nginx-requirements.md](../nginx-requirements.md)).
 
 ## Out of scope
 

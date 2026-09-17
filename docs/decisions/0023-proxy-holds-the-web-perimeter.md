@@ -2,7 +2,9 @@
 
 - **Status:** accepted; the "no cookie" clause is amended by
   [0026](0026-reader-time-zone-from-the-browser.md), where the hub reads one cookie carrying
-  the reader's time zone and nothing else. The perimeter itself stands.
+  the reader's time zone and nothing else. The perimeter is amended by
+  [0028](0028-agents-follow-a-target-the-hub-serves.md): every path under `/api/v1/agent/` is
+  the hub's to authenticate, like ingest.
 - **Date:** 2026-09-12
 - **Source:** [POC](../poc.md) stage 3,
   [proxy requirements](../nginx-requirements.md), [ADR 0007](0007-public-repository.md)

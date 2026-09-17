@@ -1,0 +1,27 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<!-- Keeps the agent on the version the hub names for this node, by running the kept
+	     install script as docs/specs/installer.md describes. It runs at load and once an
+	     hour from then on, so each Mac keeps its own minute; a failed run waits for the next
+	     hour rather than being kept alive. Placed by hand or by provisioning, never by a
+	     release, and its log is placed root-only first (docs/specs/deployment.md). -->
+	<key>Label</key>
+	<string>io.github.pravbeseda.monitor-agent-update</string>
+	<key>ProgramArguments</key>
+	<array>
+		<string>/usr/local/libexec/monitor/monitor-install.sh</string>
+		<string>agent</string>
+		<string>--follow-target</string>
+	</array>
+	<key>RunAtLoad</key>
+	<true/>
+	<key>StartInterval</key>
+	<integer>3600</integer>
+	<key>StandardOutPath</key>
+	<string>/var/log/monitor-agent-update.log</string>
+	<key>StandardErrorPath</key>
+	<string>/var/log/monitor-agent-update.log</string>
+</dict>
+</plist>

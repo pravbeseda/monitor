@@ -6,6 +6,7 @@ package deploy_test
 import (
 	"crypto/sha256"
 	"encoding/hex"
+	"net/http"
 	"os"
 	"path/filepath"
 	"strings"
@@ -390,14 +391,16 @@ func TestAFollowRunThatCannotFollowTheAnswer(t *testing.T) {
 	}
 }
 
-// spec: installer.md#following-a-target — a follow run is the hub's, and chooses its version
-// from the target alone.
+// spec: installer.md#following-a-target — a follow run chooses its version from the target
+// alone, and an agent's takes its hub and node from agent.env.
 func TestAFollowRunRefusesArgumentsThatChooseForIt(t *testing.T) {
 	for _, test := range []struct {
 		args []string
 		says string
 	}{
-		{[]string{"agent", "--follow-target", "--hub", exampleHub, "--node", testNode}, "--follow-target is the hub's"},
+		{[]string{"agent", "--follow-target", "--hub", exampleHub}, "agent.env"},
+		{[]string{"agent", "--node", testNode, "--follow-target"}, "agent.env"},
+		{[]string{"agent", "--follow-target", "--version", "1.2.3"}, "not --version"},
 		{[]string{"hub", "--follow-target", "--version", "1.2.3"}, "not --version"},
 		{[]string{"hub", "--follow-target", "--allow-downgrade"}, "only when the target names it"},
 	} {
@@ -494,5 +497,84 @@ func TestAFollowRunDownloadsNoBinaryToFinishAHubAtItsTarget(t *testing.T) {
 	}
 	if body, _ := os.ReadFile(unit); string(body) == "# an older unit\n" {
 		t.Errorf("the service definition was not installed:\n%s", stdout)
+	}
+}
+
+// spec: installer.md#following-a-target — agent --follow-target hands over to the agent's
+// installer with the same five options, the agent binary's digest and nothing on stdin.
+func TestAnAgentFollowRunHandsOverToTheAgentsInstaller(t *testing.T) {
+	o := newOrigin(t)
+	run := newBootstrapRun(t, o, "agent", "--follow-target")
+	run.stdin = "nothing the agent's installer should read"
+
+	stdout, stderr, err := run.start(t)
+	if err != nil {
+		t.Fatalf("the run failed: %v\n%s%s", err, stdout, stderr)
+	}
+
+	record, err := os.ReadFile(run.record)
+	if err != nil {
+		t.Fatalf("the installer was never reached: %v\n%s%s", err, stdout, stderr)
+	}
+	sum := sha256.Sum256(syntheticBinary("agent", "1.2.3"))
+	for _, want := range []string{"agent args: --follow-target --release 1.2.3 --newest 1.2.3 --digest " +
+		hex.EncodeToString(sum[:]) + " --answer ", "stdin: []"} {
+		if !strings.Contains(string(record), want) {
+			t.Errorf("the hand-over does not carry %q:\n%s", want, record)
+		}
+	}
+	if strings.Contains(string(record), "hub args:") {
+		t.Errorf("an agent's follow run reached the hub's installer:\n%s", record)
+	}
+	if n := fetchedCount(o, "1.2.3", binaryName("agent", "1.2.3")); n != 0 {
+		t.Errorf("the run downloaded the agent binary %d times; nobody asked for it", n)
+	}
+}
+
+// spec: installer.md#following-a-target — the whole chain for a node, with the installer a
+// release really carries: the hub agent.env names decides which agent lands, and the next run
+// downloads no binary for an agent already there.
+func TestTheWholeChainFollowsTheHubsTargetForAnAgent(t *testing.T) {
+	for _, test := range []struct {
+		target  string
+		version string
+	}{
+		{"latest\n", "1.2.3"},
+		{"1.0.0\n", "1.0.0"},
+	} {
+		t.Run(strings.TrimSpace(test.target), func(t *testing.T) {
+			o := newOrigin(t)
+			o.set("monitor-installer-1.2.3.tar.gz", realArchive(t))
+			o.sign(t)
+			o.publish(t, "1.0.0", realArchive(t))
+			hub := newFakeHub(t, http.StatusOK, test.target)
+			run := newBootstrapRun(t, o, "agent", "--follow-target")
+			install(t, run.destDir, agentBinary(t), hub.url, testNode, testToken)
+
+			stdout, stderr, err := run.start(t)
+			if err != nil {
+				t.Fatalf("the chain failed: %v\n%s%s", err, stdout, stderr)
+			}
+
+			installed, err := os.ReadFile(filepath.Join(run.destDir, hostLayout().binary.path))
+			if err != nil {
+				t.Fatal(err)
+			}
+			if want := "monitor-agent " + test.version; !strings.Contains(string(installed), want) {
+				t.Errorf("the agent that landed is %q, want %s\n%s%s", installed, want, stdout, stderr)
+			}
+			assertEnv(t, run.destDir, hub.url, testNode, testToken)
+
+			stdout, stderr, err = run.start(t)
+			if err != nil {
+				t.Fatalf("the second run failed: %v\n%s%s", err, stdout, stderr)
+			}
+			if n := fetchedCount(o, test.version, binaryName("agent", test.version)); n != 1 {
+				t.Errorf("two runs downloaded the binary %d times, want once", n)
+			}
+			if !strings.Contains(stdout, "already") {
+				t.Errorf("the second run does not say the agent is already there:\n%s", stdout)
+			}
+		})
 	}
 }

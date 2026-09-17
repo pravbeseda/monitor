@@ -143,9 +143,11 @@ Nothing about the hub, the proxy or the firewall changes.
 - No nginx or firewall change: the agent never leaves loopback.
 - No separate account for the agent: it runs as root by design
   ([deployment.md](specs/deployment.md#where-things-live)).
-- No update timer for the agent: upgrading it is re-running the play with a new version.
-  Only the hub follows a target
-  ([ADR 0024](decisions/0024-the-hub-follows-a-target-with-a-kept-install-script.md)).
+- No update timer for the agent: upgrading it is re-running the play with a new version. A
+  node can follow the hub's target from a timer of its own
+  ([ADR 0028](decisions/0028-agents-follow-a-target-the-hub-serves.md),
+  [install.md](install.md#keeping-a-node-upgraded-unattended)); on this host the play keeps
+  that choice, and placing the timer is a change to these requirements.
 
 ## How we check it is done
 

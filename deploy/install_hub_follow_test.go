@@ -490,8 +490,9 @@ func TestAFollowRunRefusesATargetInASymlinkedDirectory(t *testing.T) {
 	}
 }
 
-// spec: installer.md#answering-a-follow-run — the installer and the kept script judge a
-// version by one grammar; the two copies of it cannot share a file, so they are held equal.
+// spec: installer.md#answering-a-follow-run — the installers and the kept script judge a
+// version by one grammar; the kept script cannot share a file with a release, so its copy is
+// held equal to the one the installers source.
 func TestBothScriptsJudgeAVersionAlike(t *testing.T) {
 	function := func(file string) string {
 		body := read(t, file)
@@ -502,8 +503,8 @@ func TestBothScriptsJudgeAVersionAlike(t *testing.T) {
 		end := strings.Index(body[start:], "\n}\n")
 		return body[start : start+end]
 	}
-	if function(bootstrap) != function(hubScript) {
-		t.Errorf("is_version differs between %s and %s", bootstrap, hubScript)
+	if function(bootstrap) != function(followScript) {
+		t.Errorf("is_version differs between %s and %s", bootstrap, followScript)
 	}
 }
 
