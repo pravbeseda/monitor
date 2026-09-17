@@ -54,8 +54,8 @@ configuration is the operator's: a run that does not find it leaves the service 
 
 A follow run reads /etc/monitor/hub.target first. When the target names another release it
 writes that version into the answer file; when it names this one and the hub already runs a
-binary of that digest it does nothing; otherwise it installs the binary it was given, or
-writes this release's version to ask for it.
+binary of that digest it does nothing; otherwise it installs the binary it was given, installs
+around a binary in place of that digest, or writes this release's version to ask for it.
 
 DESTDIR stages the whole installation under a prefix and registers no service.
 EOF
@@ -255,15 +255,21 @@ digest_of() {
 	printf '%s' "${line##* }"
 }
 
-# Whether the release handed over is already what is installed, as the layout installs it, and
-# on a real run what the service is running. A run stopped between replacing the binary and
-# restarting the service leaves identical files behind, and the next run has to finish it.
-already_running() {
+# Whether the binary in place is the release handed over, as the layout installs it.
+binary_is_release() {
+	[ ! -L "$destdir$binary_file" ] || return 1
+	[ -f "$destdir$binary_file" ] || return 1
 	[ "$(digest_of "$destdir$binary_file")" = "$digest" ] || return 1
 	[ -z "$(find "$destdir$binary_file" -maxdepth 0 ! -perm 0755)" ] || return 1
+	[ -n "$destdir" ] || [ -n "$(find "$binary_file" -maxdepth 0 -user root)" ]
+}
+
+# Whether, with binary_is_release already true, the rest of the release is installed and on a
+# real run the service is running that binary. A run stopped between replacing the binary and
+# restarting the service leaves identical files behind, and the next run has to finish it.
+already_running() {
 	cmp -s "$service_source" "$destdir$service_file" || return 1
 	[ -z "$destdir" ] || return 0
-	[ -n "$(find "$binary_file" -maxdepth 0 -user root)" ] || return 1
 	pid=$(systemctl show -p MainPID --value monitor-hub.service 2>/dev/null) || return 1
 	[ "${pid:-0}" != 0 ] || return 1
 	[ "$(digest_of "/proc/$pid/exe")" = "$digest" ]
@@ -297,11 +303,16 @@ if [ -n "$follow" ]; then
 			"$program" "$target_file" "$wanted" "$release"
 		exit 0
 	fi
-	if already_running; then
+	release_in_place=
+	binary_is_release && release_in_place=1
+	if [ -n "$release_in_place" ] && already_running; then
 		printf '%s: monitor-hub %s is already installed; nothing to do\n' "$program" "$release"
 		exit 0
 	fi
-	if [ -z "$binary" ]; then
+	if [ -z "$binary" ] && [ -n "$release_in_place" ]; then
+		printf '%s: monitor-hub %s is in place; keeping the binary in place and installing the rest\n' \
+			"$program" "$release"
+	elif [ -z "$binary" ]; then
 		printf '%s\n' "$release" >"$answer"
 		printf '%s: %s names this release %s; asking for its binary\n' \
 			"$program" "$target_file" "$release"
@@ -338,7 +349,7 @@ chmod 0755 "$destdir$config_dir"
 chmod 0700 "$destdir$data_dir"
 [ -n "$destdir" ] || chown "$account:$account" "$destdir$data_dir"
 
-install_file "$binary" 0755 "$destdir$binary_file"
+[ -z "$binary" ] || install_file "$binary" 0755 "$destdir$binary_file"
 install_file "$service_source" 0644 "$destdir$service_file"
 install_file "$yaml_example" 0644 "$destdir$config_dir/hub.yaml.example"
 install_file "$env_example" 0600 "$destdir$config_dir/hub.env.example"
