@@ -14,6 +14,15 @@
 
 set -eu
 
+# A variable the caller exported keeps its export through an assignment, and any of these may come
+# to hold the token, which would then reach every child process. Unset, they are this script's
+# alone; the test that exports every name this script and install-follow.sh assign holds the list.
+unset answer assignment attempt authority binary binary_file carriage_return checked code destdir \
+	digest env_dir env_file fetched follow has_hub has_node has_token host hub init_tool key line \
+	log_file newest newline node number oldifs part pid program release reply running service_file \
+	service_label service_source setting source_dir status status_command stored temp token trimmed \
+	unquoted value wanted why written
+
 # Byte-wise ranges below, and the same answer from find and mktemp whatever the operator's
 # locale is.
 LC_ALL=C
@@ -264,9 +273,6 @@ write_env_file() {
 binary=
 hub=
 node=
-# unset, not emptied: an exported variable of this name keeps its export through an assignment,
-# and would hand the token to every child process.
-unset token
 follow=
 release=
 newest=

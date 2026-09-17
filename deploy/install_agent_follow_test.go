@@ -4,11 +4,14 @@
 package deploy_test
 
 import (
+	"maps"
 	"net/http"
 	"net/http/httptest"
 	"os"
 	"os/exec"
 	"path/filepath"
+	"regexp"
+	"slices"
 	"strings"
 	"sync"
 	"testing"
@@ -292,7 +295,7 @@ func TestAnAgentFollowRunInstallsTheBinaryItAskedFor(t *testing.T) {
 
 // spec: installer.md#answering-a-follow-run-for-the-agent — the token reaches curl on its
 // stdin, never in its arguments or its environment, even when the caller exported a variable of
-// the name the script keeps the token in.
+// any name the script assigns: an exported variable keeps its export through an assignment.
 func TestAnAgentFollowRunKeepsTheTokenOutOfCurlsArgumentsAndEnvironment(t *testing.T) {
 	f := newFollowAgent(t, newFakeHub(t, http.StatusOK, "1.1.0\n"), "1.2.3", "1.2.3")
 	realCurl, err := exec.LookPath("curl")
@@ -307,7 +310,11 @@ func TestAnAgentFollowRunKeepsTheTokenOutOfCurlsArgumentsAndEnvironment(t *testi
 		"exec '"+realCurl+"' \"$@\"\n")
 	chmod(t, filepath.Join(shims, "curl"), 0o755)
 
-	f.mustStart(t, run{pathDir: shims, token: testToken, env: []string{"token=planted"}})
+	var planted []string
+	for _, name := range assignedVariables(t, script, followScript) {
+		planted = append(planted, name+"=planted")
+	}
+	f.mustStart(t, run{pathDir: shims, token: testToken, env: planted})
 
 	body, err := os.ReadFile(record)
 	if err != nil {
@@ -316,6 +323,31 @@ func TestAnAgentFollowRunKeepsTheTokenOutOfCurlsArgumentsAndEnvironment(t *testi
 	if strings.Contains(string(body), testToken) {
 		t.Errorf("the token reached curl's arguments or environment:\n%s", body)
 	}
+}
+
+// shellAssignment is how a POSIX sh script gives a lowercase variable a value: at the start of a line
+// or after a case pattern or a || or &&, as a for loop's variable, or as read's.
+var shellAssignment = regexp.MustCompile(`(?:^|\) |\|\| |&& )([a-z_][a-z0-9_]*)=|\bfor ([a-z_][a-z0-9_]*) in\b|\bread -r ([a-z_][a-z0-9_]*)`)
+
+// assignedVariables is every lowercase variable the scripts assign, comments aside.
+func assignedVariables(t *testing.T, files ...string) []string {
+	t.Helper()
+	names := map[string]bool{}
+	for _, file := range files {
+		for _, line := range strings.Split(read(t, file), "\n") {
+			line = strings.TrimSpace(line)
+			if strings.HasPrefix(line, "#") {
+				continue
+			}
+			for _, match := range shellAssignment.FindAllStringSubmatch(line, -1) {
+				names[match[1]+match[2]+match[3]] = true
+			}
+		}
+	}
+	if len(names) == 0 {
+		t.Fatal("found no assignments; the pattern no longer reads the scripts")
+	}
+	return slices.Sorted(maps.Keys(names))
 }
 
 // hubAnswer is how the fake hub answers a refusal row; a row without one gets a valid target,
