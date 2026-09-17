@@ -4,6 +4,8 @@
 - **Amended by:** [0025](0025-the-hub-checks-hourly-and-downloads-a-binary-to-install-it.md),
   for point 4's answer contract, point 5's test of a release already in place, the daily
   timer, and the consequences naming the frozen options and the rollback floor
+- **Amended by:** [0028](0028-agents-follow-a-target-the-hub-serves.md), which answers
+  point 7 for a kept script on a node: one key there too
 - **Date:** 2026-09-14
 - **Source:** [0022](0022-updates-are-pulled.md) points 3, 5, 6 and 7, and the open key
   question [release.md](../specs/release.md#generating-and-rotating-the-key) left for this

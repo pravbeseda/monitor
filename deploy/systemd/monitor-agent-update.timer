@@ -1,0 +1,13 @@
+# Runs the agent update once an hour. Persistent catches up on a run missed while the node was
+# down; the randomized delay spreads the fleet over ten minutes (docs/specs/deployment.md).
+
+[Unit]
+Description=Monitor agent update, hourly
+
+[Timer]
+OnCalendar=hourly
+RandomizedDelaySec=10min
+Persistent=true
+
+[Install]
+WantedBy=timers.target

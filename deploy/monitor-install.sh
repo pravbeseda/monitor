@@ -85,15 +85,15 @@ refuse() {
 usage() {
 	cat <<EOF
 usage: $program <hub|agent> [--version X.Y.Z] [--allow-downgrade] [--hub <url>] [--node <name>]
-       $program hub --follow-target
+       $program <hub|agent> --follow-target
 
 Downloads the newest release, checks its signature and installs from it. The agent's token is
 read from MONITOR_TOKEN or from stdin, which the one-line form cannot offer.
 
---follow-target is what the hub's update timer runs: the installer of the newest release reads
-/etc/monitor/hub.target and does nothing, installs around the binary already in place, asks
-for its binary, or names another release to fetch; a binary is downloaded only when an
-installer asks for it.
+--follow-target is what an update timer runs: the installer of the newest release learns the
+target — the hub's from /etc/monitor/hub.target, an agent's from the hub its agent.env names —
+and does nothing, installs around the binary already in place, asks for its binary, or names
+another release to fetch; a binary is downloaded only when an installer asks for it.
 EOF
 }
 
@@ -152,9 +152,10 @@ parse_arguments() {
 		esac
 	done
 
-	# A follow run takes its version from the target alone, and only the hub has one.
+	# A follow run takes its version from the target alone, and an agent's run its hub and node
+	# from the environment file the agent was installed with.
 	[ "$follow" -eq 1 ] || return 0
-	[ "$role" = hub ] || refuse_with_usage "--follow-target is the hub's; an agent's target is not built"
+	[ -z "$hub$node" ] || refuse_with_usage "--follow-target reads --hub and --node from agent.env"
 	[ -z "$version" ] || refuse_with_usage "--follow-target takes its version from the target, not --version"
 	[ "$allow_downgrade" -eq 0 ] || refuse_with_usage "--follow-target installs an older release only when the target names it"
 }
@@ -231,13 +232,14 @@ check_tools() {
 	done
 }
 
-# curl, with the transport pinned on a real run. A staged run reaches a test server on
-# loopback, which is not https and is not the internet.
+# curl, with the transport pinned on a real run and no .curlrc read: under sudo on macOS HOME is
+# still the caller's, and a .curlrc there would steer what root downloads. A staged run reaches
+# a test server on loopback, which is not https and is not the internet.
 get() {
 	if [ "$staged" -eq 1 ]; then
-		curl -fsSL --max-time 120 "$@"
+		curl -q -fsSL --max-time 120 "$@"
 	else
-		curl -fsSL --max-time 120 --proto '=https' --proto-redir '=https' "$@"
+		curl -q -fsSL --max-time 120 --proto '=https' --proto-redir '=https' "$@"
 	fi
 }
 
@@ -412,13 +414,14 @@ follow_target() {
 		refuse "the installer of release $version answered after it was given its binary; the run stops"
 }
 
-# One hand-over to the unpacked release's installer, with the options of
-# docs/specs/installer.md#the-handover and whatever is added after them.
+# One hand-over to the unpacked release's installer for this run's role, with the options of
+# docs/specs/installer.md#the-handover and whatever is added after them. Neither role reads
+# stdin in a follow run: the agent's token is in its environment file.
 hand_over_following() {
 	: >"$work/answer"
 	printf '%s: handing over to release %s to follow the target\n' "$program" "$version"
 	status=0
-	sh "$work/release/install.sh" hub --follow-target --release "$version" --newest "$newest" \
+	sh "$work/release/install.sh" "$role" --follow-target --release "$version" --newest "$newest" \
 		--digest "$(manifest_digest "$binary_asset")" --answer "$work/answer" "$@" </dev/null ||
 		status=$?
 	[ "$status" -eq 0 ] || exit "$status"

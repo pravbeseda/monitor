@@ -1,0 +1,13 @@
+# Keeps the agent on the version the hub names for this node, by running the kept install
+# script as docs/specs/installer.md describes. Started by its timer alone, so it has no
+# [Install] section; it is placed by hand or by provisioning, never by a release.
+
+[Unit]
+Description=Monitor agent update
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+ExecStart=/usr/local/libexec/monitor/monitor-install.sh agent --follow-target
+PrivateTmp=true

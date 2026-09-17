@@ -12,7 +12,10 @@ import (
 	"testing"
 )
 
-const hubScript = "./install-hub.sh"
+const (
+	hubScript    = "./install-hub.sh"
+	followScript = "./install-follow.sh"
+)
 
 // hubRun is one invocation of install-hub.sh, staged under destDir.
 type hubRun struct {

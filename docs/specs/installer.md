@@ -2,8 +2,9 @@
 
 - **Status:** approved
 - **Owns:** `deploy/monitor-install.sh` — the script an operator runs — and the contents of
-  the installer archive a release carries: `install.sh`, `install-hub.sh`, and the copies of
-  `install-agent.sh` and the service definitions that travel with them
+  the installer archive a release carries: `install.sh`, `install-hub.sh`, `install-follow.sh`
+  — what both installers share to answer a follow run — and the copies of `install-agent.sh`
+  and the service definitions that travel with them
 - **Decisions:** [0005](../decisions/0005-poc-stack.md),
   [0007](../decisions/0007-public-repository.md),
   [0019](../decisions/0019-deployment-layout.md),
@@ -12,19 +13,21 @@
   [0022](../decisions/0022-updates-are-pulled.md),
   [0024](../decisions/0024-the-hub-follows-a-target-with-a-kept-install-script.md),
   [0025](../decisions/0025-the-hub-checks-hourly-and-downloads-a-binary-to-install-it.md),
-  [0027](../decisions/0027-the-hub-installer-reuses-the-binary-in-place.md)
+  [0027](../decisions/0027-the-hub-installer-reuses-the-binary-in-place.md),
+  [0028](../decisions/0028-agents-follow-a-target-the-hub-serves.md)
 
 ## Purpose
 
-One command puts a hub or an agent on a machine, and the same command upgrades it. On the
-hub host a kept copy of that command, run by a timer, keeps the hub on the version the host
-names. This spec owns what the command does and what it refuses, in both uses.
+One command puts a hub or an agent on a machine, and the same command upgrades it. A kept
+copy of that command, run by a timer, keeps a binary on the version named for it: the hub on
+the one its host names, an agent on the one the hub names for its node. This spec owns what
+the command does and what it refuses, in both uses.
 
-It is [0022](../decisions/0022-updates-are-pulled.md) for the hub, shaped by
-[0024](../decisions/0024-the-hub-follows-a-target-with-a-kept-install-script.md): a release
-that carries its own installer, verified before anything from it runs, and an installer that
-answers with a version instead of installing. An agent is still upgraded by the operator
-running the same command again.
+It is [0022](../decisions/0022-updates-are-pulled.md), shaped by
+[0024](../decisions/0024-the-hub-follows-a-target-with-a-kept-install-script.md) for the hub
+and by [0028](../decisions/0028-agents-follow-a-target-the-hub-serves.md) for the agent: a
+release that carries its own installer, verified before anything from it runs, and an
+installer that answers with a version instead of installing.
 
 `install-agent.sh` keeps the contract [deployment.md](deployment.md) gives it — a binary that
 already exists, passed as `--binary` — because it is what repairs a machine this installer
@@ -40,18 +43,19 @@ carries the release signing key, because a release cannot vouch for itself
 they are the same bytes is what keeps them from drifting. Beyond the shell it needs `curl`,
 `openssl`, `tar` and `find`, and it names whichever is missing.
 
-**The hub host keeps one copy of the key a release cannot replace**: the kept script the
-timer runs ([Following a target](#following-a-target)). An operator's run still fetches the
-script each time, and what a release leaves behind is the binary, the service definition and
-the examples, every one of which the next release overwrites. So a rotation is what
-[release.md](release.md) describes plus replacing the kept script on the hub host. It carries
-one key and no copy of the private half exists
-([0024](../decisions/0024-the-hub-follows-a-target-with-a-kept-install-script.md), point 7).
+**A machine that follows a target keeps one copy of the key a release cannot replace**: the
+kept script its timer runs ([Following a target](#following-a-target)). An operator's run still
+fetches the script each time, and what a release leaves behind is the binary, the service
+definition and the examples, every one of which the next release overwrites. So a rotation is
+what [release.md](release.md) describes plus replacing the kept script on every machine that
+keeps one, nodes included. It carries one key and no copy of the private half exists
+([0024](../decisions/0024-the-hub-follows-a-target-with-a-kept-install-script.md), point 7;
+[0028](../decisions/0028-agents-follow-a-target-the-hub-serves.md), point 6).
 
 **The installer travels inside the release**, as `monitor-installer-<version>.tar.gz` listed
 in that release's signed manifest ([release.md](release.md) owns the asset; this spec owns
-its contents). It holds `install.sh`, the per-binary installers, the service definitions and
-the example configuration, laid out as `deploy/` is, because `install-agent.sh` finds its
+its contents). It holds `install.sh`, the per-binary installers and the file they source to
+answer a follow run, the service definitions and the example configuration, laid out as `deploy/` is, because `install-agent.sh` finds its
 service definitions beside itself.
 
 **An asset is named, not searched for.** The run builds each asset's name from the version
@@ -64,7 +68,8 @@ signature, the archive and the one binary the machine needs, and verifies each o
 it is used; a follow run downloads the binary last, only once an installer asks for it, and
 checks it against the manifest it already verified for that release in the same run. The
 installer downloads nothing and verifies nothing: giving it either would put a verifier
-inside the release, which is the release vouching for itself. The digest it computes of the
+inside the release, which is the release vouching for itself. The agent's asks the hub one
+question — the target — and that answer names a version, never a file to fetch. The digest it computes of the
 binary in place, with `openssl`, decides whether there is anything to do and whether that
 binary is kept: a match keeps bytes that only root could have put there
 ([0027](../decisions/0027-the-hub-installer-reuses-the-binary-in-place.md)), and a false
@@ -93,8 +98,9 @@ sh <unpacked>/install.sh <role> --binary <verified path> [--hub <url> --node <na
 ```
 
 - The agent's token reaches the installer on stdin, which is the run's own stdin passed
-  through. A `hub` run is given `/dev/null` instead, because the hub takes no token and a run
-  in a pipeline would otherwise hand it whatever is on that pipe.
+  through. A `hub` run and every follow run are given `/dev/null` instead: the hub takes no
+  token, a following agent reads its own from `agent.env`, and a run in a pipeline would
+  otherwise hand either whatever is on that pipe.
 - The environment is inherited, `DESTDIR` and `MONITOR_TOKEN` among it —
   [deployment.md](deployment.md) makes that variable the token's other documented route, and
   a run cannot take it away without breaking the route it names. What the run sets for
@@ -102,10 +108,10 @@ sh <unpacked>/install.sh <role> --binary <verified path> [--hub <url> --node <na
 - The binary is already verified and already executable when the installer sees it.
 - The run exits with the installer's status, and passes its output through unchanged.
 
-A follow run hands over with five options of its own and, at first, no binary. Only the
-hub's installer accepts them today; the form names no role of its own, so an agent's
-installer can take the same five
-([0025](../decisions/0025-the-hub-checks-hourly-and-downloads-a-binary-to-install-it.md)):
+A follow run hands over with five options of its own and, at first, no binary. The form is the
+same for both roles, and both installers take it
+([0025](../decisions/0025-the-hub-checks-hourly-and-downloads-a-binary-to-install-it.md),
+[0028](../decisions/0028-agents-follow-a-target-the-hub-serves.md)):
 
 ```
 sh <unpacked>/install.sh <role> --follow-target --release <this release's version> \
@@ -121,6 +127,9 @@ sh <unpacked>/install.sh <role> --follow-target --release <this release's versio
   asks for this release's binary. A non-zero exit is a refusal whatever the file holds.
 - `--binary` is given only after an installer asked for it, together with the same five
   options, and an installer handed it answers nothing: an answer then stops the run.
+- The role is the one the kept script was started with. A kept script older than
+  [0028](../decisions/0028-agents-follow-a-target-the-hub-serves.md) knows only `hub`, so a
+  machine that places an agent's update units places a kept script at least that new.
 - The installer downloads nothing. `--newest` is how `latest` is resolved without asking the
   origin, and every hand-over of one run passes the same value; `--digest` is how it tells,
   without the binary, whether the binary in place is already this release's.
@@ -134,8 +143,11 @@ answer after `--binary` stopping the run — the
 handover form above, the two URL shapes of [Where a release is fetched
 from](#where-a-release-is-fetched-from), the asset names and the manifest format of
 [release.md](release.md), the archive being one directory holding `install.sh`, the signature
-algorithm, and the command line `monitor-hub-update.service` starts. Changing one of them is
-replacing the script on every host that keeps one.
+algorithm, and the command lines the update units start — `hub --follow-target` and
+`agent --follow-target`. Changing one of them is replacing the script on every machine that
+keeps one. The endpoint the agent's installer asks is not among them — the installer travels in
+the release — but it binds that installer to every hub still running, which
+[ingest.md](ingest.md#edge-cases) records.
 
 ## Behaviour
 
@@ -149,9 +161,9 @@ systemd about the unit and starting the service, correcting an owner, refusing a
 systemd, ignoring an inherited `TMPDIR`, treating an installed binary owned by anyone but
 root as replaceable, stripping an archive's owner and setuid bits, which an unprivileged
 tar would not have restored anyway, refusing a target owned by anyone but root, not taking a
-hub binary owned by anyone but root for the release's binary in place, and telling
-a running hub on the release's binary from a stopped one or one still on the binary it
-replaced. They are proved on a real host; everything else in these
+hub binary owned by anyone but root for the release's binary in place, refusing an
+`agent.env` owned by anyone but root in a follow run, and telling a running hub or agent on the
+release's binary from a stopped one or one still on the binary it replaced. They are proved on a real host; everything else in these
 tables is proved by the suite.
 
 `monitor-install.sh <role> [options]`, where `<role>` is `hub` or `agent`.
@@ -176,7 +188,7 @@ tables is proved by the suite.
 | nothing installed, or a binary that will not run or reports something that is not a version | it installs, and says it could not tell what was there |
 | an installed binary that another account could have replaced — it or its directory writable by group or other, or on a real run owned by anyone but root | its version is not read at all, and the run says so and installs |
 | an option this run does not know, or one given without its value | the usage on stderr |
-| `--hub` or `--node` given to the `hub` role | the usage on stderr |
+| `--hub` or `--node` given to the `hub` role, or to a follow run | the usage on stderr |
 | no `curl`, `openssl`, `tar` or `find` on `PATH` | the run names the one that is missing |
 | a script truncated in transit | nothing runs at all |
 | a machine whose shell runs under Rosetta | the `darwin-arm64` asset is what lands: the run reads `uname` and `sysctl.proc_translated` off `PATH` |
@@ -215,11 +227,17 @@ The verdict on a signature is `openssl`'s exit status and never its output, for 
 
 ### Following a target
 
-`monitor-install.sh hub --follow-target` is what `monitor-hub-update.service` runs from the
-kept copy ([deployment.md](deployment.md#where-things-live)). The target is
-`/etc/monitor/hub.target`, holding exactly `latest` or one `MAJOR.MINOR.PATCH`, a trailing
-newline allowed. The rows of [Fetching and checking a release](#fetching-and-checking-a-release)
-and [Unpacking](#unpacking) hold for each release a follow run fetches.
+`monitor-install.sh <role> --follow-target` is what the update units run from the kept copy
+([deployment.md](deployment.md#where-things-live)): `hub` on the hub host, `agent` on a node.
+The kept script reads no target itself. For the hub the target is `/etc/monitor/hub.target`,
+holding exactly `latest` or one `MAJOR.MINOR.PATCH`, a trailing newline allowed; for an agent
+it is what the hub answers for that node, in the same grammar. The rows of [Fetching and
+checking a release](#fetching-and-checking-a-release) and [Unpacking](#unpacking) hold for each
+release a follow run fetches.
+
+Nothing the kept script does depends on the role beyond the name it hands over, so the rows
+below are stated and proved for the hub; for the agent they are proved by the row that passes
+the role through and by the whole chain, run once for each role.
 
 | Event | Outcome |
 |---|---|
@@ -239,7 +257,7 @@ and [Unpacking](#unpacking) hold for each release a follow run fetches.
 | the named release's installer names a version other than its own | nothing is installed, and the run names the version it followed and the one named after it |
 | an answer that is not one `MAJOR.MINOR.PATCH` | nothing more is fetched, nothing is installed, and the run names the answer |
 | an installer that exits 0 leaving the answer empty | the run ends with that installer's output and adds no claim of its own |
-| `--follow-target` with the `agent` role | the usage on stderr: an agent's target is the hub's to name, and that is not built |
+| `agent --follow-target` | every hand-over is to `install.sh agent`, with the same five options and `/dev/null` on stdin |
 | `--follow-target` with `--version` or `--allow-downgrade` | the usage on stderr |
 
 ### Answering a follow run
@@ -260,6 +278,40 @@ What `install.sh hub` does when it is handed the five options of [The handover](
 | only some of `--follow-target`, `--release`, `--newest`, `--digest` and `--answer` | nothing is installed, and the run names what is missing |
 | `--release` or `--newest` that is not `MAJOR.MINOR.PATCH`, `--digest` that is not 64 lowercase hexadecimal digits, or `--answer` naming no file or a file that is not empty | nothing is installed, and the run names the value |
 
+### Answering a follow run for the agent
+
+What `install.sh agent` does when it is handed the five options of [The handover](#the-handover).
+It learns its target by asking the hub `agent.env` names
+([ingest.md](ingest.md#the-agents-target)), and otherwise answers as the hub's installer does.
+Every refusal of its options or of `agent.env` is made before the hub is asked, so a file
+somebody else could write never receives the token.
+
+| Event | Outcome |
+|---|---|
+| a follow run | it reads `MONITOR_HUB`, `MONITOR_NODE` and `MONITOR_TOKEN` from `agent.env` by the rules the agent reads it with ([0020](../decisions/0020-agent-reads-its-environment-file.md)), executing nothing in it, and asks the hub once — `MONITOR_HUB` joined with `/api/v1/agent/target` as the agent joins it, a trailing slash dropped — with the token as a bearer token |
+| every hand-over of a run, the one with `--binary` included | the hub is asked once more and the answer follows from that reply, so a target changed in between stops the run as [the edge case](#edge-cases) says |
+| the same run | the token reaches no argument, no message, no file but `agent.env`, and no environment of a child process; a token in `MONITOR_TOKEN` or on stdin is used neither for the request nor for the install, which leaves `agent.env` holding the three values it held |
+| a `MONITOR_HUB` that is not `https://`, unless it is `http://` to `127.0.0.1`, `[::1]` or `localhost` — how an agent on the hub's own host reaches it — with or without a port | nothing is requested and nothing is installed, and the run names the key: whoever answers in clear chooses what root installs |
+| no `agent.env` | nothing is installed, and the run names the file and says an agent is installed by hand first |
+| `agent.env` or its directory a symlink, writable by group or other, or on a real run owned by anyone but root | nothing is installed, and the run names the path: that file names the hub that chooses what root installs |
+| `agent.env` holding a line the agent would refuse | nothing is installed, and the run names the file and the line number |
+| `agent.env` without `MONITOR_HUB`, `MONITOR_NODE` or `MONITOR_TOKEN`, or with one empty — all three are what an install needs | nothing is installed, and the run names the key |
+| `--hub` or `--node` given with `--follow-target` | nothing is installed: a follow run takes them from `agent.env` |
+| any refusal above, or of the five options | the hub is not asked |
+| the hub cannot be reached, or the request fails before an answer | nothing is installed, and the run names the hub's address; a hub that never answers is given up on after thirty seconds, which no staged row waits out |
+| a `401` without `WWW-Authenticate` | nothing is installed, and the run says the hub refused this node's token |
+| a `401` carrying `WWW-Authenticate` | nothing is installed, and the run says a proxy in front of the hub asked for its own credential, so `/api/v1/agent/` does not pass through it |
+| the hub answers `204` | the answer stays empty, nothing is written, the exit is 0, and the run says the hub names no target for this node |
+| the hub answers anything else — `404`, `500`, a redirect | nothing is installed, and the run names the status; a redirect is not followed |
+| a `200` whose body is not exactly `latest` or one `MAJOR.MINOR.PATCH` and at most one newline — longer than a target can be, a component of ten digits or more, anything else | nothing is installed, and the run says the hub's answer is not a target, quoting none of it |
+| a target that resolves to `--release`, with the agent already running that release — the binary in place is a regular file with the digest `--digest` names and the layout's mode and, on a real run, owner, the service definition is the release's and, on a real run, the service runs that binary | nothing is written, the answer stays empty, the run says the agent is already at that version, and no service command runs |
+| a target that resolves to `--release`, the binary in place already that release but the rest not so, and no `--binary` | the answer stays empty, the run says it keeps the binary in place, and it installs the environment file and the service as [Installing the agent](#installing-the-agent) says, with the values of `agent.env` and nothing from stdin or `MONITOR_TOKEN`, that binary left untouched and its path not among those printed, so the service is restarted on it |
+| a target that resolves to `--release`, the binary in place not that release — another binary, a symlink or anything but a regular file, a mode or on a real run an owner that is not the layout's, or none — and no `--binary` | the answer holds `--release`, nothing is written outside it, and the exit is 0 |
+| a target that resolves to `--release`, the agent not already running it, with `--binary` | it installs as [Installing the agent](#installing-the-agent) says, with the values of `agent.env` and nothing from stdin or `MONITOR_TOKEN`, and the answer stays empty |
+| a target that resolves to another version | the answer holds that version, nothing is written outside it, and the exit is 0 |
+| target `latest` | it resolves to `--newest` |
+| only some of the five options, or a value the hub's installer would refuse | nothing is installed and the hub is not asked, as for the hub |
+
 ### Installing the agent
 
 | Event | Outcome |
@@ -268,7 +320,7 @@ What `install.sh hub` does when it is handed the five options of [The handover](
 | a run on a host that already has an agent, with no token | the binary is replaced, the stored token is kept, and `--hub` and `--node` are still required |
 | a run with no token available and none stored | nothing is installed, and the run says where a token is read from |
 | a run against a stored environment file the agent itself would refuse | nothing is installed ([0020](../decisions/0020-agent-reads-its-environment-file.md)) |
-| any run | the token reaches the installer on stdin and appears in no argument, no message and no environment of a child process |
+| any run that is not a follow run | the token reaches the installer on stdin and appears in no argument, no message and no environment of a child process |
 
 ### Staged installs
 
@@ -292,7 +344,8 @@ What `install.sh hub` does when it is handed the five options of [The handover](
   stays the operator's to use or not.
 - An asset is required to be in the manifest under the name the run built for it, so what a
   signature says is what that release published under that name.
-- The installer that runs from a release downloads nothing.
+- The installer that runs from a release downloads nothing. The agent's makes one request, to
+  the hub its node reports to, and what comes back can only name a version.
 - No configuration is invented. The one value the script does carry is where releases come
   from, and it is a product default like any other ([0007](../decisions/0007-public-repository.md)).
 - Nothing is written outside the run's own directory until every check has passed; after
@@ -325,13 +378,13 @@ What `install.sh hub` does when it is handed the five options of [The handover](
   recovered by the manual path.
 - **Rotating the signing key** touches five places: the secret in the release environment,
   `deploy/release-signing-key.pub`, the copy inside `monitor-install.sh`, the fingerprint
-  [install.md](../install.md) publishes, and the kept script on the hub host. The copy and the
+  [install.md](../install.md) publishes, and the kept script on every machine that keeps one. The copy and the
   fingerprint are asserted by tests, so missing either turns the suite red rather than the
   fleet; the kept script is replaced over the manual path. A kept script with the new key verifies no release
   signed with the old one, so a rotation also raises the rollback floor to the first release
   signed with the new key.
 - **A lost key and a leaked one differ.** A lost key leaves the kept script refusing every
-  new release until it is replaced; the hub keeps the version it has. A leaked key is still
+  new release until it is replaced; the hub and every agent keep the version they have. A leaked key is still
   accepted by the kept script, so after a leak the timer is stopped, or the script replaced,
   before anything else.
 - **A signature does not prove freshness.** Whoever answers for the origin can serve a
@@ -341,12 +394,15 @@ What `install.sh hub` does when it is handed the five options of [The handover](
 - **Two runs at once on one machine** are not supported: the environment file is read and
   rewritten, so a token rotated by one run can be lost by the other. Each file still ends as
   one of the two runs left it. An operator's run while the timer's is in progress is the same
-  case.
+  case. The hub's update and the agent's on a host that is both are two runs of different
+  roles: they write no file in common, and each may run while the other does.
 - **The rollback floor.** A target can go back no further than the first release whose
   installer takes `--digest`
   ([0025](../decisions/0025-the-hub-checks-hourly-and-downloads-a-binary-to-install-it.md)):
   v0.1.2's installer refuses `--digest` as an unknown option, an older one refuses
   `--follow-target` the same way, and a release older still carries no installer at all. Going below the floor is the manual path.
+  An agent's floor is higher: the first release whose `install-agent.sh` answers a follow run
+  ([0028](../decisions/0028-agents-follow-a-target-the-hub-serves.md)).
 - **A hub that never counts as running** — one whose configuration is missing, so its service
   is never started, one crash-looping between restarts, or one stopped by hand — is installed
   again around the binary in place at every run, and a configured one is started again. Each
@@ -355,6 +411,22 @@ What `install.sh hub` does when it is handed the five options of [The handover](
   ([0027](../decisions/0027-the-hub-installer-reuses-the-binary-in-place.md)). A hub stopped
   for maintenance stays stopped only with its update timer stopped first
   ([install.md](../install.md#keeping-the-hub-upgraded-unattended)).
+- **A host that is both hub and node** keeps one script for both timers. A copy placed before
+  [0028](../decisions/0028-agents-follow-a-target-the-hub-serves.md) refuses `agent
+  --follow-target`, so that host replaces it before it places the agent's units; the hub's
+  timer runs the same with either copy.
+- **The hub chooses what root installs on every node that follows it**, within the signed
+  releases above the floor. A hub that is compromised can roll each node back to an older
+  release, and not beyond it.
+- **An agent that never counts as running** — crash-looping, or stopped by hand — is installed
+  again around the binary in place at every run, and its service restarted. An agent stopped
+  on purpose stays stopped only with its update timer stopped first.
+- **A hub reached over loopback** is trusted to be the hub because only it holds that port. A
+  local account that binds the port while the hub is down receives the token and names the
+  version root installs, within the signed releases above the floor; the hub's port is kept
+  below 1024, or the host has no account that is not trusted.
+- **The hub a node reports to is its target's source.** An `agent.env` pointing at another hub
+  gets that hub's answer, which is why the file and its directory are held to root alone.
 - **A broken newest installer blocks every target**, rollback included, because every run
   hands over to it first. The remedy is a fixed release, or the manual path.
 - **A target changed between hand-overs** is read afresh by every installer. If it no longer
@@ -372,12 +444,9 @@ base, which is what lets the rows above be tested against a release served over 
 
 ## Out of scope
 
-- An agent following a target: the hub naming it, the agent's installer asking for it, and a
-  kept script and timer on Debian and macOS — the rest of
-  [0022](../decisions/0022-updates-are-pulled.md). Before a kept script reaches a node that
-  is touched by hand, how many keys it carries is answered again
-  ([0024](../decisions/0024-the-hub-follows-a-target-with-a-kept-install-script.md), point 7).
-- Placing the kept script, its units and the target: [install.md](../install.md) and the
+- Which target the hub names for a node, and how it answers: [hub-config.md](hub-config.md)
+  and [ingest.md](ingest.md#the-agents-target).
+- Placing the kept script, its units and the hub's target: [install.md](../install.md) and the
   host's provisioning. What they look like on disk, and every other path, owner and mode, is
   [deployment.md](deployment.md).
 - What a release contains and how it is signed: [release.md](release.md).

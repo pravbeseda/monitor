@@ -7,6 +7,8 @@
 - **Amended by:** [0025](0025-the-hub-checks-hourly-and-downloads-a-binary-to-install-it.md),
   for point 6's installer installing itself on its own version (the hub's asks for its binary
   instead), point 7's daily run, and what every run downloads
+- **Amended by:** [0028](0028-agents-follow-a-target-the-hub-serves.md), for point 7's daily
+  run on a node
 - **Date:** 2026-09-06
 - **Source:** [POC](../poc.md) stage 3, the manual upgrade path in
   [install.md](../install.md), and [issue #16](https://github.com/pravbeseda/monitor/issues/16)

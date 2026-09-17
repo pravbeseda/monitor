@@ -5,7 +5,8 @@
   configuration the ingest response delivers
 - **Decisions:** [0007](../decisions/0007-public-repository.md),
   [0010](../decisions/0010-agent-configuration.md),
-  [0011](../decisions/0011-quality-gates.md)
+  [0011](../decisions/0011-quality-gates.md),
+  [0028](../decisions/0028-agents-follow-a-target-the-hub-serves.md)
 
 ## Purpose
 
@@ -18,7 +19,8 @@ so that nothing downstream merges anything.
 It does not evaluate: the `rules` and `volumes` keys, volume roles and the meaning of
 `silence_after` belong to [evaluation](evaluation.md), which owns their validation too.
 It parses `digest` and `notify` too, but what they mean and what refuses them belongs to
-that spec. This one owns the tokens and what reaches an agent.
+that spec. This one owns the tokens, what reaches an agent, and the version each node's agent
+is told to follow.
 
 ## The file
 
@@ -29,6 +31,7 @@ ships `config.example.yaml` with synthetic names
 ```yaml
 # Product defaults are compiled in; every key below is optional except `nodes`.
 base_tick: 5m
+agent_target: latest
 filesystems: [apfs, ext4, xfs, btrfs, zfs, ntfs]
 skip_mounts: ["/System/Volumes/", "/Library/Developer/CoreSimulator/"]
 
@@ -39,6 +42,7 @@ classes:
   laptop:
     profile: [disk]
     silence_after: 48h
+    agent_target: 1.4.0
     sensors:
       disk: { interval: 1h }
   server:
@@ -69,6 +73,12 @@ file.
 Each node names one environment variable holding its token: a handful of nodes needs no
 second secrets file, and `EnvironmentFile=` with mode 600 is what systemd already does.
 
+**The agents' target** is `agent_target`: `latest` or one `MAJOR.MINOR.PATCH`, at the top
+level, in a class or in a node, the most specific winning
+([0028](../decisions/0028-agents-follow-a-target-the-hub-serves.md)). It has no default — a
+file naming none has every node's updater install nothing — and it never reaches the ingest
+response: [ingest](ingest.md#the-agents-target) serves it to a node that asks.
+
 **What reaches the agent** is only the flat result — base tick, filesystem allow-list,
 skip list, and the enabled sensors with their intervals, in the shape [ingest](ingest.md)
 documents.
@@ -98,12 +108,14 @@ One row = one test. Anchors: `spec: hub-config.md#<heading>`.
 | `token_env` names a variable that is unset or empty | startup error naming the variable |
 | a token shorter than 32 characters | startup error naming the variable |
 | two nodes sharing one `token_env` | startup error naming both nodes |
+| two variables holding the same token | startup error naming both nodes and no value: a token is what tells the hub which node is asking |
 | a node whose `class` is neither compiled in nor in the file | startup error naming node and class |
 | a class the file introduces without `silence_after` | startup error naming the class: a silence window is a deployment setting |
 | a duration that Go cannot parse, or that is zero or negative | startup error naming the key |
 | a sensor interval below the `base_tick` a node resolves to | startup error: a sensor collects above the tick |
 | `filesystems` present and empty | startup error: no volume would ever be collected |
 | a sensor in a profile with no interval at any layer | startup error naming the sensor, whether or not a node uses that class |
+| `agent_target` at the top level, in `classes.<name>` or in `nodes.<name>`, that is neither `latest` nor one `MAJOR.MINOR.PATCH` — `1.4`, `v1.4.0`, `01.4.0`, a component of ten digits or more, `""`, or present with no value | startup error naming the key and the class or node it is in |
 | a valid file | the hub starts and every listed node resolves |
 
 ### Resolution
@@ -121,6 +133,10 @@ The node is listed in `nodes`; the layers apply most-specific-last.
 | the class sets `base_tick`, `filesystems` or `skip_mounts` | wins over the top level; a node entry wins over the class |
 | `skip_mounts` set to an empty list | nothing is skipped: an empty list is a value, not an omission |
 | a sensor no layer mentions | absent from the delivered configuration |
+| top-level `agent_target` | the node's target |
+| the class sets `agent_target` | wins over the top level |
+| the node sets `agent_target` | wins over the class |
+| no layer sets `agent_target` | the node has no target |
 
 ### Configuration version
 
@@ -134,7 +150,7 @@ logs both versions when it delivers a new one.
 | the same file and environment, hub restarted | unchanged: the version is derived, never stored |
 | a value that reaches this node changes | a different version |
 | another node's settings change | unchanged for this node |
-| a hub-only value changes (`silence_after`, thresholds) | unchanged: the agent is never sent it |
+| a hub-only value changes (`silence_after`, thresholds, `agent_target`) | unchanged: the agent is never sent it |
 | two nodes resolve to an identical configuration | the same version — it identifies the configuration, not the node |
 
 ### Tokens
@@ -178,6 +194,9 @@ logs both versions when it delivers a new one.
 - **A sensor enabled for a node whose manifest lacks it**: it is delivered anyway and the
   agent ignores what it cannot run; the hub does not filter by manifest in stage 1.
 - **The file edited while the hub runs**: no effect until a restart.
+- **One node held back while its class follows**: it is pinned to the version it runs. No
+  value takes a target away at a more specific layer; a node that must not change at all has
+  its update timer stopped.
 
 ## Out of scope
 

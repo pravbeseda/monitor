@@ -8,6 +8,10 @@
 base_tick: 5m
 filesystems: [apfs, ext4, xfs, btrfs, zfs, ntfs]
 
+# The version every node's update timer installs: latest, or one version such as 1.4.0, here
+# or per class or node. Absent, nodes install nothing (docs/decisions/0028).
+# agent_target: latest
+
 # Mount points not worth watching. An empty list watches everything the allow-list admits.
 skip_mounts: ["/System/Volumes/", "/Library/Developer/CoreSimulator/"]
 

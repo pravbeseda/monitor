@@ -2,6 +2,9 @@ package config
 
 import (
 	"fmt"
+	"regexp"
+
+	"gopkg.in/yaml.v3"
 
 	"github.com/pravbeseda/monitor/internal/evaluate"
 )
@@ -13,6 +16,9 @@ import (
 // are the same statement, and it is made where they are resolved.
 func validate(f file) error {
 	if err := validateLayer("", f.BaseTick, f.Filesystems, f.Sensors); err != nil {
+		return err
+	}
+	if err := validateAgentTarget("", f.AgentTarget); err != nil {
 		return err
 	}
 	if err := validateRuleLayer("", f.Rules); err != nil {
@@ -29,6 +35,9 @@ func validate(f file) error {
 		node := f.Nodes[name]
 		where := fmt.Sprintf("node %s: ", name)
 		if err := validateLayer(where, node.BaseTick, node.Filesystems, node.Sensors); err != nil {
+			return err
+		}
+		if err := validateAgentTarget(where, node.AgentTarget); err != nil {
 			return err
 		}
 		if err := validateRuleLayer(where, node.Rules); err != nil {
@@ -49,6 +58,9 @@ func validateClass(f file, name string) error {
 	where := fmt.Sprintf("class %s: ", name)
 
 	if err := validateLayer(where, custom.BaseTick, custom.Filesystems, custom.Sensors); err != nil {
+		return err
+	}
+	if err := validateAgentTarget(where, custom.AgentTarget); err != nil {
 		return err
 	}
 	if _, compiledIn := defaultClasses[name]; !compiledIn && custom.SilenceAfter == "" {
@@ -213,6 +225,22 @@ func validateThresholdText(where string, declared fileThreshold) error {
 func refuseBand(where string, declared fileThreshold) error {
 	if declared.Ratio != nil || declared.Ceiling != "" {
 		return fmt.Errorf("%s: a backup rule is a floor, so it takes no ratio and no ceiling", where)
+	}
+	return nil
+}
+
+// agentTargetGrammar is hub.target's: latest, or a version whose components the installer's
+// shell can still compare as numbers (docs/specs/installer.md).
+var agentTargetGrammar = regexp.MustCompile(`^(latest|(0|[1-9][0-9]{0,8})\.(0|[1-9][0-9]{0,8})\.(0|[1-9][0-9]{0,8}))$`)
+
+// validateAgentTarget refuses a target the installer would refuse, a key with no value
+// included; a key that is not written at all is no target.
+func validateAgentTarget(where string, target agentTarget) error {
+	if target.Kind == 0 {
+		return nil
+	}
+	if target.Kind != yaml.ScalarNode || target.Tag == "!!null" || !agentTargetGrammar.MatchString(target.Value) {
+		return fmt.Errorf("%sagent_target %q is neither latest nor a version such as 1.2.3", where, target.Value)
 	}
 	return nil
 }

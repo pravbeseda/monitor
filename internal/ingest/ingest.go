@@ -39,7 +39,7 @@ func NewHandler(cfg *config.Config, store storage.Storage, now func() time.Time)
 }
 
 func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
-	node, ok := h.authenticate(r)
+	node, ok := authenticate(h.config, r)
 	if !ok {
 		fail(w, http.StatusUnauthorized, "unknown or missing token")
 		return
@@ -80,13 +80,13 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 
 // authenticate resolves the bearer token to its node, comparing in constant time so that
 // a wrong token cannot be found one character at a time.
-func (h *Handler) authenticate(r *http.Request) (config.Node, bool) {
+func authenticate(cfg *config.Config, r *http.Request) (config.Node, bool) {
 	header := r.Header.Get("Authorization")
 	presented, found := strings.CutPrefix(header, "Bearer ")
 	if !found || presented == "" {
 		return config.Node{}, false
 	}
-	for _, node := range h.config.Nodes() {
+	for _, node := range cfg.Nodes() {
 		if subtle.ConstantTimeCompare([]byte(presented), []byte(node.Token)) == 1 {
 			return node, true
 		}

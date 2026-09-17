@@ -368,7 +368,7 @@ func TestVersionIgnoresHubOnlyValue(t *testing.T) {
 // spec: hub-config.md#configuration-version — it identifies the configuration, not the node.
 func TestVersionIsSharedByIdenticalNodes(t *testing.T) {
 	const secondEnv = "MONITOR_TOKEN_LAPTOP_B"
-	t.Setenv(secondEnv, token)
+	t.Setenv(secondEnv, strings.Repeat("second-", 5))
 	body := minimal + "  laptop-b:\n    class: laptop\n    token_env: " + secondEnv + "\n"
 
 	cfg := load(t, body)

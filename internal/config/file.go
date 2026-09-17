@@ -11,6 +11,7 @@ import (
 
 type file struct {
 	BaseTick    string                `yaml:"base_tick"`
+	AgentTarget agentTarget           `yaml:"agent_target"`
 	Filesystems []string              `yaml:"filesystems"`
 	SkipMounts  []string              `yaml:"skip_mounts"`
 	Sensors     map[string]fileSensor `yaml:"sensors"`
@@ -29,6 +30,7 @@ type fileSensor struct {
 type fileClass struct {
 	Profile      []string              `yaml:"profile"`
 	SilenceAfter string                `yaml:"silence_after"`
+	AgentTarget  agentTarget           `yaml:"agent_target"`
 	BaseTick     string                `yaml:"base_tick"`
 	Filesystems  []string              `yaml:"filesystems"`
 	SkipMounts   []string              `yaml:"skip_mounts"`
@@ -39,6 +41,7 @@ type fileClass struct {
 type fileNode struct {
 	Class       string                `yaml:"class"`
 	TokenEnv    string                `yaml:"token_env"`
+	AgentTarget agentTarget           `yaml:"agent_target"`
 	BaseTick    string                `yaml:"base_tick"`
 	Filesystems []string              `yaml:"filesystems"`
 	SkipMounts  []string              `yaml:"skip_mounts"`
@@ -82,6 +85,11 @@ type fileVolume struct {
 	Role  string              `yaml:"role"`
 	Rules map[string]fileRule `yaml:"rules"`
 }
+
+// agentTarget keeps the YAML node rather than its text: a key written with no value decodes
+// as an absent one into a string, and absent means "no target" while an empty value is a
+// mistake to refuse.
+type agentTarget = yaml.Node
 
 type size string
 

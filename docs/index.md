@@ -9,7 +9,7 @@ entry point to every document in the project.
 |---|---|
 | [concept.md](concept.md) | Idea, architectural principles, planned skins, domains, roadmap |
 | [poc.md](poc.md) | POC spec: scope, terminology, wire format, work plan, answered questions |
-| [install.md](install.md) | Install guide: one command, then the manual path — the hub host, install and verify a node, upgrade, uninstall |
+| [install.md](install.md) | Install guide: one command, then the manual path — the hub host, install and verify a node, upgrade by hand or from a timer, uninstall |
 | [nginx-requirements.md](nginx-requirements.md) | What the hub needs from the reverse proxy in front of it, handed to the Ansible repository that owns that host |
 | [hub-host-node-requirements.md](hub-host-node-requirements.md) | What the Ansible play must do to install the agent on the hub host too, and how to check it |
 | [plans/stage-1-skeleton.md](plans/stage-1-skeleton.md) | Step plan for POC stage 1, kept as a record; plans now live in the task and the pull request ([0017](decisions/0017-one-spec-and-decision-gates.md)) |
@@ -48,6 +48,7 @@ One decision per file, each stating what was rejected and why. New records start
 | [0025](decisions/0025-the-hub-checks-hourly-and-downloads-a-binary-to-install-it.md) | The hub checks hourly and downloads a binary only to install it | accepted |
 | [0026](decisions/0026-reader-time-zone-from-the-browser.md) | The reader's time zone comes from the browser in a cookie; pages stay server-rendered | accepted |
 | [0027](decisions/0027-the-hub-installer-reuses-the-binary-in-place.md) | The hub's installer reuses a binary in place that is already its release | accepted |
+| [0028](decisions/0028-agents-follow-a-target-the-hub-serves.md) | Agents follow a target the hub serves under `/api/v1/agent/` | accepted |
 
 ## Behaviour specs
 
@@ -59,15 +60,15 @@ can see ([ADR 0017](decisions/0017-one-spec-and-decision-gates.md)). New specs s
 
 | Spec | Owns | Status |
 |---|---|---|
-| [ingest.md](specs/ingest.md) | `/api/v1/ingest` contract: request, response, config delivery | approved |
-| [hub-config.md](specs/hub-config.md) | The hub's YAML file: validation, layering, per-node configuration and its version | approved |
+| [ingest.md](specs/ingest.md) | `/api/v1/ingest` contract: request, response, config delivery; the node's target under `/api/v1/agent/` | approved |
+| [hub-config.md](specs/hub-config.md) | The hub's YAML file: validation, layering, per-node configuration and its version, and each node's agent target | approved |
 | [disk-sensor.md](specs/disk-sensor.md) | The disk sensor: enumeration, filtering and the label contract of its metrics | approved |
 | [agent.md](specs/agent.md) | The agent: local configuration, tick loop, delivery and configuration application | approved |
 | [evaluation.md](specs/evaluation.md) | Levels, hysteresis, the event log, silence, digests and the notifier boundary | approved |
 | [history.md](specs/history.md) | The history series, `/api/v1/series`, `/api/v1/history` and the drill-down page | approved |
 | [release.md](specs/release.md) | How a merge tags itself, what a tag publishes, how a release is signed, and how an artifact is checked | approved |
-| [installer.md](specs/installer.md) | One command that installs or upgrades a hub or an agent from a signed release, and the hub following the version its host names | approved |
-| [deployment.md](specs/deployment.md) | The install layout, the units — the hub's update timer among them — and what `install-agent.sh` does to a node | approved |
+| [installer.md](specs/installer.md) | One command that installs or upgrades a hub or an agent from a signed release, the hub following the version its host names, and an agent following the one the hub names | approved |
+| [deployment.md](specs/deployment.md) | The install layout, the units — the hub's and the agents' update timers among them — and what `install-agent.sh` does to a node | approved |
 | [web.md](specs/web.md) | What every hub page shares: the reader's time zone, how a page says which zone it used, and the shell | approved |
 
 ## Design notes
@@ -83,6 +84,7 @@ Reasoning from working sessions, including options that were rejected.
 | [2026-09-06](log/2026-09-06-release-signing.md) | Release signing: the tools, the manifest and the key placement that lost |
 | [2026-09-13](log/2026-09-13-hub-host-node.md) | The agent on the hub host: loopback, and why every play restarts rather than detecting a change |
 | [2026-09-14](log/2026-09-14-auto-tag.md) | A merge tags itself: how the tag reaches the release, and the tokens and tools that lost |
+| [2026-09-17](log/2026-09-17-agent-updater.md) | Agents follow the hub's target: what three spec reviews changed before the code |
 
 ## Not written yet
 

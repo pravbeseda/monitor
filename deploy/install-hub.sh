@@ -61,31 +61,6 @@ DESTDIR stages the whole installation under a prefix and registers no service.
 EOF
 }
 
-# The grammar deploy/tag-version.sh enforces. A copy of the function in monitor-install.sh,
-# which cannot share a file with a release; a test asserts the two are the same.
-is_version() {
-	# Splitting on dots drops a trailing empty field, so the dots are judged before it.
-	case $1 in
-	.* | *. | *..*) return 1 ;;
-	esac
-	oldifs=$IFS
-	IFS=.
-	set -f
-	# shellcheck disable=SC2086 # deliberate: the IFS above is what splits on dots
-	set -- $1
-	set +f
-	IFS=$oldifs
-	[ $# -eq 3 ] || return 1
-	for part in "$@"; do
-		case $part in
-		# A component wider than the shell's integers is not a version anyone releases, and
-		# comparing one would error rather than answer.
-		'' | *[!0-9]* | 0?* | ??????????*) return 1 ;;
-		esac
-	done
-	return 0
-}
-
 refuse() {
 	printf '%s: %s\n' "$program" "$1" >&2
 	exit 1
@@ -133,20 +108,12 @@ done
 # The five options of a follow run come together or not at all, and only a follow run may go
 # without a binary: it asks for one (installer.md#the-handover).
 if [ -n "$follow$release$newest$digest$answer" ]; then
-	[ -n "$follow" ] || refuse "a follow run needs --follow-target as well"
-	[ -n "$release" ] || refuse "a follow run needs --release as well"
-	[ -n "$newest" ] || refuse "a follow run needs --newest as well"
-	[ -n "$digest" ] || refuse "a follow run needs --digest as well"
-	[ -n "$answer" ] || refuse "a follow run needs --answer as well"
-	is_version "$release" || refuse "--release is not a version: $release"
-	is_version "$newest" || refuse "--newest is not a version: $newest"
-	case $digest in
-	*[!0-9a-f]*) refuse "--digest is not a SHA-256 in lowercase hexadecimal: $digest" ;;
-	esac
-	[ ${#digest} -eq 64 ] || refuse "--digest is not a SHA-256 in lowercase hexadecimal: $digest"
-	if [ ! -f "$answer" ] || [ -s "$answer" ]; then
-		refuse "--answer must name an empty file: $answer"
-	fi
+	# A follow run comes out of a release, which carries this file beside the script.
+	[ -f "$source_dir/install-follow.sh" ] ||
+		refuse "a follow run needs install-follow.sh beside this script: $source_dir/install-follow.sh"
+	# shellcheck source=deploy/install-follow.sh
+	. "$source_dir/install-follow.sh"
+	check_follow_options
 else
 	[ -n "$binary" ] || refuse "--binary is required"
 fi
@@ -237,50 +204,22 @@ account_or_nothing=
 check_dir "$destdir$config_dir" root
 check_dir "$destdir$data_dir" "$account_or_nothing"
 
-# The target chooses what root installs, so only root may have written it or the directory
-# it lives in.
-check_target_path() {
-	[ -e "$1" ] || [ -L "$1" ] || return 0
-	[ ! -L "$1" ] || refuse "$2 is a symlink, and the target chooses what root installs"
-	[ -z "$(find "$1" -maxdepth 0 \( -perm -g+w -o -perm -o+w \))" ] ||
-		refuse "$2 is writable by group or other, and the target chooses what root installs"
-	if [ -z "$destdir" ] && [ -z "$(find "$1" -maxdepth 0 -user root)" ]; then
-		refuse "$2 is not owned by root, and the target chooses what root installs"
-	fi
-}
-
-# The SHA-256 of a file, or nothing when it cannot be read.
-digest_of() {
-	line=$(openssl dgst -sha256 "$1" 2>/dev/null) || return 0
-	printf '%s' "${line##* }"
-}
-
-# Whether the binary in place is the release handed over, as the layout installs it.
-binary_is_release() {
-	[ ! -L "$destdir$binary_file" ] || return 1
-	[ -f "$destdir$binary_file" ] || return 1
-	[ "$(digest_of "$destdir$binary_file")" = "$digest" ] || return 1
-	[ -z "$(find "$destdir$binary_file" -maxdepth 0 ! -perm 0755)" ] || return 1
-	[ -n "$destdir" ] || [ -n "$(find "$binary_file" -maxdepth 0 -user root)" ]
-}
-
 # Whether, with binary_is_release already true, the rest of the release is installed and on a
 # real run the service is running that binary. A run stopped between replacing the binary and
 # restarting the service leaves identical files behind, and the next run has to finish it.
 already_running() {
 	cmp -s "$service_source" "$destdir$service_file" || return 1
 	[ -z "$destdir" ] || return 0
-	pid=$(systemctl show -p MainPID --value monitor-hub.service 2>/dev/null) || return 1
-	[ "${pid:-0}" != 0 ] || return 1
-	[ "$(digest_of "/proc/$pid/exe")" = "$digest" ]
+	systemd_runs_release monitor-hub.service
 }
 
 # A follow run decides from the target before anything is written: it answers with another
 # version, finds nothing to change, or goes on to install (installer.md#answering-a-follow-run).
 if [ -n "$follow" ]; then
 	target_file=$config_dir/hub.target
-	check_target_path "$destdir$config_dir" "$config_dir"
-	check_target_path "$destdir$target_file" "$target_file"
+	why="the target chooses what root installs"
+	check_root_only "$destdir$config_dir" "$config_dir" "$why"
+	check_root_only "$destdir$target_file" "$target_file" "$why"
 	[ -f "$destdir$target_file" ] ||
 		refuse "there is no $target_file: it holds latest or a version such as 1.2.3"
 	# The command substitution drops trailing newlines, so the line count is what refuses a
@@ -290,34 +229,8 @@ if [ -n "$follow" ]; then
 	if [ $((lines)) -gt 1 ]; then
 		refuse "$target_file holds more than one line"
 	fi
-	case $target in
-	latest) wanted=$newest ;;
-	*)
-		is_version "$target" || refuse "$target_file holds neither latest nor a version: $target"
-		wanted=$target
-		;;
-	esac
-	if [ "$wanted" != "$release" ]; then
-		printf '%s\n' "$wanted" >"$answer"
-		printf '%s: %s names %s, not this release %s; nothing is installed from it\n' \
-			"$program" "$target_file" "$wanted" "$release"
-		exit 0
-	fi
-	release_in_place=
-	binary_is_release && release_in_place=1
-	if [ -n "$release_in_place" ] && already_running; then
-		printf '%s: monitor-hub %s is already installed; nothing to do\n' "$program" "$release"
-		exit 0
-	fi
-	if [ -z "$binary" ] && [ -n "$release_in_place" ]; then
-		printf '%s: monitor-hub %s is in place; keeping the binary in place and installing the rest\n' \
-			"$program" "$release"
-	elif [ -z "$binary" ]; then
-		printf '%s\n' "$release" >"$answer"
-		printf '%s: %s names this release %s; asking for its binary\n' \
-			"$program" "$target_file" "$release"
-		exit 0
-	fi
+	resolve_target "$target" || refuse "$target_file holds neither latest nor a version: $target"
+	answer_follow "$binary_file" "$target_file"
 fi
 
 # The account owns the secrets and the database, so an account that can log in is not the

@@ -731,6 +731,16 @@ func TestARerunRefusesAFileTheAgentWouldRefuse(t *testing.T) {
 		t.Errorf("the refusal does not name the line; it said:\n%s", stderr)
 	}
 
+	for _, line := range []string{"MONITOR_NODE=server-b\rMONITOR_EXTRA=1", "# a note\rMONITOR_HUB=https://elsewhere.example.com"} {
+		if err := os.WriteFile(envFile, []byte(kept+line+"\n"), 0o600); err != nil {
+			t.Fatalf("edit the environment file: %v", err)
+		}
+		_, stderr, err := run{destDir: destDir, args: []string{"--binary", binary, "--hub", exampleHub, "--node", testNode}, stdin: testToken}.start(t)
+		if err == nil || !strings.Contains(stderr, "line 4") {
+			t.Errorf("a carriage return inside line 4 was not refused by its number: %v\n%s", err, stderr)
+		}
+	}
+
 	if err := os.WriteFile(envFile, []byte("# a note\n\n"+kept), 0o600); err != nil {
 		t.Fatalf("edit the environment file: %v", err)
 	}

@@ -41,7 +41,10 @@ type Node struct {
 	Class        string
 	Token        string
 	SilenceAfter time.Duration
-	Agent        Agent
+	// AgentTarget is the version this node's updater installs — latest or MAJOR.MINOR.PATCH
+	// — or empty when no layer names one (ADR 0028). It never reaches the agent itself.
+	AgentTarget string
+	Agent       Agent
 	// Version identifies Agent, not the node: identical configurations share it.
 	Version string
 	// target is what evaluation reads of this node. It travels apart from Agent because
@@ -110,6 +113,7 @@ func Load(path string) (*Config, error) {
 
 	nodes := make(map[string]Node, len(f.Nodes))
 	owner := make(map[string]string, len(f.Nodes))
+	holder := make(map[string]string, len(f.Nodes))
 	for _, name := range sorted(f.Nodes) {
 		entry := f.Nodes[name]
 		if err := claimToken(owner, name, entry.TokenEnv); err != nil {
@@ -119,6 +123,11 @@ func Load(path string) (*Config, error) {
 		if err != nil {
 			return nil, err
 		}
+		// The token is what tells the hub which node asks, so it has to name exactly one.
+		if other, taken := holder[node.Token]; taken {
+			return nil, fmt.Errorf("nodes %s and %s hold the same token; each node needs its own", other, name)
+		}
+		holder[node.Token] = name
 		nodes[name] = node
 	}
 	return &Config{nodes: nodes, digest: digest, notify: notify}, nil

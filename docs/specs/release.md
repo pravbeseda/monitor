@@ -116,7 +116,8 @@ be for, and turning them on is a settings change, not a code change.
 These three commands make the first key and every replacement — a rotation is a new pair, not
 a repair. Since [installer.md](installer.md) landed, three more copies follow the public
 half: the one inside `deploy/monitor-install.sh` and the fingerprint `install.md` publishes,
-both held in step by tests, and the kept install script on the hub host, replaced by hand.
+both held in step by tests, and the kept install script on every machine that follows a
+target — the hub host and every node — replaced by hand.
 
 ```sh
 openssl ecparam -name prime256v1 -genkey -noout -out ~/release-signing-key.priv
@@ -132,12 +133,11 @@ verifiable only with the `.pub` committed beside it at that tag.
 
 **There is no second copy of the private half.** The secret in that environment is the only
 one, and GitHub cannot read a secret back. Losing it costs a rotation — a new pair, a new
-`.pub` committed, a new secret, and a new kept install script on the hub host, the one machine
-that carries the public half where no release can replace it
-([installer.md](installer.md#edge-cases)). With one provisioned host that is one more step,
-so the choice stands
-([0024](../decisions/0024-the-hub-follows-a-target-with-a-kept-install-script.md), point 7);
-it comes back before a kept script reaches a node touched by hand.
+`.pub` committed, a new secret, and a new kept install script on every machine that carries
+the public half where no release can replace it ([installer.md](installer.md#edge-cases)). The
+choice of one key stands for the hub host
+([0024](../decisions/0024-the-hub-follows-a-target-with-a-kept-install-script.md), point 7) and
+for nodes ([0028](../decisions/0028-agents-follow-a-target-the-hub-serves.md), point 6).
 
 The shell this adds — `verify-release.sh`, `tag-version.sh` and `next-tag.sh` — is POSIX
 `sh` and stands under the same lint gate as the rest of the shell this project ships
