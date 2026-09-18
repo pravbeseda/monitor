@@ -17,8 +17,7 @@ var historyTemplate = template.Must(template.ParseFS(templates, "templates/histo
 // historyView is the drill-down page as the template sees it: every string translated,
 // every number formatted, no logic left.
 type historyView struct {
-	Locale      i18n.Locale
-	Title       string
+	shell
 	Index       string
 	Heading     string
 	LatestLabel string
@@ -68,8 +67,7 @@ func HistoryPage(reader history.Reader) http.Handler {
 
 func historyPage(printer *i18n.Printer, query history.Query, result history.Result, lang, window string) historyView {
 	out := historyView{
-		Locale:      printer.Locale(),
-		Title:       printer.T("history.title"),
+		shell:       shellOf(printer, "history.title"),
 		Index:       printer.T("history.index"),
 		LatestLabel: printer.T("history.latest"),
 		WindowLabel: printer.T("history.window"),
@@ -147,9 +145,8 @@ func language(values url.Values) string {
 // the reader's language, which is the one difference between the two surfaces (ADR 0008).
 func refuse(w http.ResponseWriter, printer *i18n.Printer, err error) {
 	page := historyView{
-		Locale: printer.Locale(),
-		Title:  printer.T("history.title"),
-		Index:  printer.T("history.index"),
+		shell: shellOf(printer, "history.title"),
+		Index: printer.T("history.index"),
 	}
 	var refusal history.Refusal
 	if errors.As(err, &refusal) {

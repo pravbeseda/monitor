@@ -5,6 +5,9 @@ import (
 	"strings"
 	"time"
 
+	"github.com/pravbeseda/monitor/internal/i18n"
+	"github.com/pravbeseda/monitor/internal/version"
+
 	// The zone database travels in the binary, so a host carrying none of its own still
 	// reads a page in the reader's zone (ADR 0026).
 	_ "time/tzdata"
@@ -60,4 +63,24 @@ func shellHeaders(w http.ResponseWriter) {
 	head.Set("Content-Type", "text/html; charset=utf-8")
 	head.Set("Cache-Control", "no-store")
 	head.Set("Vary", "Cookie, Accept-Language")
+}
+
+// shell is what every page's head carries (templates/shell.html). Rendering names what the
+// head was built from, so the refresh script reloads a page whole rather than pair an old
+// head with a new body; StalledNotice is what it shows when the page is not being
+// refreshed (spec: web.md#live).
+type shell struct {
+	Locale        i18n.Locale
+	Title         string
+	Rendering     string
+	StalledNotice string
+}
+
+func shellOf(printer *i18n.Printer, titleKey string) shell {
+	return shell{
+		Locale:        printer.Locale(),
+		Title:         printer.T(titleKey),
+		Rendering:     version.Current + " " + string(printer.Locale()),
+		StalledNotice: printer.T("page.stalled"),
+	}
 }

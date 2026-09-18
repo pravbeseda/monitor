@@ -108,8 +108,9 @@ func TestEveryPageCarriesTheShell(t *testing.T) {
 				"Intl.DateTimeFormat().resolvedOptions().timeZone",
 				// The page is fetched again only after the cookie reads back, so a
 				// browser that stores nothing keeps the UTC page (spec: web.md#zone).
-				"if (!zone || holds(zone)) return;",
-				"if (holds(zone)) location.reload();",
+				"if (!zone || holds(zone)) return false;",
+				"return holds(zone);",
+				"if (stateZone()) {",
 			} {
 				if !strings.Contains(rec.Body.String(), want) {
 					t.Errorf("page does not carry %q", want)

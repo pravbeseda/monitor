@@ -49,6 +49,7 @@ One decision per file, each stating what was rejected and why. New records start
 | [0026](decisions/0026-reader-time-zone-from-the-browser.md) | The reader's time zone comes from the browser in a cookie; pages stay server-rendered | accepted |
 | [0027](decisions/0027-the-hub-installer-reuses-the-binary-in-place.md) | The hub's installer reuses a binary in place that is already its release | accepted |
 | [0028](decisions/0028-agents-follow-a-target-the-hub-serves.md) | Agents follow a target the hub serves under `/api/v1/agent/` | accepted |
+| [0029](decisions/0029-pages-refresh-by-fetching-their-own-address.md) | Pages refresh themselves by fetching their own address | accepted |
 
 ## Behaviour specs
 
@@ -69,7 +70,7 @@ can see ([ADR 0017](decisions/0017-one-spec-and-decision-gates.md)). New specs s
 | [release.md](specs/release.md) | How a merge tags itself, what a tag publishes, how a release is signed, and how an artifact is checked | approved |
 | [installer.md](specs/installer.md) | One command that installs or upgrades a hub or an agent from a signed release, the hub following the version its host names, and an agent following the one the hub names | approved |
 | [deployment.md](specs/deployment.md) | The install layout, the units — the hub's and the agents' update timers among them — and what `install-agent.sh` does to a node | approved |
-| [web.md](specs/web.md) | What every hub page shares: the reader's time zone, how a page says which zone it used, and the shell | approved |
+| [web.md](specs/web.md) | What every hub page shares: the reader's time zone, how a page says which zone it used, how an open page keeps itself current, and the shell | approved |
 
 ## Design notes
 
