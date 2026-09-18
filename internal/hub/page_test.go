@@ -9,7 +9,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/pravbeseda/monitor/internal/history"
+	"github.com/pravbeseda/monitor/internal/evaluate"
 	"github.com/pravbeseda/monitor/internal/hub"
 	"github.com/pravbeseda/monitor/internal/storage"
 	"github.com/pravbeseda/monitor/internal/version"
@@ -64,18 +64,19 @@ func show(t *testing.T, store storage.Storage, target, acceptLanguage string) *h
 		req.Header.Set("Accept-Language", acceptLanguage)
 	}
 	rec := httptest.NewRecorder()
-	hub.Page(store, diskEvery(time.Minute), func() time.Time { return lastSeen }).ServeHTTP(rec, req)
+	hub.Page(store, configured(time.Minute, time.Hour), func() time.Time { return lastSeen }).ServeHTTP(rec, req)
 	return rec
 }
 
-// diskEvery is a configuration that expects the disk metrics every interval and says
-// nothing of any other metric.
-func diskEvery(interval time.Duration) history.Interval {
-	return func(_, metric string) time.Duration {
-		if strings.HasPrefix(metric, "disk.") {
-			return interval
-		}
-		return 0
+// configured is a configuration naming every node: each runs the disk sensor every interval
+// and falls silent after silenceAfter.
+func configured(interval, silenceAfter time.Duration) func(node string) (evaluate.Target, bool) {
+	return func(node string) (evaluate.Target, bool) {
+		return evaluate.Target{
+			Node:         node,
+			SilenceAfter: silenceAfter,
+			Intervals:    map[string]time.Duration{"disk": interval},
+		}, true
 	}
 }
 
@@ -318,5 +319,36 @@ func TestPageSaysANodeWhoseSeriesAllVanishedHasNothingCurrent(t *testing.T) {
 
 	if !strings.Contains(body, "No current measurements") || strings.Contains(body, "No measurements yet") {
 		t.Errorf("page = %q, want it to say nothing is current rather than nothing was measured", body)
+	}
+}
+
+// spec: history.md#page — a node silent past its silence_after has its rows left out or
+// marked in that same moment evaluation freezes them, before they are three intervals old.
+func TestPageFreezesTheRowsOfASilentNode(t *testing.T) {
+	aMinuteAgo := lastSeen.Add(-time.Minute)
+	values := []storage.Value{
+		{
+			Metric: "disk.free_pct",
+			Labels: map[string]string{"mount": "/Volumes/stick-a", "fs": "apfs", "removable": "true"},
+			Value:  1,
+			TS:     aMinuteAgo,
+		},
+		{
+			Metric: "disk.free_pct",
+			Labels: map[string]string{"mount": "/Volumes/data-a", "fs": "apfs", "removable": "false"},
+			Value:  1,
+			TS:     aMinuteAgo,
+		},
+	}
+	state := storage.NodeState{Node: "server-b", LastSeen: aMinuteAgo, Values: values}
+	req := httptest.NewRequest(http.MethodGet, "/", nil)
+	rec := httptest.NewRecorder()
+
+	page := hub.Page(stored{states: []storage.NodeState{state}}, configured(time.Hour, 30*time.Second), func() time.Time { return lastSeen })
+	page.ServeHTTP(rec, req)
+
+	body := rec.Body.String()
+	if strings.Contains(body, "/Volumes/stick-a") || !strings.Contains(body, "no fresh data") {
+		t.Errorf("page = %q, want the stick left out and the fixed volume marked", body)
 	}
 }

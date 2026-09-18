@@ -47,6 +47,23 @@ func (t Target) Rule(name, mount string) (Rule, bool) {
 	return found, ok
 }
 
+// Frozen reports whether a value of a sensor, stamped at ts, is past judging at now: its
+// node has been silent longer than its class allows, or the value is older than three of the
+// sensor's intervals. A sensor the node does not run has no interval and never freezes. It is
+// exported because the index page hides and marks rows by the same rule
+// (docs/specs/history.md#page).
+func (t Target) Frozen(sensor string, lastSeen, ts, now time.Time) bool {
+	interval, runs := t.Intervals[sensor]
+	if !runs {
+		return false
+	}
+	return t.silent(lastSeen, now) || now.Sub(ts) > StaleFactor*interval
+}
+
+func (t Target) silent(lastSeen, now time.Time) bool {
+	return now.Sub(lastSeen) > t.SilenceAfter
+}
+
 // Subject is one thing that has a level, as one tick sees it: the triple (node, rule,
 // labels), what it was, what it is now, and the values that decided it.
 type Subject struct {
@@ -95,11 +112,10 @@ func Subjects(targets []Target, snap storage.Snapshot, now time.Time) []Subject 
 		if !ever {
 			continue // a node the file lists and no agent has installed is not an incident.
 		}
-		// Silence is decided before the node's other subjects, so a node that has just
-		// fallen silent freezes them in this tick rather than the next.
-		silent := now.Sub(node.LastSeen) > target.SilenceAfter
-		out = append(out, silenceSubject(target, silent, stored, now))
-		out = append(out, volumeSubjects(target, node, silent, stored, now)...)
+		// Silence and freezing read one clock, so a node that has just fallen silent freezes
+		// its other subjects in this tick rather than the next.
+		out = append(out, silenceSubject(target, target.silent(node.LastSeen, now), stored, now))
+		out = append(out, volumeSubjects(target, node, stored, now)...)
 	}
 	sortSubjects(out)
 	return out
@@ -118,12 +134,11 @@ func silenceSubject(target Target, silent bool, stored map[string]storage.State,
 // volumeSubjects builds one subject per complete join of every rule the node runs a sensor
 // for. A rule whose sensor is not delivered has no subjects: nothing collects for it, so
 // every value it could read would be stale by definition.
-func volumeSubjects(target Target, node storage.NodeState, silent bool, stored map[string]storage.State, now time.Time) []Subject {
+func volumeSubjects(target Target, node storage.NodeState, stored map[string]storage.State, now time.Time) []Subject {
 	var out []Subject
 	for _, name := range Names() {
 		definition, _ := Lookup(name)
-		interval, runs := target.Intervals[definition.Sensor]
-		if !runs {
+		if _, runs := target.Intervals[definition.Sensor]; !runs {
 			continue
 		}
 		for _, joined := range join(definition, node.Values) {
@@ -134,7 +149,7 @@ func volumeSubjects(target Target, node storage.NodeState, silent bool, stored m
 			subject := Subject{
 				Subject:  storage.Subject{Node: target.Node, Rule: name, Labels: joined.labels},
 				Readings: map[string]float64{definition.Free: joined.free, definition.Pct: joined.pct},
-				Frozen:   silent || now.Sub(joined.oldest) > StaleFactor*interval,
+				Frozen:   target.Frozen(definition.Sensor, node.LastSeen, joined.oldest, now),
 			}
 			restore(&subject, stored, now)
 			subject.Level = subject.Previous

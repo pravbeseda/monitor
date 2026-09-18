@@ -161,3 +161,12 @@ func intervalOf(cfg *config.Config) history.Interval {
 		return entry.Target().Intervals[sensor]
 	}
 }
+
+// targetOf resolves a node as evaluation reads it, and false for a node the configuration
+// does not name.
+func targetOf(cfg *config.Config) func(node string) (evaluate.Target, bool) {
+	return func(node string) (evaluate.Target, bool) {
+		entry, known := cfg.Node(node)
+		return entry.Target(), known
+	}
+}

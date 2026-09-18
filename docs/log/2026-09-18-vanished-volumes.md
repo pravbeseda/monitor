@@ -29,7 +29,11 @@ Three options were weighed by the operator:
   evaluation froze every volume while the page showed them unmarked, against
   [0001](../decisions/0001-semantic-core-and-skins.md). The operator chose the hub's clock —
   one definition of stale for evaluation, charts and the page — accepting that a sleeping
-  laptop's external drive leaves the page until the laptop reports again.
+  laptop's external drive leaves the page until the laptop reports again. The next review
+  round found the page still missed half of that rule: evaluation also freezes a node silent
+  past its `silence_after`, which for the shipped server class is ten minutes against a
+  forty-five minute bound. The rule moved into one function evaluation and the page both
+  call, so the two cannot drift again.
 - **Snapshots are grouped, not dropped.** A rule dropping every `@` source would also drop a
   root mounted from a snapshot; grouping lets the container's shorter mount point win and
   still reports a snapshot that is its container's only watched member.

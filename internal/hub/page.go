@@ -8,6 +8,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/pravbeseda/monitor/internal/evaluate"
 	"github.com/pravbeseda/monitor/internal/history"
 	"github.com/pravbeseda/monitor/internal/i18n"
 	"github.com/pravbeseda/monitor/internal/storage"
@@ -54,9 +55,9 @@ type valueView struct {
 	History string
 }
 
-// Page renders the latest state of every node, leaving out what has vanished: interval is
-// how often a node is expected to report a metric (docs/specs/history.md#page).
-func Page(store storage.Storage, interval history.Interval, now func() time.Time) http.Handler {
+// Page renders the latest state of every node, leaving out or marking what evaluation holds
+// frozen: targets resolves a node as evaluation reads it (docs/specs/history.md#page).
+func Page(store storage.Storage, targets func(node string) (evaluate.Target, bool), now func() time.Time) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		values := r.URL.Query()
 		printer := i18n.For(i18n.Negotiate(values.Get("lang"), r.Header.Get("Accept-Language"))).In(zoneOf(r))
@@ -71,13 +72,13 @@ func Page(store storage.Storage, interval history.Interval, now func() time.Time
 		}
 
 		shellHeaders(w)
-		if err := pageTemplate.Execute(w, index(printer, states, interval, now(), language(values))); err != nil {
+		if err := pageTemplate.Execute(w, index(printer, states, targets, now(), language(values))); err != nil {
 			slog.Error("render the page", "error", err)
 		}
 	})
 }
 
-func index(printer *i18n.Printer, states []storage.NodeState, interval history.Interval, now time.Time, lang string) view {
+func index(printer *i18n.Printer, states []storage.NodeState, targets func(node string) (evaluate.Target, bool), now time.Time, lang string) view {
 	out := view{
 		Locale:         printer.Locale(),
 		Title:          printer.T("page.title"),
@@ -91,6 +92,7 @@ func index(printer *i18n.Printer, states []storage.NodeState, interval history.I
 		Nodes:          make([]nodeView, 0, len(states)),
 	}
 	for _, state := range states {
+		target, configured := targets(state.Node)
 		node := nodeView{
 			Name:     state.Node,
 			Version:  state.AgentVersion,
@@ -105,8 +107,8 @@ func index(printer *i18n.Printer, states []storage.NodeState, interval history.I
 				Collected: printer.Time(value.TS),
 				History:   historyLink(state.Node, value.Metric, value.Labels, lang, ""),
 			}
-			// Aged by the clock evaluation freezes by, so the two never disagree.
-			if history.Gap(interval(state.Node, value.Metric), value.TS, now) {
+			sensor, declared := evaluate.SensorOf(value.Metric)
+			if configured && declared && target.Frozen(sensor, state.LastSeen, value.TS, now) {
 				if value.Labels["removable"] == "true" {
 					continue
 				}
