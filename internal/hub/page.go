@@ -25,7 +25,6 @@ type view struct {
 	Title          string
 	Version        string
 	Empty          string
-	NoValues       string
 	LastSeenLabel  string
 	MetricLabel    string
 	VolumeLabel    string
@@ -39,6 +38,8 @@ type nodeView struct {
 	Version  string
 	LastSeen string
 	Values   []valueView
+	// Empty says why a node has no rows: nothing measured yet, or nothing current.
+	Empty string
 }
 
 type valueView struct {
@@ -46,12 +47,15 @@ type valueView struct {
 	Volume    string
 	Value     string
 	Collected string
+	// Stale is the translated mark of a series that stopped arriving, empty on a fresh one.
+	Stale string
 	// History addresses the drill-down page of this series (docs/specs/history.md#page).
 	History string
 }
 
-// Page renders the latest state of every node.
-func Page(store storage.Storage) http.Handler {
+// Page renders the latest state of every node, leaving out what has vanished: interval is
+// how often a node is expected to report a metric (docs/specs/history.md#page).
+func Page(store storage.Storage, interval history.Interval) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		values := r.URL.Query()
 		printer := i18n.For(i18n.Negotiate(values.Get("lang"), r.Header.Get("Accept-Language"))).In(zoneOf(r))
@@ -66,19 +70,18 @@ func Page(store storage.Storage) http.Handler {
 		}
 
 		shellHeaders(w)
-		if err := pageTemplate.Execute(w, index(printer, states, language(values))); err != nil {
+		if err := pageTemplate.Execute(w, index(printer, states, interval, language(values))); err != nil {
 			slog.Error("render the page", "error", err)
 		}
 	})
 }
 
-func index(printer *i18n.Printer, states []storage.NodeState, lang string) view {
+func index(printer *i18n.Printer, states []storage.NodeState, interval history.Interval, lang string) view {
 	out := view{
 		Locale:         printer.Locale(),
 		Title:          printer.T("page.title"),
 		Version:        version.Current,
 		Empty:          printer.T("page.empty"),
-		NoValues:       printer.T("node.no_values"),
 		LastSeenLabel:  printer.T("node.last_seen"),
 		MetricLabel:    printer.T("table.metric"),
 		VolumeLabel:    printer.T("table.volume"),
@@ -94,13 +97,27 @@ func index(printer *i18n.Printer, states []storage.NodeState, lang string) view 
 			Values:   make([]valueView, 0, len(state.Values)),
 		}
 		for _, value := range state.Values {
-			node.Values = append(node.Values, valueView{
+			row := valueView{
 				Metric:    value.Metric,
 				Volume:    volume(printer, value.Labels),
 				Value:     format(printer, value.Metric, value.Value),
 				Collected: printer.Time(value.TS),
 				History:   historyLink(state.Node, value.Metric, value.Labels, lang, ""),
-			})
+			}
+			// Aged against the node's own last report, so a silent node keeps its rows.
+			if history.Gap(interval(state.Node, value.Metric), value.TS, state.LastSeen) {
+				if value.Labels["removable"] == "true" {
+					continue
+				}
+				row.Stale = printer.T("value.stale")
+			}
+			node.Values = append(node.Values, row)
+		}
+		switch {
+		case len(state.Values) == 0:
+			node.Empty = printer.T("node.no_values")
+		case len(node.Values) == 0:
+			node.Empty = printer.T("node.no_current")
 		}
 		out.Nodes = append(out.Nodes, node)
 	}

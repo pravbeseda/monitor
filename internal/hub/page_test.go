@@ -9,6 +9,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/pravbeseda/monitor/internal/history"
 	"github.com/pravbeseda/monitor/internal/hub"
 	"github.com/pravbeseda/monitor/internal/storage"
 	"github.com/pravbeseda/monitor/internal/version"
@@ -63,8 +64,19 @@ func show(t *testing.T, store storage.Storage, target, acceptLanguage string) *h
 		req.Header.Set("Accept-Language", acceptLanguage)
 	}
 	rec := httptest.NewRecorder()
-	hub.Page(store).ServeHTTP(rec, req)
+	hub.Page(store, diskEvery(time.Minute)).ServeHTTP(rec, req)
 	return rec
+}
+
+// diskEvery is a configuration that expects the disk metrics every interval and says
+// nothing of any other metric.
+func diskEvery(interval time.Duration) history.Interval {
+	return func(_, metric string) time.Duration {
+		if strings.HasPrefix(metric, "disk.") {
+			return interval
+		}
+		return 0
+	}
 }
 
 func TestPageShowsEveryNodeWithItsLatestValues(t *testing.T) {
@@ -172,5 +184,127 @@ func TestRootIsMountedOnTheRoutes(t *testing.T) {
 
 	if rec.Code != http.StatusOK {
 		t.Errorf("status = %d, want the page mounted on /", rec.Code)
+	}
+}
+
+// spec: history.md#page — a series that stopped arriving while its node reports is hidden
+// when removable and marked otherwise, aged against the node's last-seen time.
+func TestPageLeavesOutOrMarksSeriesThatStoppedArriving(t *testing.T) {
+	const marker = "no fresh data"
+	bound := 3 * time.Minute
+	series := func(metric, mount, removable string, age time.Duration) storage.Value {
+		return storage.Value{
+			Metric: metric,
+			Labels: map[string]string{"mount": mount, "fs": "apfs", "removable": removable},
+			Value:  1,
+			TS:     lastSeen.Add(-age),
+		}
+	}
+	tests := []struct {
+		name       string
+		value      storage.Value
+		wantShown  bool
+		wantMarked bool
+	}{
+		{"a fresh series, or one reporting again", series("disk.free_pct", "/Volumes/stick-a", "true", 0), true, false},
+		{"a series exactly at the bound", series("disk.free_pct", "/Volumes/stick-a", "true", bound), true, false},
+		{"a removable series past the bound", series("disk.free_pct", "/Volumes/stick-a", "true", bound+time.Second), false, false},
+		{"a fixed series past the bound", series("disk.free_pct", "/Volumes/data-a", "false", bound+time.Second), true, true},
+		{"a series whose node resolves no interval", series("coffee.level", "/Volumes/stick-a", "true", 24*time.Hour), true, false},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			state := storage.NodeState{Node: "laptop-a", LastSeen: lastSeen, Values: []storage.Value{tc.value}}
+
+			body := show(t, stored{states: []storage.NodeState{state}}, "/", "").Body.String()
+
+			if shown := strings.Contains(body, tc.value.Labels["mount"]); shown != tc.wantShown {
+				t.Errorf("shown = %v, want %v; page = %q", shown, tc.wantShown, body)
+			}
+			if marked := strings.Contains(body, marker); marked != tc.wantMarked {
+				t.Errorf("marked = %v, want %v; page = %q", marked, tc.wantMarked, body)
+			}
+		})
+	}
+}
+
+// spec: history.md#page — a node that stopped reporting keeps its rows as they were, and a
+// node still reporting with no measurements ages them like any other.
+func TestPageAgesSeriesByTheirNodesLastReport(t *testing.T) {
+	stick := storage.Value{
+		Metric: "disk.free_pct",
+		Labels: map[string]string{"mount": "/Volumes/stick-a", "fs": "apfs", "removable": "true"},
+		Value:  1,
+		TS:     lastSeen,
+	}
+	silent := storage.NodeState{Node: "laptop-a", LastSeen: lastSeen, Values: []storage.Value{stick}}
+	heartbeatOnly := storage.NodeState{Node: "server-b", LastSeen: lastSeen.Add(time.Hour), Values: []storage.Value{stick}}
+
+	body := show(t, stored{states: []storage.NodeState{silent, heartbeatOnly}}, "/", "").Body.String()
+
+	if got := strings.Count(body, "/Volumes/stick-a"); got != 1 {
+		t.Errorf("the stick is shown %d times, want once: under the silent node only; page = %q", got, body)
+	}
+}
+
+// spec: history.md#page — the mark is in the reader's language.
+func TestPageMarksAStaleSeriesInTheReadersLanguage(t *testing.T) {
+	fixed := storage.Value{
+		Metric: "disk.free_pct",
+		Labels: map[string]string{"mount": "/Volumes/data-a", "fs": "apfs", "removable": "false"},
+		Value:  1,
+		TS:     lastSeen.Add(-time.Hour),
+	}
+	state := storage.NodeState{Node: "laptop-a", LastSeen: lastSeen, Values: []storage.Value{fixed}}
+
+	body := show(t, stored{states: []storage.NodeState{state}}, "/?lang=ru", "").Body.String()
+
+	if !strings.Contains(body, "нет свежих данных") {
+		t.Errorf("page = %q, want the mark in Russian", body)
+	}
+}
+
+// spec: history.md#page — the hub ages a series by the interval its node's configuration
+// resolves, and a node the configuration no longer names resolves none.
+func TestRootAgesSeriesByTheConfiguredInterval(t *testing.T) {
+	old := storage.Value{
+		Metric: "disk.free_pct",
+		Labels: map[string]string{"mount": "/Volumes/data-a", "fs": "apfs", "removable": "false"},
+		Value:  1,
+		TS:     lastSeen.Add(-30 * 24 * time.Hour),
+	}
+	configured := storage.NodeState{Node: "laptop-a", LastSeen: lastSeen, Values: []storage.Value{old}}
+	forgotten := storage.NodeState{Node: "server-c", LastSeen: lastSeen, Values: []storage.Value{old}}
+
+	for _, tc := range []struct {
+		state      storage.NodeState
+		wantMarked bool
+	}{{configured, true}, {forgotten, false}} {
+		req := httptest.NewRequest(http.MethodGet, "/", nil)
+		rec := httptest.NewRecorder()
+		routesWith(t, stored{states: []storage.NodeState{tc.state}}, time.Now).ServeHTTP(rec, req)
+
+		if marked := strings.Contains(rec.Body.String(), "no fresh data"); marked != tc.wantMarked {
+			t.Errorf("%s: marked = %v, want %v", tc.state.Node, marked, tc.wantMarked)
+		}
+	}
+}
+
+// spec: history.md#page — a node whose every series was left out says it has nothing
+// current, not that it never measured anything.
+func TestPageSaysANodeWhoseSeriesAllVanishedHasNothingCurrent(t *testing.T) {
+	stick := storage.Value{
+		Metric: "disk.free_pct",
+		Labels: map[string]string{"mount": "/Volumes/stick-a", "fs": "apfs", "removable": "true"},
+		Value:  1,
+		TS:     lastSeen.Add(-time.Hour),
+	}
+	state := storage.NodeState{Node: "laptop-a", LastSeen: lastSeen, Values: []storage.Value{stick}}
+
+	body := show(t, stored{states: []storage.NodeState{state}}, "/", "").Body.String()
+
+	if !strings.Contains(body, "No current measurements") || strings.Contains(body, "No measurements yet") {
+		t.Errorf("page = %q, want it to say nothing is current rather than nothing was measured", body)
 	}
 }

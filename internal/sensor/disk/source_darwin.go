@@ -45,11 +45,13 @@ func (systemSource) Mounts() ([]Mount, error) {
 
 // container is the whole disk behind an APFS volume, whose volumes share one pool of free
 // space. Other filesystems stand alone: two HFS+ or NTFS partitions of one disk have
-// separate pools, and collapsing them would drop a real volume.
+// separate pools, and collapsing them would drop a real volume. A mounted snapshot names
+// the device it was taken from after its last @ and shares that device's pool.
 func container(filesystem, device string) string {
 	if !strings.EqualFold(filesystem, "apfs") {
 		return ""
 	}
+	device = device[strings.LastIndex(device, "@")+1:]
 	name, found := strings.CutPrefix(device, "/dev/")
 	if !found {
 		return ""

@@ -139,23 +139,25 @@ func answer(w http.ResponseWriter, status int, body any) {
 	}
 }
 
-// reader wires history to the two things it reads: the stored points, and the interval a
-// node resolves for the sensor behind a metric — the same input evaluation ages a subject
-// by, so one definition of silence serves both (docs/specs/history.md#gaps).
+// reader wires history to the two things it reads: the stored points, and the interval of
+// each series.
 func reader(cfg *config.Config, store storage.Storage, now func() time.Time) history.Reader {
-	return history.Reader{
-		Source: store,
-		Now:    now,
-		Interval: func(node, metric string) time.Duration {
-			sensor, declared := evaluate.SensorOf(metric)
-			if !declared {
-				return 0
-			}
-			entry, known := cfg.Node(node)
-			if !known {
-				return 0
-			}
-			return entry.Target().Intervals[sensor]
-		},
+	return history.Reader{Source: store, Now: now, Interval: intervalOf(cfg)}
+}
+
+// intervalOf is the interval a node resolves for the sensor behind a metric — the same
+// input evaluation ages a subject by, so one definition of silence serves both
+// (docs/specs/history.md#gaps).
+func intervalOf(cfg *config.Config) history.Interval {
+	return func(node, metric string) time.Duration {
+		sensor, declared := evaluate.SensorOf(metric)
+		if !declared {
+			return 0
+		}
+		entry, known := cfg.Node(node)
+		if !known {
+			return 0
+		}
+		return entry.Target().Intervals[sensor]
 	}
 }
