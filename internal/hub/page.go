@@ -6,7 +6,9 @@ import (
 	"log/slog"
 	"net/http"
 	"strings"
+	"time"
 
+	"github.com/pravbeseda/monitor/internal/evaluate"
 	"github.com/pravbeseda/monitor/internal/history"
 	"github.com/pravbeseda/monitor/internal/i18n"
 	"github.com/pravbeseda/monitor/internal/storage"
@@ -25,7 +27,6 @@ type view struct {
 	Title          string
 	Version        string
 	Empty          string
-	NoValues       string
 	LastSeenLabel  string
 	MetricLabel    string
 	VolumeLabel    string
@@ -39,6 +40,8 @@ type nodeView struct {
 	Version  string
 	LastSeen string
 	Values   []valueView
+	// Empty says why a node has no rows: nothing measured yet, or nothing current.
+	Empty string
 }
 
 type valueView struct {
@@ -46,12 +49,15 @@ type valueView struct {
 	Volume    string
 	Value     string
 	Collected string
+	// Stale is the translated mark of a series that stopped arriving, empty on a fresh one.
+	Stale string
 	// History addresses the drill-down page of this series (docs/specs/history.md#page).
 	History string
 }
 
-// Page renders the latest state of every node.
-func Page(store storage.Storage) http.Handler {
+// Page renders the latest state of every node, leaving out or marking what evaluation holds
+// frozen: targets resolves a node as evaluation reads it (docs/specs/history.md#page).
+func Page(store storage.Storage, targets func(node string) (evaluate.Target, bool), now func() time.Time) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		values := r.URL.Query()
 		printer := i18n.For(i18n.Negotiate(values.Get("lang"), r.Header.Get("Accept-Language"))).In(zoneOf(r))
@@ -66,19 +72,18 @@ func Page(store storage.Storage) http.Handler {
 		}
 
 		shellHeaders(w)
-		if err := pageTemplate.Execute(w, index(printer, states, language(values))); err != nil {
+		if err := pageTemplate.Execute(w, index(printer, states, targets, now(), language(values))); err != nil {
 			slog.Error("render the page", "error", err)
 		}
 	})
 }
 
-func index(printer *i18n.Printer, states []storage.NodeState, lang string) view {
+func index(printer *i18n.Printer, states []storage.NodeState, targets func(node string) (evaluate.Target, bool), now time.Time, lang string) view {
 	out := view{
 		Locale:         printer.Locale(),
 		Title:          printer.T("page.title"),
 		Version:        version.Current,
 		Empty:          printer.T("page.empty"),
-		NoValues:       printer.T("node.no_values"),
 		LastSeenLabel:  printer.T("node.last_seen"),
 		MetricLabel:    printer.T("table.metric"),
 		VolumeLabel:    printer.T("table.volume"),
@@ -87,6 +92,7 @@ func index(printer *i18n.Printer, states []storage.NodeState, lang string) view 
 		Nodes:          make([]nodeView, 0, len(states)),
 	}
 	for _, state := range states {
+		target, configured := targets(state.Node)
 		node := nodeView{
 			Name:     state.Node,
 			Version:  state.AgentVersion,
@@ -94,13 +100,27 @@ func index(printer *i18n.Printer, states []storage.NodeState, lang string) view 
 			Values:   make([]valueView, 0, len(state.Values)),
 		}
 		for _, value := range state.Values {
-			node.Values = append(node.Values, valueView{
+			row := valueView{
 				Metric:    value.Metric,
 				Volume:    volume(printer, value.Labels),
 				Value:     format(printer, value.Metric, value.Value),
 				Collected: printer.Time(value.TS),
 				History:   historyLink(state.Node, value.Metric, value.Labels, lang, ""),
-			})
+			}
+			sensor, declared := evaluate.SensorOf(value.Metric)
+			if configured && declared && target.Frozen(sensor, state.LastSeen, value.TS, now) {
+				if value.Labels["removable"] == "true" {
+					continue
+				}
+				row.Stale = printer.T("value.stale")
+			}
+			node.Values = append(node.Values, row)
+		}
+		switch {
+		case len(state.Values) == 0:
+			node.Empty = printer.T("node.no_values")
+		case len(node.Values) == 0:
+			node.Empty = printer.T("node.no_current")
 		}
 		out.Nodes = append(out.Nodes, node)
 	}

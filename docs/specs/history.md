@@ -3,10 +3,10 @@
 - **Status:** approved
 - **Owns:** `internal/history` (series: selection, window, reduction, gaps) and its consumers
   in `internal/hub` — `GET /api/v1/series`, `GET /api/v1/history` and the drill-down page
-  `GET /history`, plus the link the index page `/` grows to reach it. Reading stored points
-  stays with `internal/storage`; the expected interval of a series comes from the resolved
-  configuration `internal/config` already computes; every user-facing string comes from
-  `internal/i18n`.
+  `GET /history`, plus the link the index page `/` grows to reach it and which series `/`
+  hides or marks as no longer arriving. Reading stored points stays with `internal/storage`;
+  the expected interval of a series comes from the resolved configuration `internal/config`
+  already computes; every user-facing string comes from `internal/i18n`.
 - **Decisions:** [0001](../decisions/0001-semantic-core-and-skins.md),
   [0005](../decisions/0005-poc-stack.md),
   [0007](../decisions/0007-public-repository.md),
@@ -202,6 +202,14 @@ subject's values stale; one definition of "this node was not reporting", not two
 | a series with a two-day silence inside a seven-day window | the line broken across the gap, not drawn straight through it |
 | a query the endpoint refuses, or a read that fails | the same status the endpoint answers, as a translated page |
 | a value on `/` | a link to the history page of its series, carrying the node, the metric and every label |
+| a series on `/` that [evaluation](evaluation.md#freezing) holds frozen when the page is read — its newest point older than three times the interval the node resolves for its sensor ([gaps](#gaps)), or its node silent past its `silence_after` — and that carries `removable: "true"` | not shown: an unplugged drive or an ejected disk image is not a reading |
+| the same, without `removable: "true"` | shown, its collected time marked, in the reader's language, as holding no fresh data |
+| a series on `/` exactly three intervals old | shown unmarked: the bound is inclusive, as for gaps |
+| that series reporting again | shown as before, unmarked |
+| a series whose node resolves no interval for its sensor — a metric in no rule, a sensor resolved `enabled: false`, a node the configuration no longer names | shown unmarked however old, and however long its node is silent: evaluation judges no subject for it |
+| a node silent past its `silence_after`, its series not yet three intervals old | its series hidden or marked already: evaluation freezes a silent node's subjects in the tick it falls silent |
+| a node whose every series is left out | "no current measurements" in place of its table, rather than the "no measurements yet" of a node that never sent one |
+| a node still reporting but sending no measurements — its mount table unreadable | its series age like any other and are hidden or marked once past the bound |
 | `&lang=ru` | axis labels, dates, byte sizes and percentages in Russian |
 | any time on the page, and every axis label | the reader's time zone, named once on the chart ([web.md](web.md#zone)); which day a tick is labelled with follows that zone, where the ticks sit does not |
 
@@ -226,7 +234,23 @@ unit reads naturally.
 - **A node that has never reported** selects no series; that is a 200 with an empty list, not
   an error. Nothing matched is an answer.
 - **A volume that disappeared** — an unplugged removable disk — keeps its stored points and
-  keeps being returned while they are inside the window.
+  keeps being returned while they are inside the window. Only `/` leaves it out
+  ([the page](#page)); the endpoints and the drill-down still reach it.
+- **A row is hidden or marked by [evaluation](evaluation.md#freezing)'s own freezing rule** —
+  node silence, or a value older than three intervals, on the hub's clock — applied by the
+  same code, so `/` and evaluation cannot disagree about which series are fresh. A laptop
+  asleep overnight therefore shows its internal volume marked and its external drive gone
+  until it reports again. An agent clock running behind by more than the bound hides and
+  marks what evaluation freezes, and points stamped ahead by a clock since corrected stay
+  shown until real time passes them. Until the State API carries freshness
+  ([0001](../decisions/0001-semantic-core-and-skins.md)), `/` applies that rule to the values
+  it reads rather than reading the verdict from the core. Evaluation ages a volume by the
+  older of its two series; `/` ages each row by its own, and the two are collected together.
+- **A removable volume plugged back under another mount point** is a new series; the old one
+  stays hidden.
+- **A sensor interval lowered while the agent still holds the old one** can hide a removable
+  volume that is still plugged in, until the agent picks up the new interval — the same
+  window in which [evaluation](evaluation.md#freezing) may freeze it.
 - **A metric the hub's configuration does not declare** is stored by [ingest](ingest.md) and
   served here with no interval, so its line is never broken. Its unit still comes from its
   id, which is where the unit lives until metrics are declared.

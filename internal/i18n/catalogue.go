@@ -8,11 +8,13 @@ var catalogue = map[string]map[Locale]string{
 	"page.empty":      {English: "No node has reported yet", Russian: "Ни один узел ещё не отчитался"},
 	"node.last_seen":  {English: "Last seen", Russian: "Последний отчёт"},
 	"node.no_values":  {English: "No measurements yet", Russian: "Измерений ещё нет"},
+	"node.no_current": {English: "No current measurements", Russian: "Актуальных измерений нет"},
 	"table.metric":    {English: "Metric", Russian: "Метрика"},
 	"table.volume":    {English: "Volume", Russian: "Том"},
 	"table.free":      {English: "Value", Russian: "Значение"},
 	"table.collected": {English: "Collected", Russian: "Собрано"},
 	"label.removable": {English: "removable", Russian: "съёмный"},
+	"value.stale":     {English: "no fresh data", Russian: "нет свежих данных"},
 	"error.storage":   {English: "The panel cannot read its data right now", Russian: "Панель сейчас не может прочитать свои данные"},
 
 	"level.ok":       {English: "ok", Russian: "норма"},

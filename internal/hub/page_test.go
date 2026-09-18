@@ -9,6 +9,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/pravbeseda/monitor/internal/evaluate"
 	"github.com/pravbeseda/monitor/internal/hub"
 	"github.com/pravbeseda/monitor/internal/storage"
 	"github.com/pravbeseda/monitor/internal/version"
@@ -63,8 +64,20 @@ func show(t *testing.T, store storage.Storage, target, acceptLanguage string) *h
 		req.Header.Set("Accept-Language", acceptLanguage)
 	}
 	rec := httptest.NewRecorder()
-	hub.Page(store).ServeHTTP(rec, req)
+	hub.Page(store, configured(time.Minute, time.Hour), func() time.Time { return lastSeen }).ServeHTTP(rec, req)
 	return rec
+}
+
+// configured is a configuration naming every node: each runs the disk sensor every interval
+// and falls silent after silenceAfter.
+func configured(interval, silenceAfter time.Duration) func(node string) (evaluate.Target, bool) {
+	return func(node string) (evaluate.Target, bool) {
+		return evaluate.Target{
+			Node:         node,
+			SilenceAfter: silenceAfter,
+			Intervals:    map[string]time.Duration{"disk": interval},
+		}, true
+	}
 }
 
 func TestPageShowsEveryNodeWithItsLatestValues(t *testing.T) {
@@ -172,5 +185,170 @@ func TestRootIsMountedOnTheRoutes(t *testing.T) {
 
 	if rec.Code != http.StatusOK {
 		t.Errorf("status = %d, want the page mounted on /", rec.Code)
+	}
+}
+
+// spec: history.md#page — a series that stopped arriving is hidden when removable and marked
+// otherwise.
+func TestPageLeavesOutOrMarksSeriesThatStoppedArriving(t *testing.T) {
+	const marker = "no fresh data"
+	bound := 3 * time.Minute
+	series := func(metric, mount, removable string, age time.Duration) storage.Value {
+		return storage.Value{
+			Metric: metric,
+			Labels: map[string]string{"mount": mount, "fs": "apfs", "removable": removable},
+			Value:  1,
+			TS:     lastSeen.Add(-age),
+		}
+	}
+	tests := []struct {
+		name       string
+		value      storage.Value
+		wantShown  bool
+		wantMarked bool
+	}{
+		{"a fresh series, or one reporting again", series("disk.free_pct", "/Volumes/stick-a", "true", 0), true, false},
+		{"a series exactly at the bound", series("disk.free_pct", "/Volumes/stick-a", "true", bound), true, false},
+		{"a removable series past the bound", series("disk.free_pct", "/Volumes/stick-a", "true", bound+time.Second), false, false},
+		{"a fixed series past the bound", series("disk.free_pct", "/Volumes/data-a", "false", bound+time.Second), true, true},
+		{"a series whose node resolves no interval", series("coffee.level", "/Volumes/stick-a", "true", 24*time.Hour), true, false},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			state := storage.NodeState{Node: "laptop-a", LastSeen: lastSeen, Values: []storage.Value{tc.value}}
+
+			body := show(t, stored{states: []storage.NodeState{state}}, "/", "").Body.String()
+
+			if shown := strings.Contains(body, tc.value.Labels["mount"]); shown != tc.wantShown {
+				t.Errorf("shown = %v, want %v; page = %q", shown, tc.wantShown, body)
+			}
+			if marked := strings.Contains(body, marker); marked != tc.wantMarked {
+				t.Errorf("marked = %v, want %v; page = %q", marked, tc.wantMarked, body)
+			}
+		})
+	}
+}
+
+// spec: history.md#page — series age by the hub's clock, the age evaluation freezes by: a
+// node that stopped reporting and one reporting with no measurements age alike.
+func TestPageAgesSeriesByTheHubsClock(t *testing.T) {
+	anHourAgo := lastSeen.Add(-time.Hour)
+	values := []storage.Value{
+		{
+			Metric: "disk.free_pct",
+			Labels: map[string]string{"mount": "/Volumes/stick-a", "fs": "apfs", "removable": "true"},
+			Value:  1,
+			TS:     anHourAgo,
+		},
+		{
+			Metric: "disk.free_pct",
+			Labels: map[string]string{"mount": "/Volumes/data-a", "fs": "apfs", "removable": "false"},
+			Value:  1,
+			TS:     anHourAgo,
+		},
+	}
+	silent := storage.NodeState{Node: "laptop-a", LastSeen: anHourAgo, Values: values}
+	heartbeatOnly := storage.NodeState{Node: "server-b", LastSeen: lastSeen, Values: values}
+
+	body := show(t, stored{states: []storage.NodeState{silent, heartbeatOnly}}, "/", "").Body.String()
+
+	if strings.Contains(body, "/Volumes/stick-a") {
+		t.Errorf("page = %q, want the stick left out under both nodes", body)
+	}
+	if got := strings.Count(body, "no fresh data"); got != 2 {
+		t.Errorf("%d rows marked, want the fixed volume marked under both nodes; page = %q", got, body)
+	}
+}
+
+// spec: history.md#page — the mark is in the reader's language.
+func TestPageMarksAStaleSeriesInTheReadersLanguage(t *testing.T) {
+	fixed := storage.Value{
+		Metric: "disk.free_pct",
+		Labels: map[string]string{"mount": "/Volumes/data-a", "fs": "apfs", "removable": "false"},
+		Value:  1,
+		TS:     lastSeen.Add(-time.Hour),
+	}
+	state := storage.NodeState{Node: "laptop-a", LastSeen: lastSeen, Values: []storage.Value{fixed}}
+
+	body := show(t, stored{states: []storage.NodeState{state}}, "/?lang=ru", "").Body.String()
+
+	if !strings.Contains(body, "нет свежих данных") {
+		t.Errorf("page = %q, want the mark in Russian", body)
+	}
+}
+
+// spec: history.md#page — the hub ages a series by the interval its node's configuration
+// resolves, and a node the configuration no longer names resolves none.
+func TestRootAgesSeriesByTheConfiguredInterval(t *testing.T) {
+	old := storage.Value{
+		Metric: "disk.free_pct",
+		Labels: map[string]string{"mount": "/Volumes/data-a", "fs": "apfs", "removable": "false"},
+		Value:  1,
+		TS:     lastSeen.Add(-30 * 24 * time.Hour),
+	}
+	configured := storage.NodeState{Node: "laptop-a", LastSeen: lastSeen, Values: []storage.Value{old}}
+	forgotten := storage.NodeState{Node: "server-c", LastSeen: lastSeen, Values: []storage.Value{old}}
+
+	for _, tc := range []struct {
+		state      storage.NodeState
+		wantMarked bool
+	}{{configured, true}, {forgotten, false}} {
+		req := httptest.NewRequest(http.MethodGet, "/", nil)
+		rec := httptest.NewRecorder()
+		routesWith(t, stored{states: []storage.NodeState{tc.state}}, time.Now).ServeHTTP(rec, req)
+
+		if marked := strings.Contains(rec.Body.String(), "no fresh data"); marked != tc.wantMarked {
+			t.Errorf("%s: marked = %v, want %v", tc.state.Node, marked, tc.wantMarked)
+		}
+	}
+}
+
+// spec: history.md#page — a node whose every series was left out says it has nothing
+// current, not that it never measured anything.
+func TestPageSaysANodeWhoseSeriesAllVanishedHasNothingCurrent(t *testing.T) {
+	stick := storage.Value{
+		Metric: "disk.free_pct",
+		Labels: map[string]string{"mount": "/Volumes/stick-a", "fs": "apfs", "removable": "true"},
+		Value:  1,
+		TS:     lastSeen.Add(-time.Hour),
+	}
+	state := storage.NodeState{Node: "laptop-a", LastSeen: lastSeen, Values: []storage.Value{stick}}
+
+	body := show(t, stored{states: []storage.NodeState{state}}, "/", "").Body.String()
+
+	if !strings.Contains(body, "No current measurements") || strings.Contains(body, "No measurements yet") {
+		t.Errorf("page = %q, want it to say nothing is current rather than nothing was measured", body)
+	}
+}
+
+// spec: history.md#page — a node silent past its silence_after has its rows left out or
+// marked in that same moment evaluation freezes them, before they are three intervals old.
+func TestPageFreezesTheRowsOfASilentNode(t *testing.T) {
+	aMinuteAgo := lastSeen.Add(-time.Minute)
+	values := []storage.Value{
+		{
+			Metric: "disk.free_pct",
+			Labels: map[string]string{"mount": "/Volumes/stick-a", "fs": "apfs", "removable": "true"},
+			Value:  1,
+			TS:     aMinuteAgo,
+		},
+		{
+			Metric: "disk.free_pct",
+			Labels: map[string]string{"mount": "/Volumes/data-a", "fs": "apfs", "removable": "false"},
+			Value:  1,
+			TS:     aMinuteAgo,
+		},
+	}
+	state := storage.NodeState{Node: "server-b", LastSeen: aMinuteAgo, Values: values}
+	req := httptest.NewRequest(http.MethodGet, "/", nil)
+	rec := httptest.NewRecorder()
+
+	page := hub.Page(stored{states: []storage.NodeState{state}}, configured(time.Hour, 30*time.Second), func() time.Time { return lastSeen })
+	page.ServeHTTP(rec, req)
+
+	body := rec.Body.String()
+	if strings.Contains(body, "/Volumes/stick-a") || !strings.Contains(body, "no fresh data") {
+		t.Errorf("page = %q, want the stick left out and the fixed volume marked", body)
 	}
 }

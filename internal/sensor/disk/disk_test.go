@@ -274,3 +274,39 @@ func TestContainerChoiceIsStable(t *testing.T) {
 		}
 	}
 }
+
+// spec: disk-sensor.md#enumeration — a mounted snapshot is one more member of its container:
+// it loses to a shorter watched mount point, and stands for the container when it is the
+// only one watched.
+func TestSnapshotCountsAsAMemberOfItsContainer(t *testing.T) {
+	const localSnapshot = "/Volumes/com.apple.TimeMachine.localsnapshots/Backups.backupdb/laptop-a/2026-01-01-120000/Data"
+	const backupSnapshot = "/Volumes/.timemachine/00000000-0000-0000-0000-000000000000/2026-01-01-120000.backup"
+	// The backup disk's own volume is skipped, leaving the snapshot its container's only member.
+	source := fake{
+		mounts: []disk.Mount{
+			{Path: "/", FS: "apfs", Container: "disk3"},
+			{Path: localSnapshot, FS: "apfs", Container: "disk3"},
+			{Path: "/System/Volumes/backup-b", FS: "apfs", Container: "disk7"},
+			{Path: backupSnapshot, FS: "apfs", Container: "disk7"},
+		},
+		usage: map[string]disk.Usage{
+			"/":                        {TotalBytes: 1000, AvailBytes: 250},
+			localSnapshot:              {TotalBytes: 1000, AvailBytes: 250},
+			"/System/Volumes/backup-b": {TotalBytes: 4000, AvailBytes: 130},
+			backupSnapshot:             {TotalBytes: 4000, AvailBytes: 130},
+		},
+	}
+
+	got := collectWith(t, source, disk.Settings{
+		Filesystems: []string{"apfs"},
+		SkipMounts:  []string{"/System/Volumes/"},
+	})
+
+	mounts := map[string]bool{}
+	for _, m := range got {
+		mounts[m.Labels["mount"]] = true
+	}
+	if len(mounts) != 2 || !mounts["/"] || !mounts[backupSnapshot] {
+		t.Errorf("mounts = %v, want the root and the snapshot standing alone for its container", mounts)
+	}
+}

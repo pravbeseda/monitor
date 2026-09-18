@@ -85,6 +85,7 @@ Reasoning from working sessions, including options that were rejected.
 | [2026-09-13](log/2026-09-13-hub-host-node.md) | The agent on the hub host: loopback, and why every play restarts rather than detecting a change |
 | [2026-09-14](log/2026-09-14-auto-tag.md) | A merge tags itself: how the tag reaches the release, and the tokens and tools that lost |
 | [2026-09-17](log/2026-09-17-agent-updater.md) | Agents follow the hub's target: what three spec reviews changed before the code |
+| [2026-09-18](log/2026-09-18-vanished-volumes.md) | Vanished volumes: why `/` hides by `removable`, ages by the hub's clock, and groups snapshots |
 
 ## Not written yet
 

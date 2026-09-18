@@ -61,6 +61,8 @@ One row = one test. Anchors: `spec: disk-sensor.md#<heading>`.
 | a mount point under one of the skipped prefixes | nothing: the hub's skip list names what is not worth watching |
 | several volumes that share one pool of free space (an APFS container, bind mounts of one device) | one measurement pair, for the shortest mount point of the group |
 | several partitions of one physical disk (two NTFS volumes on a stick) | one measurement pair each: separate pools are separate volumes |
+| on macOS, a mounted snapshot of an APFS volume — Time Machine mounts them during a backup | grouped with the container it was taken from, so nothing of its own while that container has a watched volume with a shorter mount point |
+| on macOS, a mounted snapshot whose container has no other watched volume | collected as that container's one measurement pair, like any other sole member |
 | a volume reporting zero total blocks | nothing: a percentage of nothing is not a number |
 | a volume that vanishes between enumeration and reading | nothing for it; every other volume is still collected |
 | a volume the agent may not read | nothing for it; every other volume is still collected |
@@ -101,7 +103,13 @@ One row = one test. Anchors: `spec: disk-sensor.md#<heading>`.
   future alert by the number of volumes the container happens to have.
 - **An unplugged external drive** simply stops producing measurements. `removable: "true"`
   is what lets the hub tell that from a vanished internal disk
-  ([evaluation](evaluation.md#freezing)).
+  ([evaluation](evaluation.md#freezing), [history](history.md#page)). macOS flags a mounted
+  disk image as removable too, so an installer opened and ejected leaves no row on the page.
+- **A mounted snapshot** names its source device after its last `@`
+  (`com.apple.TimeMachine.….local@/dev/disk3s5`), so it is grouped with the container it was
+  taken from and loses to that container's shorter mount points — `/` for a local snapshot,
+  the backup disk's own volume for one under `/Volumes/.timemachine/`. Reporting it would add
+  a volume for every backup Time Machine runs, each one vanishing when the backup ends.
 - **A mount point with spaces or non-ASCII characters** is carried verbatim; labels are
   not sanitised, because the label is what identifies the volume.
 - **Purgeable space on macOS** is counted as available, so a Mac reports what Finder

@@ -12,6 +12,7 @@
     table { border-collapse: collapse; width: 100%; }
     th, td { text-align: left; padding: 0.3rem 0.6rem; border-bottom: 1px solid #ddd; }
     th { font-weight: 600; font-size: 0.85rem; color: #555; }
+    small.stale { color: #a60; }
   </style>
 </head>
 <body>
@@ -39,13 +40,13 @@
                 <td>{{ .Metric }}</td>
                 <td>{{ .Volume }}</td>
                 <td><a href="{{ .History }}">{{ .Value }}</a></td>
-                <td>{{ .Collected }}</td>
+                <td>{{ .Collected }}{{ with .Stale }} <small class="stale">{{ . }}</small>{{ end }}</td>
               </tr>
             {{ end }}
           </tbody>
         </table>
       {{ else }}
-        <p class="meta">{{ $.NoValues }}</p>
+        <p class="meta">{{ .Empty }}</p>
       {{ end }}
     </section>
   {{ end }}
