@@ -2,20 +2,115 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>{{ .Title }}</title>
+  <meta name="monitor-live" content="{{ .StalledNotice }}" data-rendering="{{ .Rendering }}">
   <script>
-    // The reader's time zone is the one thing the server cannot know (ADR 0026): state it,
-    // then fetch the page again in it. The cookie is read back first, so a browser that
-    // will not store it keeps the UTC page instead of fetching forever. reload() keeps the
-    // address whole, fragment included, where replacing it would only jump to the anchor.
     (function () {
-      try {
-        var zone = Intl.DateTimeFormat().resolvedOptions().timeZone;
-        if (!zone || holds(zone)) return;
-        document.cookie = "tz=" + zone + "; path=/; max-age=31536000; samesite=lax" +
-          (location.protocol === "https:" ? "; secure" : "");
-        if (holds(zone)) location.reload();
-      } catch (e) {
-        // A browser that refuses to answer about its zone or its cookies reads UTC.
+      // The reader's time zone is the one thing the server cannot know (ADR 0026): state it,
+      // then fetch the page again in it. The cookie is read back first, so a browser that
+      // will not store it keeps the UTC page instead of fetching forever. reload() keeps the
+      // address whole, fragment included, where replacing it would only jump to the anchor.
+      if (stateZone()) {
+        location.reload();
+        return;
+      }
+
+      // An open page fetches its own address and swaps in the answer's body when it
+      // changed, so the document and its scroll position stay (ADR 0029).
+      var period = 30000;
+      var marker = 'meta[name="monitor-live"]';
+      var mine = document.querySelector(marker);
+      if (!mine || !window.fetch || !window.DOMParser || !window.AbortController) return;
+      var shown = null;
+      var stalled = false;
+      var inFlight = false;
+      var halted = false;
+      var leaving = false;
+      var next;
+
+      function refresh() {
+        if (inFlight || halted) return;
+        clearTimeout(next);
+        if (document.visibilityState !== "visible") return;
+        inFlight = true;
+        stateZone();
+        var started = performance.now();
+        // A slow answer is waited for, since an abort would also dismiss a credential prompt
+        // and bring it back on the next refresh; only one that never comes, on a connection
+        // that died, is given up on, so the page recovers when the hub is back.
+        var late = setTimeout(stall, period / 2);
+        var abort = new AbortController();
+        var dead = setTimeout(function () { abort.abort(); }, 4 * period);
+        fetch(location.href, { cache: "no-store", credentials: "same-origin", signal: abort.signal })
+          .then(function (answer) {
+            // A refused credential would bring the browser's prompt back every period, so
+            // refreshing stops until the reader reloads the page by hand.
+            if (answer.status === 401) halted = true;
+            if (answer.status === 401 || answer.status >= 500 || answer.redirected) throw answer.status;
+            return answer.text();
+          })
+          .then(function (html) {
+            var page = new DOMParser().parseFromString(html, "text/html");
+            var theirs = page.querySelector(marker);
+            if (!theirs) throw "not a hub page";
+            if (theirs.getAttribute("data-rendering") !== mine.getAttribute("data-rendering")) {
+              location.reload();
+              return;
+            }
+            var body = page.body.innerHTML;
+            if (stalled || body !== (shown === null ? document.body.innerHTML : shown)) {
+              document.body.replaceWith(page.body);
+            }
+            shown = body;
+            stalled = false;
+          })
+          .catch(stall)
+          .then(function () {
+            clearTimeout(late);
+            clearTimeout(dead);
+            inFlight = false;
+            if (!halted) next = setTimeout(refresh, Math.max(0, period - (performance.now() - started)));
+          });
+      }
+
+      // The page stays as it was, under a notice: the last good numbers with a warning are
+      // worth more than an error in their place. A fetch the browser cancels because the
+      // reader is leaving is not a failure.
+      function stall() {
+        if (leaving) return;
+        stalled = true;
+        if (document.getElementById("monitor-stalled")) return;
+        var notice = document.createElement("p");
+        notice.id = "monitor-stalled";
+        notice.setAttribute("role", "status");
+        notice.textContent = mine.getAttribute("content");
+        notice.style.cssText = "position: sticky; top: 0; margin: 0 0 1rem; padding: 0.4rem 0.6rem;" +
+          " background: #fdecc8; color: #6a4a00; font-size: 0.9rem;";
+        document.body.insertBefore(notice, document.body.firstChild);
+      }
+
+      next = setTimeout(refresh, period);
+      document.addEventListener("visibilitychange", refresh);
+      window.addEventListener("pagehide", function () {
+        leaving = true;
+      });
+      window.addEventListener("pageshow", function (event) {
+        leaving = false;
+        if (event.persisted) refresh();
+      });
+
+      // stateZone writes the browser's zone into the cookie when it differs, and answers
+      // whether the cookie now holds it. A browser that refuses to answer about its zone or
+      // its cookies reads UTC.
+      function stateZone() {
+        try {
+          var zone = Intl.DateTimeFormat().resolvedOptions().timeZone;
+          if (!zone || holds(zone)) return false;
+          document.cookie = "tz=" + zone + "; path=/; max-age=31536000; samesite=lax" +
+            (location.protocol === "https:" ? "; secure" : "");
+          return holds(zone);
+        } catch (e) {
+          return false;
+        }
       }
       function holds(zone) {
         return document.cookie.split("; ").indexOf("tz=" + zone) >= 0;

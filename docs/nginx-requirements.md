@@ -109,11 +109,15 @@ path list grows; do not enumerate paths where a prefix rule will do.
     week". It must not log the `Authorization` header, and nothing that carries a credential
     should end up in a query string.
 
-12. **No `Content-Security-Policy` that blocks inline script on the HTML pages.** The pages
-    carry one small inline block, which is how the hub learns the reader's time zone
-    ([0026](decisions/0026-reader-time-zone-from-the-browser.md)). Blocked, every page
-    silently falls back to UTC and nothing on our side reports it. A policy is welcome as
-    long as its `script-src` admits that block.
+12. **No `Content-Security-Policy` that blocks inline script on the HTML pages, or their
+    fetching their own origin.** The pages carry one small inline block, which is how the hub
+    learns the reader's time zone ([0026](decisions/0026-reader-time-zone-from-the-browser.md))
+    and how an open page keeps itself current by fetching its own address every 30 seconds
+    ([0029](decisions/0029-pages-refresh-by-fetching-their-own-address.md)). A blocked script
+    leaves every page silently in UTC and never refreshed, and nothing on our side reports
+    it; a blocked fetch keeps every open page under a notice that it is not being refreshed.
+    A policy is welcome as long as its `script-src` admits that block and its `connect-src`
+    admits `'self'`.
 
 13. **Generated credentials reach us out of band** — not in this repository, not in an issue,
     not in a pull request. What we need back is the public name, the credential for a person

@@ -2,7 +2,8 @@
 
 - **Status:** approved
 - **Owns:** what every hub HTML page shares — how it learns the time zone the reader is in,
-  how it says which zone it used, and the shell that carries both: `internal/hub/shell.go`,
+  how it says which zone it used, how an open page keeps itself current, and the shell that
+  carries all three: `internal/hub/shell.go`,
   `internal/hub/templates/shell.html` and the printer's zone in `internal/i18n`. Formatting
   itself stays with `internal/i18n`; what a page *contains* stays with that page's own spec
   ([history.md](history.md) for `/history` and for the values on `/`); the reader's language
@@ -12,7 +13,8 @@
   [0008](../decisions/0008-english-repo-bilingual-ui.md),
   [0018](../decisions/0018-history-through-the-api.md),
   [0023](../decisions/0023-proxy-holds-the-web-perimeter.md),
-  [0026](../decisions/0026-reader-time-zone-from-the-browser.md)
+  [0026](../decisions/0026-reader-time-zone-from-the-browser.md),
+  [0029](../decisions/0029-pages-refresh-by-fetching-their-own-address.md)
 
 ## Purpose
 
@@ -21,9 +23,13 @@ A timestamp means nothing until it is read in the zone the reader lives in: "col
 answers UTC on the API, so the zone is a property of the *reader*, not of the data — and
 the only party that knows it is the browser.
 
-This spec owns that one translation: how the browser's zone reaches the hub, what a page
-does before it has it, and what happens when it is wrong or refused. It owns no page's
-content and no number's format.
+This spec owns that translation — how the browser's zone reaches the hub, what a page does
+before it has it, and what happens when it is wrong or refused — and keeping an open page
+current. It owns no page's content and no number's format.
+
+A panel is also left open. A page that shows what was true when it was opened, and says
+nothing about it, is wrong the same quiet way a page in the wrong zone is: it looks right.
+So an open page keeps itself current, and says so when it cannot.
 
 ## Behaviour
 
@@ -54,6 +60,30 @@ tell which of them they are.
 | the same address opened again after the browser has learned its zone | the reader's zone, never the earlier answer served again |
 | a refusal or a failure rendered as a page | the same zone handling as any other page: a first visit that fails still leaves the reader in their own zone afterwards |
 
+### Keeping an open page current {#live}
+
+| While the page is open and in front | What the reader sees |
+|---|---|
+| a node reports a new value | the new value within 30 seconds, without the page reloading, at the same distance from the top of the page |
+| nothing changes | nothing moves: no flicker, and the scroll position, a text selection and the focus stay as they are |
+| a series stops arriving and nothing is reported at all | its stale mark, or its row leaving, within 30 seconds of when a fresh load would first show it |
+| a chart | follows the hub's present as a fresh load would, since its window ends there; how often that visibly moves it depends on the window's length |
+| the tab is in the background | nothing is fetched; brought back to the front, the page shows the current state as soon as the hub answers |
+| a page brought back by the back or forward button | the same: current as soon as the hub answers |
+| the hub or the proxy does not answer within 15 seconds, answers with a failure, or answers with something that is not a hub page | the page as it was, under a notice in the reader's language that it is not being refreshed; the notice leaves with the first refresh that succeeds |
+| the hub cannot read its data | the same notice over the page as it was, on the index and on a chart alike: the last good rendering outlives a failure |
+| the proxy stops accepting the reader's credentials | the browser asks for them, as a reload would; refused, the page stays under the notice and is not refreshed again until the reader reloads it |
+| the hub answers with a refusal of the page's query | that refusal, as a fresh load of the address would show it |
+| the address carries a query — a chart window, a language | the refreshed page is what reloading that address would show: the same window, the same language |
+| the browser has moved to another zone, or dropped what it stored | the next refresh in the browser's current zone |
+| the hub was upgraded, or the page's language changed | the page reloads once, whole, in the new rendering |
+| the reader uses the back button afterwards | the page they came from; refreshing added nothing to the browser's history |
+| scripting is turned off | the page as it was drawn, never refreshed; reloading it by hand still works |
+
+What the script does in a browser — the timing, the swap, the scroll, the notice — is
+checked by hand in one; the hub's side of it, what every page carries for the script, is
+tested.
+
 ## Invariants
 
 - Every page says which zone its times are in, and no two times on one page are in
@@ -65,8 +95,17 @@ tell which of them they are.
   never in the hub host's.
 - No zone a browser reports makes the hub open anything outside its zone database, fail a
   request, or answer twice as slowly.
-- A page arrives at most twice for one browser zone, and a browser that stores nothing still
-  gets a page.
+- Learning the zone costs a page at most one extra arrival, and a browser that stores
+  nothing still gets a page.
+- A refreshed page shows what reloading its address at that moment would, never a mix of
+  two renderings.
+- A page in front that is not being kept current says so within a minute: with no notice on
+  it, it is at most a minute behind the hub — counted from when it came to the front — or
+  has its scripting turned off.
+- Whether an answer counts is settled before what it looks like: a failure, a refused
+  credential, a redirect or an answer that is not a hub page puts the notice up, whatever
+  it carries; only a hub page that succeeded or refused the query is shown, reloading the
+  page whole when it comes from another version of the hub or in another language.
 
 ## Edge cases
 
@@ -89,8 +128,22 @@ tell which of them they are.
   seven days — is a first visit again, and converges the same way. Nothing accumulates.
 - **A page reached by the back button** is fetched again wherever a page that may not be
   stored is also not restored, and shows the current zone; where it is restored instead, it
-  is the rendering it was left with, since nothing runs on a restore. Which of the two a
-  reader gets is their browser's to decide, and neither is wrong.
+  is the rendering it was left with, refreshed as soon as the hub answers. Which of
+  the two a reader gets is their browser's to decide, and neither is wrong.
+- **A page that gets shorter on a refresh** — a row left, a node went — keeps the scroll
+  position where it still exists and ends at the new bottom otherwise.
+- **A refresh that changes something** replaces the page's content, so a text selection or
+  a focused link inside it is lost then. Only a change costs that; an unchanged refresh
+  touches nothing. A chart on a short window changes on nearly every refresh, so a
+  selection on it rarely lasts longer than a period.
+- **A slow answer** puts the notice up after 15 seconds and is still waited for; when it
+  arrives, it is shown and the notice leaves. One still missing after two minutes is given
+  up on, so a connection that died does not stop the page refreshing once the hub is back;
+  a credential prompt nobody answers is dismissed then too, and asked again on the next
+  refresh. A refresh never starts while the previous one
+  is in flight, so a hub under load gets one request per open page, never a queue of them.
+- **Leaving the page** while a refresh is in flight is not a failure: the notice does not go
+  up on the way out, nor on a page the browser restores later.
 - **A storage failure on the index** is plain text rather than a page, as it was before any
   of this, so it carries no shell and leaves the reader's zone unlearnt until the hub answers
   again. It is not cached either way.
@@ -104,6 +157,9 @@ tell which of them they are.
 - What a page contains and which queries it accepts — that page's own spec.
 - The zone a digest is sent in: a property of the installation, configured
   ([evaluation.md](evaluation.md)), not of whoever opens the panel.
+- Delivering a change to the page the instant it arrives —
+  [0029](../decisions/0029-pages-refresh-by-fetching-their-own-address.md) says why a
+  30-second fetch is enough for now.
 - Whether a page may be opened at all, and any policy the proxy sets in front of it —
   [0023](../decisions/0023-proxy-holds-the-web-perimeter.md) and
   [nginx-requirements.md](../nginx-requirements.md).

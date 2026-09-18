@@ -23,8 +23,7 @@ var pageTemplate = template.Must(template.ParseFS(templates, "templates/index.ht
 // view is the page as the template sees it: every string is already translated and every
 // number already formatted, so the template holds no logic and no English.
 type view struct {
-	Locale         i18n.Locale
-	Title          string
+	shell
 	Version        string
 	Empty          string
 	LastSeenLabel  string
@@ -80,8 +79,7 @@ func Page(store storage.Storage, targets func(node string) (evaluate.Target, boo
 
 func index(printer *i18n.Printer, states []storage.NodeState, targets func(node string) (evaluate.Target, bool), now time.Time, lang string) view {
 	out := view{
-		Locale:         printer.Locale(),
-		Title:          printer.T("page.title"),
+		shell:          shellOf(printer, "page.title"),
 		Version:        version.Current,
 		Empty:          printer.T("page.empty"),
 		LastSeenLabel:  printer.T("node.last_seen"),

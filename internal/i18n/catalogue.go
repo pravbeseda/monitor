@@ -6,6 +6,7 @@ var catalogue = map[string]map[Locale]string{
 	"page.title":      {English: "Monitor", Russian: "Монитор"},
 	"page.nodes":      {English: "Nodes", Russian: "Узлы"},
 	"page.empty":      {English: "No node has reported yet", Russian: "Ни один узел ещё не отчитался"},
+	"page.stalled":    {English: "Not refreshed: the hub is not answering", Russian: "Не обновляется: хаб не отвечает"},
 	"node.last_seen":  {English: "Last seen", Russian: "Последний отчёт"},
 	"node.no_values":  {English: "No measurements yet", Russian: "Измерений ещё нет"},
 	"node.no_current": {English: "No current measurements", Russian: "Актуальных измерений нет"},
