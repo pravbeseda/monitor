@@ -139,8 +139,13 @@ func (a *Agent) collect(ctx context.Context, now time.Time) []api.Measurement {
 		if !configured || !setting.enabled {
 			continue
 		}
-		if last, seen := a.collected[s.Name()]; seen && now.Sub(last) < setting.interval {
-			continue
+		if last, seen := a.collected[s.Name()]; seen {
+			// By the wall clock, since the monotonic one stands still while the node sleeps;
+			// a clock set back makes the sensor due instead of silent until it catches up.
+			elapsed := now.Round(0).Sub(last)
+			if elapsed >= 0 && elapsed < setting.interval {
+				continue
+			}
 		}
 		a.collected[s.Name()] = now
 

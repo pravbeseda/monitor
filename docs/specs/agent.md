@@ -58,6 +58,13 @@ One row = one test. Anchors: `spec: agent.md#<heading>`.
 | a sensor returns an error | tick | the error is logged, the other sensors still post |
 | a sensor that does not answer within half the base tick | tick | its collection is abandoned and logged; the tick goes on without it |
 | a sensor's interval changes | next tick | it is measured from the sensor's last collection, not from the change |
+| the node slept through all or part of a sensor's interval | the first tick that starts once the interval has passed by the clock | it collects: the time asleep counts toward the interval |
+| the clock was set forward past a sensor's interval | tick | it collects once early, then keeps its interval |
+| the clock was set back to before a sensor's last collection | tick | it collects, rather than staying silent until the clock catches up |
+
+Sensor intervals are measured by the wall clock, because the monotonic clock stands still
+while the node sleeps. A clock set back by less than the time since a sensor's last
+collection delays that sensor by at most the size of the jump, and by less than one interval.
 
 ### Delivering
 
@@ -102,10 +109,10 @@ lands in the right place in history.
 - **The hub is unreachable for hours**: measurements accumulate up to the buffer cap,
   the oldest going first; the node's silence is the hub's business to detect
   ([evaluation](evaluation.md#node-silence)).
-- **The clock jumps** (sleep, NTP correction): a sensor is due when its interval has
-  elapsed by the monotonic clock, so a jump neither floods the hub nor stalls collection.
-- **A laptop sleeps and wakes**: the first tick after waking finds every sensor due and
-  posts one request with all of them.
+- **A laptop sleeps and wakes**: the first tick may start up to one base tick after waking,
+  because the wait between ticks does not count the time asleep; a tick the sleep caught
+  midway finishes first, on the time it started with. From there, the sleep row of
+  [Ticking](#ticking) holds.
 - **The hub answers 403** (the node does not match the token): logged as a configuration
   error, and the agent keeps ticking — the operator fixes the hub, not the node.
 

@@ -204,6 +204,83 @@ func TestCollectsOnlyDueSensors(t *testing.T) {
 	}
 }
 
+// agentAfterOneCollection is an agent whose disk sensor, on an hourly interval, collected
+// one tick ago.
+func agentAfterOneCollection(t *testing.T) (*agent.Agent, *clock, *stub) {
+	t.Helper()
+	h, c := &hub{}, &clock{at: start}
+	h.answers = []answer{{response: configure("v1", "5m", map[string]api.SensorConfig{
+		"disk": {Enabled: true, Interval: "1h"},
+	})}}
+	disk := &stub{name: "disk"}
+	a := newAgent(t, h, c, disk)
+	for range 2 { // the first tick brings the configuration, the second collects
+		if err := a.Tick(context.Background()); err != nil {
+			t.Fatalf("tick: %v", err)
+		}
+		c.advance(5 * time.Minute)
+	}
+	if disk.calls != 1 {
+		t.Fatalf("disk collected %d times, want once before the test begins", disk.calls)
+	}
+	return a, c, disk
+}
+
+// spec: agent.md#ticking — the time a node spends asleep counts toward the interval.
+// This pins the rule, not the regression: the test clock carries no monotonic reading, and
+// Go offers no way to build one that stands still while the wall clock moves on.
+func TestSleepCountsTowardTheInterval(t *testing.T) {
+	a, c, disk := agentAfterOneCollection(t)
+
+	c.advance(3 * time.Hour)
+	if err := a.Tick(context.Background()); err != nil {
+		t.Fatalf("tick after waking: %v", err)
+	}
+
+	if disk.calls != 2 {
+		t.Errorf("disk collected %d times, want the first tick after waking to collect", disk.calls)
+	}
+}
+
+// spec: agent.md#ticking — a clock set forward costs one early collection, then the interval holds.
+func TestClockSetForwardCollectsOnceEarly(t *testing.T) {
+	a, c, disk := agentAfterOneCollection(t)
+
+	c.advance(2 * time.Hour)
+	if err := a.Tick(context.Background()); err != nil {
+		t.Fatalf("tick after the clock was set forward: %v", err)
+	}
+	c.advance(5 * time.Minute)
+	if err := a.Tick(context.Background()); err != nil {
+		t.Fatalf("next tick: %v", err)
+	}
+
+	if disk.calls != 2 {
+		t.Errorf("disk collected %d times, want one early collection and then its interval", disk.calls)
+	}
+}
+
+// spec: agent.md#ticking — a clock set back does not silence a sensor until it catches up.
+func TestClockSetBackMakesTheSensorDue(t *testing.T) {
+	a, c, disk := agentAfterOneCollection(t)
+
+	c.advance(-2 * time.Hour)
+	if err := a.Tick(context.Background()); err != nil {
+		t.Fatalf("tick after the clock was set back: %v", err)
+	}
+	if disk.calls != 2 {
+		t.Fatalf("disk collected %d times, want the tick after the clock was set back to collect", disk.calls)
+	}
+
+	c.advance(5 * time.Minute)
+	if err := a.Tick(context.Background()); err != nil {
+		t.Fatalf("next tick: %v", err)
+	}
+	if disk.calls != 2 {
+		t.Errorf("disk collected %d times, want the interval to run from the collection after the set-back", disk.calls)
+	}
+}
+
 // spec: agent.md#ticking — a disabled sensor is not called, whatever its interval.
 func TestSkipsDisabledSensor(t *testing.T) {
 	h, c := &hub{}, &clock{at: start}
