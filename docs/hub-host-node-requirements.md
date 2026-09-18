@@ -2,15 +2,18 @@
 
 The hub host is provisioned by Ansible, in the repository that owns that host, and the hub is
 installed from there. This file is the requirement handed to it for the next step: **the same
-play also installs the agent on that host**, so the host's own disks are watched like any
-other node's. It says what the result must be, not how the role is written. Per
-[ADR 0007](decisions/0007-public-repository.md) no host name, node name, domain or token may
-enter this repository; `hub.example.com` and `server-a` below are placeholders.
+play also installs the agent on that host and keeps it on the version the hub names for it**,
+so the host's own disks are watched like any other node's. It says what the result must be,
+not how the role is written. Per [ADR 0007](decisions/0007-public-repository.md) no host
+name, node name, domain or token may enter this repository; `hub.example.com` and `server-a`
+below are placeholders.
 
 Related: [install.md](install.md) is the operator's guide the role automates,
 [specs/installer.md](specs/installer.md) and [specs/deployment.md](specs/deployment.md) own
 what an install does and leaves on disk, and [nginx-requirements.md](nginx-requirements.md)
-is the proxy half of the same host. Why every play restarts both services rather than
+is the proxy half of the same host.
+[ADR 0028](decisions/0028-agents-follow-a-target-the-hub-serves.md) is why the agent follows a
+target rather than a version the play pins. Why every play restarts both services rather than
 detecting a change is [log/2026-09-13-hub-host-node.md](log/2026-09-13-hub-host-node.md).
 
 The durations below are the hub's compiled-in defaults; a `hub.yaml` that overrides
@@ -19,7 +22,8 @@ The durations below are the hub's compiled-in defaults; a `hub.yaml` that overri
 ## What is added
 
 One more service beside the hub, installed by the same installer in its other role
-([installer.md](specs/installer.md#edge-cases)):
+([installer.md](specs/installer.md#edge-cases)), and the update service that keeps it on its
+target:
 
 | What | Value |
 |---|---|
@@ -27,6 +31,8 @@ One more service beside the hub, installed by the same installer in its other ro
 | binary | `/usr/local/bin/monitor-agent` |
 | its settings and token | `/etc/monitor/agent.env`, root, `0600` |
 | account | root — the agent stats every mounted volume |
+| update units | `monitor-agent-update.service` and `.timer`, hourly |
+| what they run | `/usr/local/libexec/monitor/monitor-install.sh`, the copy the hub's timer already keeps |
 
 Nothing about the hub, the proxy or the firewall changes.
 
@@ -81,12 +87,13 @@ Nothing about the hub, the proxy or the firewall changes.
    skipping the check. The run is
 
    ```sh
-   sh monitor-install.sh agent --version 1.2.3 --hub http://127.0.0.1:8080 --node server-a
+   sh monitor-install.sh agent --hub http://127.0.0.1:8080 --node server-a
    ```
 
-   - The version is pinned in a role variable of the agent's own, so the hub and the agent
-     can be moved separately. A pinned version older than the installed one is refused
-     unless the run adds `--allow-downgrade`.
+   - The run names no `--version`: the agent's version is the hub's `agent_target`
+     (requirement 11). Without `--version` the installer installs the newest release, and the
+     follow run after it moves the agent to the target, an older one included. A version pinned here would be
+     refused by the downgrade guard as soon as the timer had moved the agent past it.
    - The vault token is the whole of stdin, on every run: the installer reads stdin whenever
      it is not a terminal and waits for it to close, and what a task with no `stdin` of its
      own inherits is not something to rely on. Trailing newlines are dropped; anything else
@@ -119,11 +126,14 @@ Nothing about the hub, the proxy or the firewall changes.
 8. **The role does not write `agent.env` or the agent's unit.** The installer owns both and
    rewrites them on every run ([ADR 0020](decisions/0020-agent-reads-its-environment-file.md)).
 
-9. **Installs are sequential, and the hub goes first.** Two installer runs at once on one
-   host are not supported, and the hub's update timer counts as one: starting its service
-   waits for a run already in progress instead of overlapping it. The hub is installed and
-   restarted before the agent: the hub accepts measurements from an agent older than itself,
-   and nothing promises the reverse ([ADR 0022](decisions/0022-updates-are-pulled.md)).
+9. **Installs are sequential, and the hub goes first.** Two installer runs of the same role
+   at once on one host are not supported, and each role's update timer counts as one
+   ([installer.md](specs/installer.md#edge-cases)): starting the hub's update service waits
+   for a run already in progress instead of overlapping it, and requirement 11 keeps the
+   agent's timer off requirement 5's run. A hub run and an agent run may overlap. The hub is
+   installed and restarted before the agent: the hub accepts measurements from an agent older
+   than itself, and nothing promises the reverse
+   ([ADR 0022](decisions/0022-updates-are-pulled.md)).
 
 10. **The hub is installed by its own update service, never with a pinned version.** The play
     writes `/etc/monitor/hub.target` from a role variable — `latest` or a version — places the
@@ -137,17 +147,47 @@ Nothing about the hub, the proxy or the firewall changes.
     instead of starting another, and that run may have read the target before the play
     rewrote it; a play that changed the target therefore starts the service a second time.
 
+11. **The agent follows the hub's target through its own update service**, as
+    [install.md](install.md#keeping-a-node-upgraded-unattended) describes for any node.
+    - `hub.yaml` names `agent_target` from a role variable — `latest` or one
+      `MAJOR.MINOR.PATCH`, at the top level or on this node
+      ([hub-config.md](specs/hub-config.md)). The role has no default for it: an undefined
+      variable fails the play, because following is switched on by configuration, never by a
+      default. It goes back no further than v0.1.6, the first release whose installer answers
+      an agent's follow run, and neither does `hub.target`: an older hub answers `404` and
+      every follow run fails.
+    - The agent's target is never later than the hub's (requirement 9): when `hub.target`
+      names a version, `agent_target` names that version or an earlier one, not `latest`, and
+      the role fails the play otherwise. What is installed can still run ahead of the hub
+      twice, and both windows are accepted: requirement 5's run installs the newest release
+      until the follow run below moves it back, and with both targets `latest` the agent's
+      timer can take a new release up to an hour before the hub's does.
+    - The kept script is the one requirement 10 places, fetched and checked on every play: a
+      copy older than [ADR 0028](decisions/0028-agents-follow-a-target-the-hub-serves.md)
+      refuses `agent --follow-target`.
+    - After requirement 3's restart, in this order:
+      1. place `monitor-agent-update.service` and `.timer` unchanged from the repository,
+         `daemon-reload`, and enable the timer without starting it — on a first play
+         `agent.env` does not exist yet, and a run before it does would fail;
+      2. in one `block` with requirement 5's run: stop the timer, wait while
+         `monitor-agent-update.service` is `activating` — a unit left `failed` by an earlier
+         run is not waited for — and only then run the install, so it never overlaps an update
+         run; the block's `always` starts the timer again when `agent.env`
+         exists, so a failed play never leaves an installed agent without updates;
+      3. `systemctl start monitor-agent-update.service`, which returns when the run has
+         finished; a failed run fails the play. The hub it asks has already read the target.
+    - The run asks the hub over requirement 4's loopback address, and loopback is trusted to
+      be the hub because only it holds that port: the hub's port stays below 1024, or the host
+      has no account that is not trusted ([installer.md](specs/installer.md#edge-cases)).
+
 ## What we are not asking for
 
 - No change detection: every play restarts both services on purpose (requirements 3 and 5).
 - No nginx or firewall change: the agent never leaves loopback.
 - No separate account for the agent: it runs as root by design
   ([deployment.md](specs/deployment.md#where-things-live)).
-- No update timer for the agent: upgrading it is re-running the play with a new version. A
-  node can follow the hub's target from a timer of its own
-  ([ADR 0028](decisions/0028-agents-follow-a-target-the-hub-serves.md),
-  [install.md](install.md#keeping-a-node-upgraded-unattended)); on this host the play keeps
-  that choice, and placing the timer is a change to these requirements.
+- No agent version in the role: pinning, canarying and rolling back are `agent_target` edits
+  (requirement 11).
 
 ## How we check it is done
 
@@ -157,8 +197,11 @@ journal's groups sees nothing, and a count of zero proves nothing. `grep -c` exi
 counts zero, so a task wrapping these lines judges by the output, not the status.
 
 ```sh
-systemctl is-enabled monitor-hub.service monitor-agent.service   # enabled, enabled
-systemctl is-active monitor-agent.service                        # active
+systemctl is-enabled monitor-hub.service monitor-agent.service monitor-agent-update.timer
+                                                                 # enabled, enabled, enabled
+systemctl is-active monitor-agent.service monitor-agent-update.timer   # active, active
+sudo journalctl -u monitor-agent-update.service -n 20            # "… is already installed; nothing to do", or an install
+/usr/local/bin/monitor-agent --version                           # the version agent_target resolves to
 sudo journalctl -u monitor-agent.service -n 20                   # "node server-a reporting to http://127.0.0.1:8080"
 sudo journalctl -u monitor-agent.service --since -15min | grep -c 'tick failed'   # 0
 sudo stat -c '%U %a' /etc/monitor /etc/monitor/agent.env         # root 755, root 600
@@ -175,13 +218,16 @@ arguments, with diffs on. Two runs, and each must reach the tasks that carry the
 
 - a green one that also changes the content of `hub.env` — adding a line to it will do — so
   that its template task would have a diff to print;
-- a failing one that overrides the agent's version variable with a version that was never
-  released. The hub follows its target and still succeeds, the agent's fetch fails inside
-  the `block`, and the `rescue` prints the installer's `stderr`.
+- a failing one, run with a line the agent refuses appended to `agent.env`, which the role
+  never writes (requirement 8). The hub follows its target and still succeeds, the installer
+  refuses the file inside the `block` before writing anything, and the `rescue` prints its
+  `stderr`, which names the file and the line number. Remove the line afterwards.
 
 The token is read from a file descriptor, so it is not an argument of `grep` either (bash):
 
 ```sh
 ansible-playbook … -vvv --diff 2>&1 | grep -cFf /dev/fd/3 3<<<"$token"                               # 0
-ansible-playbook … -vvv --diff -e <agent version variable>=0.0.1 2>&1 | grep -cFf /dev/fd/3 3<<<"$token"   # 0, the play failed in the agent's rescue
+echo 'not a setting' | sudo tee -a /etc/monitor/agent.env >/dev/null                      # on the hub host
+ansible-playbook … -vvv --diff 2>&1 | grep -cFf /dev/fd/3 3<<<"$token"   # 0, the play failed in the agent's rescue
+sudo sed -i '$d' /etc/monitor/agent.env                                                    # on the hub host
 ```
