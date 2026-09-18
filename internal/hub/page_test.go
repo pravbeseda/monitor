@@ -64,7 +64,7 @@ func show(t *testing.T, store storage.Storage, target, acceptLanguage string) *h
 		req.Header.Set("Accept-Language", acceptLanguage)
 	}
 	rec := httptest.NewRecorder()
-	hub.Page(store, diskEvery(time.Minute)).ServeHTTP(rec, req)
+	hub.Page(store, diskEvery(time.Minute), func() time.Time { return lastSeen }).ServeHTTP(rec, req)
 	return rec
 }
 
@@ -187,8 +187,8 @@ func TestRootIsMountedOnTheRoutes(t *testing.T) {
 	}
 }
 
-// spec: history.md#page — a series that stopped arriving while its node reports is hidden
-// when removable and marked otherwise, aged against the node's last-seen time.
+// spec: history.md#page — a series that stopped arriving is hidden when removable and marked
+// otherwise.
 func TestPageLeavesOutOrMarksSeriesThatStoppedArriving(t *testing.T) {
 	const marker = "no fresh data"
 	bound := 3 * time.Minute
@@ -229,22 +229,34 @@ func TestPageLeavesOutOrMarksSeriesThatStoppedArriving(t *testing.T) {
 	}
 }
 
-// spec: history.md#page — a node that stopped reporting keeps its rows as they were, and a
-// node still reporting with no measurements ages them like any other.
-func TestPageAgesSeriesByTheirNodesLastReport(t *testing.T) {
-	stick := storage.Value{
-		Metric: "disk.free_pct",
-		Labels: map[string]string{"mount": "/Volumes/stick-a", "fs": "apfs", "removable": "true"},
-		Value:  1,
-		TS:     lastSeen,
+// spec: history.md#page — series age by the hub's clock, the age evaluation freezes by: a
+// node that stopped reporting and one reporting with no measurements age alike.
+func TestPageAgesSeriesByTheHubsClock(t *testing.T) {
+	anHourAgo := lastSeen.Add(-time.Hour)
+	values := []storage.Value{
+		{
+			Metric: "disk.free_pct",
+			Labels: map[string]string{"mount": "/Volumes/stick-a", "fs": "apfs", "removable": "true"},
+			Value:  1,
+			TS:     anHourAgo,
+		},
+		{
+			Metric: "disk.free_pct",
+			Labels: map[string]string{"mount": "/Volumes/data-a", "fs": "apfs", "removable": "false"},
+			Value:  1,
+			TS:     anHourAgo,
+		},
 	}
-	silent := storage.NodeState{Node: "laptop-a", LastSeen: lastSeen, Values: []storage.Value{stick}}
-	heartbeatOnly := storage.NodeState{Node: "server-b", LastSeen: lastSeen.Add(time.Hour), Values: []storage.Value{stick}}
+	silent := storage.NodeState{Node: "laptop-a", LastSeen: anHourAgo, Values: values}
+	heartbeatOnly := storage.NodeState{Node: "server-b", LastSeen: lastSeen, Values: values}
 
 	body := show(t, stored{states: []storage.NodeState{silent, heartbeatOnly}}, "/", "").Body.String()
 
-	if got := strings.Count(body, "/Volumes/stick-a"); got != 1 {
-		t.Errorf("the stick is shown %d times, want once: under the silent node only; page = %q", got, body)
+	if strings.Contains(body, "/Volumes/stick-a") {
+		t.Errorf("page = %q, want the stick left out under both nodes", body)
+	}
+	if got := strings.Count(body, "no fresh data"); got != 2 {
+		t.Errorf("%d rows marked, want the fixed volume marked under both nodes; page = %q", got, body)
 	}
 }
 

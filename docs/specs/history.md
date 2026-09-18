@@ -202,12 +202,12 @@ subject's values stale; one definition of "this node was not reporting", not two
 | a series with a two-day silence inside a seven-day window | the line broken across the gap, not drawn straight through it |
 | a query the endpoint refuses, or a read that fails | the same status the endpoint answers, as a translated page |
 | a value on `/` | a link to the history page of its series, carrying the node, the metric and every label |
-| a series on `/` whose newest point is older than its node's last-seen time by more than three times the interval the node resolves for its sensor ([gaps](#gaps)), and that carries `removable: "true"` | not shown: an unplugged drive or an ejected disk image is not a reading |
+| a series on `/` whose newest point is older, when the page is read, than three times the interval the node resolves for its sensor ([gaps](#gaps)), and that carries `removable: "true"` | not shown: an unplugged drive or an ejected disk image is not a reading |
 | the same, without `removable: "true"` | shown, its collected time marked, in the reader's language, as holding no fresh data |
-| a series on `/` exactly three intervals behind its node's last-seen time | shown unmarked: the bound is inclusive, as for gaps |
+| a series on `/` exactly three intervals old | shown unmarked: the bound is inclusive, as for gaps |
 | that series reporting again | shown as before, unmarked |
 | a series whose node resolves no interval for its sensor — a metric in no rule, a sensor resolved `enabled: false`, a node the configuration no longer names | shown unmarked however old: nothing says how often it should report |
-| a node that has stopped reporting | its series shown as they were when it stopped: its last-seen time stops with them, and its silence is [evaluation](evaluation.md#node-silence)'s to report |
+| a node that has stopped reporting | its series age like any other and are hidden or marked once past the bound — the moment [evaluation](evaluation.md#freezing) freezes them |
 | a node whose every series is left out | "no current measurements" in place of its table, rather than the "no measurements yet" of a node that never sent one |
 | a node still reporting but sending no measurements — its mount table unreadable | its series age like any other and are hidden or marked once past the bound |
 | `&lang=ru` | axis labels, dates, byte sizes and percentages in Russian |
@@ -236,14 +236,15 @@ unit reads naturally.
 - **A volume that disappeared** — an unplugged removable disk — keeps its stored points and
   keeps being returned while they are inside the window. Only `/` leaves it out
   ([the page](#page)); the endpoints and the drill-down still reach it.
-- **A series that vanished is measured against its node's last-seen time**, not against the
-  page's own clock, so a node that stops reporting keeps its rows as they were rather than
-  losing every removable one. Otherwise the age is the one [evaluation](evaluation.md#freezing)
-  freezes by: an agent clock running behind by more than the bound hides and marks what
-  evaluation freezes, and points stamped ahead by a clock since corrected keep their series
-  shown until real time passes them. Until the State API carries freshness
-  ([0001](../decisions/0001-semantic-core-and-skins.md)), `/` derives it from the factor
-  evaluation uses, so the two cannot drift apart.
+- **A series that vanished is aged exactly as [evaluation](evaluation.md#freezing) ages a
+  subject** — the hub's clock against the point's own stamp — so a row is hidden or marked
+  precisely while evaluation holds it frozen. A laptop asleep overnight therefore shows its
+  internal volume marked and its external drive gone until it reports again; its silence is
+  told by its last-seen time and by [evaluation](evaluation.md#node-silence). An agent clock
+  running behind by more than the bound hides and marks what evaluation freezes, and points
+  stamped ahead by a clock since corrected stay shown until real time passes them. Until the
+  State API carries freshness ([0001](../decisions/0001-semantic-core-and-skins.md)), `/`
+  derives it from the same factor and the same clock rather than reading it from the core.
 - **A removable volume plugged back under another mount point** is a new series; the old one
   stays hidden.
 - **A sensor interval lowered while the agent still holds the old one** can hide a removable

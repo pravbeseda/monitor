@@ -6,6 +6,7 @@ import (
 	"log/slog"
 	"net/http"
 	"strings"
+	"time"
 
 	"github.com/pravbeseda/monitor/internal/history"
 	"github.com/pravbeseda/monitor/internal/i18n"
@@ -55,7 +56,7 @@ type valueView struct {
 
 // Page renders the latest state of every node, leaving out what has vanished: interval is
 // how often a node is expected to report a metric (docs/specs/history.md#page).
-func Page(store storage.Storage, interval history.Interval) http.Handler {
+func Page(store storage.Storage, interval history.Interval, now func() time.Time) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		values := r.URL.Query()
 		printer := i18n.For(i18n.Negotiate(values.Get("lang"), r.Header.Get("Accept-Language"))).In(zoneOf(r))
@@ -70,13 +71,13 @@ func Page(store storage.Storage, interval history.Interval) http.Handler {
 		}
 
 		shellHeaders(w)
-		if err := pageTemplate.Execute(w, index(printer, states, interval, language(values))); err != nil {
+		if err := pageTemplate.Execute(w, index(printer, states, interval, now(), language(values))); err != nil {
 			slog.Error("render the page", "error", err)
 		}
 	})
 }
 
-func index(printer *i18n.Printer, states []storage.NodeState, interval history.Interval, lang string) view {
+func index(printer *i18n.Printer, states []storage.NodeState, interval history.Interval, now time.Time, lang string) view {
 	out := view{
 		Locale:         printer.Locale(),
 		Title:          printer.T("page.title"),
@@ -104,8 +105,8 @@ func index(printer *i18n.Printer, states []storage.NodeState, interval history.I
 				Collected: printer.Time(value.TS),
 				History:   historyLink(state.Node, value.Metric, value.Labels, lang, ""),
 			}
-			// Aged against the node's own last report, so a silent node keeps its rows.
-			if history.Gap(interval(state.Node, value.Metric), value.TS, state.LastSeen) {
+			// Aged by the clock evaluation freezes by, so the two never disagree.
+			if history.Gap(interval(state.Node, value.Metric), value.TS, now) {
 				if value.Labels["removable"] == "true" {
 					continue
 				}

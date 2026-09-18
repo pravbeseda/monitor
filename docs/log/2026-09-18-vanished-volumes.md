@@ -1,4 +1,4 @@
-# 2026-09-18 — Vanished volumes: why the page hides by `removable` and ages by last-seen
+# 2026-09-18 — Vanished volumes: why the page hides by `removable` and ages by the hub's clock
 
 The index page showed the latest value of every series ever stored, so a Mac's page filled
 with Time Machine snapshot mounts and an ejected installer image, each frozen at the moment
@@ -20,11 +20,16 @@ Three options were weighed by the operator:
 
 ## What the spec reviews changed
 
-- **The age is measured against the node's last-seen time**, not its newest point. Measuring
-  against the newest point was skew-free, but a node sending only heartbeats would never age
-  its rows, and a node whose only volumes are removable would keep the last one unplugged for
-  ever — the bug being fixed. Last-seen also stops when the node stops, so a silent node keeps
-  its rows instead of losing every removable one.
+- **The age is measured by the hub's clock**, as evaluation freezes by. The first draft
+  measured against the node's newest point: skew-free, but a node sending only heartbeats
+  would never age its rows, and a node whose only volumes are removable would keep the last
+  one unplugged for ever — the bug being fixed. The spec review moved it to the node's
+  last-seen time, so a silent node would keep its rows as they were. The PR review then
+  pointed out that this gave the page a freshness verdict of its own: for a silent node,
+  evaluation froze every volume while the page showed them unmarked, against
+  [0001](../decisions/0001-semantic-core-and-skins.md). The operator chose the hub's clock —
+  one definition of stale for evaluation, charts and the page — accepting that a sleeping
+  laptop's external drive leaves the page until the laptop reports again.
 - **Snapshots are grouped, not dropped.** A rule dropping every `@` source would also drop a
   root mounted from a snapshot; grouping lets the container's shorter mount point win and
   still reports a snapshot that is its container's only watched member.
