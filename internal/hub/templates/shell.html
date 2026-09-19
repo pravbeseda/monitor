@@ -1,7 +1,26 @@
 {{ define "shell" }}
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="color-scheme" content="dark">
   <title>{{ .Title }}</title>
+  <style>
+    :root {
+      color-scheme: dark;
+      --bg: #111418;
+      --fg: #d8dde3;
+      --muted: #8b949e;
+      --faint: #6e7681;
+      --rule: #2d333b;
+      --grid: #1f242b;
+      --link: #6cb6ff;
+      --accent: #3fb950;
+      --warn: #d29922;
+      --notice-bg: #3d2e00;
+      --notice-fg: #f2cc60;
+    }
+    body { background: var(--bg); color: var(--fg); }
+    a { color: var(--link); }
+  </style>
   <meta name="monitor-live" content="{{ .StalledNotice }}" data-rendering="{{ .Rendering }}">
   <script>
     (function () {
@@ -84,7 +103,7 @@
         notice.setAttribute("role", "status");
         notice.textContent = mine.getAttribute("content");
         notice.style.cssText = "position: sticky; top: 0; margin: 0 0 1rem; padding: 0.4rem 0.6rem;" +
-          " background: #fdecc8; color: #6a4a00; font-size: 0.9rem;";
+          " background: var(--notice-bg); color: var(--notice-fg); font-size: 0.9rem;";
         document.body.insertBefore(notice, document.body.firstChild);
       }
 
