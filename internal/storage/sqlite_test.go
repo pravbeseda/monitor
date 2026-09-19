@@ -180,7 +180,7 @@ func TestSaveIngestKeepsOneMeasurementPerMillisecond(t *testing.T) {
 	}
 }
 
-func TestStatesReturnsTheLatestValueOfEachSeries(t *testing.T) {
+func TestSnapshotReturnsTheLatestValueOfEachSeries(t *testing.T) {
 	db := open(t)
 	first := time.Date(2026, 8, 28, 10, 0, 5, 0, time.UTC)
 	older := Measurement{Metric: "disk.free_bytes", Labels: map[string]string{"mount": "/"}, Value: 500, TS: collected}
@@ -190,10 +190,11 @@ func TestStatesReturnsTheLatestValueOfEachSeries(t *testing.T) {
 		t.Fatalf("SaveIngest: %v", err)
 	}
 
-	states, err := db.States(context.Background())
+	snap, err := db.Snapshot(context.Background(), nil)
 	if err != nil {
-		t.Fatalf("States: %v", err)
+		t.Fatalf("Snapshot: %v", err)
 	}
+	states := snap.Nodes
 	if len(states) != 1 || states[0].Node != "laptop-a" {
 		t.Fatalf("states = %+v, want one node", states)
 	}
@@ -211,7 +212,7 @@ func TestStatesReturnsTheLatestValueOfEachSeries(t *testing.T) {
 }
 
 // spec: ingest.md#storage — valid request: node's agent version replaced by the request's.
-func TestStatesReturnsTheAgentVersionOfTheLatestRequest(t *testing.T) {
+func TestSnapshotReturnsTheAgentVersionOfTheLatestRequest(t *testing.T) {
 	db := open(t)
 	received := time.Date(2026, 8, 28, 10, 0, 5, 0, time.UTC)
 	older := ingest("laptop-a", received)
@@ -224,16 +225,17 @@ func TestStatesReturnsTheAgentVersionOfTheLatestRequest(t *testing.T) {
 		}
 	}
 
-	states, err := db.States(context.Background())
+	snap, err := db.Snapshot(context.Background(), nil)
 	if err != nil {
-		t.Fatalf("States: %v", err)
+		t.Fatalf("Snapshot: %v", err)
 	}
+	states := snap.Nodes
 	if len(states) != 1 || states[0].AgentVersion != "0.2.0" {
 		t.Errorf("states = %+v, want the version the upgraded agent reported", states)
 	}
 }
 
-func TestStatesIncludesANodeThatSentNoMeasurements(t *testing.T) {
+func TestSnapshotIncludesANodeThatSentNoMeasurements(t *testing.T) {
 	db := open(t)
 	received := time.Date(2026, 8, 28, 10, 0, 5, 0, time.UTC)
 
@@ -241,16 +243,17 @@ func TestStatesIncludesANodeThatSentNoMeasurements(t *testing.T) {
 		t.Fatalf("SaveIngest: %v", err)
 	}
 
-	states, err := db.States(context.Background())
+	snap, err := db.Snapshot(context.Background(), nil)
 	if err != nil {
-		t.Fatalf("States: %v", err)
+		t.Fatalf("Snapshot: %v", err)
 	}
+	states := snap.Nodes
 	if len(states) != 1 || len(states[0].Values) != 0 {
 		t.Errorf("states = %+v, want the node with no values", states)
 	}
 }
 
-func TestStatesOrdersNodesByName(t *testing.T) {
+func TestSnapshotOrdersNodesByName(t *testing.T) {
 	db := open(t)
 	received := time.Date(2026, 8, 28, 10, 0, 5, 0, time.UTC)
 	for _, node := range []string{"server-b", "laptop-a"} {
@@ -259,10 +262,11 @@ func TestStatesOrdersNodesByName(t *testing.T) {
 		}
 	}
 
-	states, err := db.States(context.Background())
+	snap, err := db.Snapshot(context.Background(), nil)
 	if err != nil {
-		t.Fatalf("States: %v", err)
+		t.Fatalf("Snapshot: %v", err)
 	}
+	states := snap.Nodes
 
 	if len(states) != 2 || states[0].Node != "laptop-a" || states[1].Node != "server-b" {
 		t.Errorf("states = %+v, want them ordered by name", states)

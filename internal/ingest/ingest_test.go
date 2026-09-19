@@ -51,8 +51,6 @@ func (s *spy) SaveIngest(_ context.Context, in storage.Ingest) error {
 	return nil
 }
 
-func (s *spy) States(context.Context) ([]storage.NodeState, error) { return nil, nil }
-
 func (s *spy) Series(context.Context, storage.Selection) ([]storage.SeriesRef, error) {
 	return nil, nil
 }

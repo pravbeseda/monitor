@@ -124,7 +124,7 @@ nodes:
 - [x] Agents upgrade themselves hourly to the version the hub names for their node
       ([0028](decisions/0028-agents-follow-a-target-the-hub-serves.md),
       [installer spec](specs/installer.md#answering-a-follow-run-for-the-agent))
-- [ ] nginx vhost for the hub, per-node tokens, authentication on the web page and a
+- [x] nginx vhost for the hub, per-node tokens, authentication on the web page and a
       credential a program can send to the read endpoints. The proxy holds that credential
       ([0023](decisions/0023-proxy-holds-the-web-perimeter.md)) and what it has to do is
       [nginx-requirements.md](nginx-requirements.md); the vhost itself is applied from the
@@ -135,7 +135,9 @@ nodes:
       [munin hub-plugin proposal](log/2026-08-29-munin-hub-plugin.md)
 - [x] `/api/v1/series`, `/api/v1/history` and the drill-down page
       ([history spec](specs/history.md))
-- [ ] Roll out to every node, observe for a week, tune thresholds
+- [x] `/api/v1/state` and the levels on `/`, so a node turns red on the page
+      ([state spec](specs/state.md), [0030](decisions/0030-the-state-api-reports-the-stored-verdict.md))
+- [x] Roll out to every node, observe for a week, tune thresholds
 
 **Done when**: filling a disk on a test node produces a Telegram alert within one interval,
 the node turns red on the web page, and the value history is visible for the whole

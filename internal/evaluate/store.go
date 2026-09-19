@@ -8,8 +8,8 @@ import (
 )
 
 // Store is what evaluation needs of persistence, declared where it is consumed: the hub's
-// own Storage boundary keeps the three methods ingest and the web page use, so adding to
-// this one costs nothing to their test doubles.
+// own Storage boundary keeps what ingest and the history pages use, and the state declares
+// its own, so adding to this one costs nothing to their test doubles.
 type Store interface {
 	// Snapshot is the one view a tick evaluates against: nodes and their latest values,
 	// the level every subject held, and each subject's newest transition among the levels

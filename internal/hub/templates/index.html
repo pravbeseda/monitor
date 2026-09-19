@@ -13,6 +13,9 @@
     th, td { text-align: left; padding: 0.3rem 0.6rem; border-bottom: 1px solid var(--rule); }
     th { font-weight: 600; font-size: 0.85rem; color: var(--muted); }
     small.stale { color: var(--warn); }
+    .level-ok { color: var(--accent); }
+    .level-warning { color: var(--warn); }
+    .level-critical { color: var(--bad); font-weight: 600; }
   </style>
 </head>
 <body>
@@ -22,8 +25,8 @@
   {{ end }}
   {{ range .Nodes }}
     <section>
-      <h2>{{ .Name }}{{ with .Version }} <small>{{ . }}</small>{{ end }}</h2>
-      <p class="meta">{{ $.LastSeenLabel }}: {{ .LastSeen }}</p>
+      <h2>{{ .Name }}{{ with .Version }} <small>{{ . }}</small>{{ end }}{{ with .Level }} <span class="{{ .Class }}">{{ .Word }}</span>{{ end }}</h2>
+      <p class="meta">{{ $.LastSeenLabel }}: {{ .LastSeen }}{{ with .Silent }} <small class="level-critical">{{ . }}</small>{{ end }}</p>
       {{ if .Rows }}
         <table>
           <thead>
@@ -31,6 +34,7 @@
               <th>{{ $.MetricLabel }}</th>
               <th>{{ $.VolumeLabel }}</th>
               <th>{{ $.ValueLabel }}</th>
+              <th>{{ $.LevelLabel }}</th>
               <th>{{ $.CollectedLabel }}</th>
             </tr>
           </thead>
@@ -40,6 +44,7 @@
                 <td>{{ .Metric }}</td>
                 <td>{{ .Volume }}</td>
                 <td>{{ range $i, $_ := .Values }}{{ if $i }} · {{ end }}<a href="{{ .History }}" title="{{ .Metric }}">{{ .Value }}</a>{{ end }}</td>
+                <td>{{ with .Level }}<span class="{{ .Class }}">{{ .Word }}</span>{{ else }}—{{ end }}</td>
                 <td>{{ .Collected }}{{ with .Stale }} <small class="stale">{{ . }}</small>{{ end }}</td>
               </tr>
             {{ end }}

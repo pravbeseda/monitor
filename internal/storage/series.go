@@ -132,12 +132,12 @@ func sortSeries[T any](series []T, ref func(T) SeriesRef) {
 		if a.Node != b.Node {
 			return a.Node < b.Node
 		}
-		return labelKey(a.Labels) < labelKey(b.Labels)
+		return LabelKey(a.Labels) < LabelKey(b.Labels)
 	})
 }
 
-// labelKey renders a label set as the order the history contract sorts by.
-func labelKey(labels map[string]string) string {
+// LabelKey renders a label set as the order the history and state contracts sort by.
+func LabelKey(labels map[string]string) string {
 	keys := make([]string, 0, len(labels))
 	for key := range labels {
 		keys = append(keys, key)

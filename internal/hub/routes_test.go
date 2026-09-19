@@ -20,7 +20,7 @@ func routes(t *testing.T) http.Handler {
 	return routesWith(t, stored{}, time.Now)
 }
 
-func routesWith(t *testing.T, store storage.Storage, now func() time.Time) http.Handler {
+func routesWith(t *testing.T, store hub.Store, now func() time.Time) http.Handler {
 	t.Helper()
 	t.Setenv("MONITOR_TOKEN_LAPTOP_A", strings.Repeat("synthetic-", 4))
 	t.Setenv("MONITOR_TOKEN_SERVER_B", strings.Repeat("server-b-", 4))

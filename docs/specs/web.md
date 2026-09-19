@@ -6,7 +6,8 @@
   carries all three: `internal/hub/shell.go`,
   `internal/hub/templates/shell.html` and the printer's zone in `internal/i18n`. Formatting
   itself stays with `internal/i18n`; what a page *contains* stays with that page's own spec
-  ([history.md](history.md) for `/history` and for the values on `/`); the reader's language
+  ([history.md](history.md) for `/history` and for the values on `/`, [state.md](state.md)
+  for the levels on `/`); the reader's language
   is settled by [0008](../decisions/0008-english-repo-bilingual-ui.md) and needs nothing
   here. The JSON API is not a reader: nothing here touches it.
 - **Decisions:** [0005](../decisions/0005-poc-stack.md),
