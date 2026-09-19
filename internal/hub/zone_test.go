@@ -126,6 +126,25 @@ func TestEveryPageCarriesTheShell(t *testing.T) {
 	}
 }
 
+// spec: web.md#shell — every page, a refusal included, names its tab icon inline, so the
+// browser asks the hub for no /favicon.ico of its own.
+func TestEveryPageCarriesItsIcon(t *testing.T) {
+	pages := map[string]storage.Storage{
+		"/":       stored{states: []storage.NodeState{laptop}},
+		oneVolume: served{series: []storage.SeriesPoints{volume()}},
+		"/history?metric=disk.free_pct&nonsense=1": served{},
+	}
+
+	for target, page := range pages {
+		t.Run(target, func(t *testing.T) {
+			body := getFrom(t, page, target, "").Body.String()
+			if want := `<link rel="icon" href="data:image/svg+xml,`; !strings.Contains(body, want) {
+				t.Errorf("page does not carry %q", want)
+			}
+		})
+	}
+}
+
 // spec: web.md#shell — a refusal is a page too, so a first visit that fails still leaves
 // the reader in their own zone for the next one.
 func TestARefusedPageCarriesTheShell(t *testing.T) {

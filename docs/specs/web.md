@@ -59,6 +59,7 @@ tell which of them they are.
 | any HTML page of the hub | `Cache-Control: no-store`, and `Vary: Cookie, Accept-Language` — the answer depends on who is asking and is never a stored copy |
 | the same address opened again after the browser has learned its zone | the reader's zone, never the earlier answer served again |
 | a refusal or a failure rendered as a page | the same zone handling as any other page: a first visit that fails still leaves the reader in their own zone afterwards |
+| any HTML page of the hub, in a browser tab | the monitor's own icon, a green pulse line on the dark page colour, carried inside the page so it costs no request of its own |
 
 ### Keeping an open page current {#live}
 
