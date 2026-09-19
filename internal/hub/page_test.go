@@ -369,9 +369,12 @@ func diskValue(metric, mount, removable string, value float64, age time.Duration
 }
 
 // spec: history.md#page — a volume is one row: the sensor, the volume, and its free space in
-// bytes then in percent, each value its own link.
+// bytes then in percent, each value its own link, whatever order storage returns them in.
 func TestPageShowsAVolumeAsOneRow(t *testing.T) {
-	body := show(t, stored{states: []storage.NodeState{laptop}}, "/", "").Body.String()
+	reversed := laptop
+	reversed.Values = []storage.Value{laptop.Values[1], laptop.Values[0]}
+
+	body := show(t, stored{states: []storage.NodeState{reversed}}, "/", "").Body.String()
 
 	got := rows(body)
 	if len(got) != 1 {

@@ -152,8 +152,8 @@ type seriesRow struct {
 	series []storage.Value
 }
 
-// byRow groups values into rows ordered by name, then by labels, whichever of a row's
-// series happens to be stored first.
+// byRow groups values into rows ordered by name, then by labels, each row's series ordered
+// by metric: whatever order storage returns them in.
 func byRow(values []storage.Value) []seriesRow {
 	var rows []seriesRow
 	position := map[rowKey]int{}
@@ -182,6 +182,9 @@ func byRow(values []storage.Value) []seriesRow {
 		}
 		return a.labels < b.labels
 	})
+	for _, row := range rows {
+		sort.Slice(row.series, func(i, j int) bool { return row.series[i].Metric < row.series[j].Metric })
+	}
 	return rows
 }
 
