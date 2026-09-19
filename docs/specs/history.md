@@ -202,10 +202,15 @@ subject's values stale; one definition of "this node was not reporting", not two
 | a series with a two-day silence inside a seven-day window | the line broken across the gap, not drawn straight through it |
 | a query the endpoint refuses, or a read that fails | the same status the endpoint answers, as a translated page |
 | a value on `/` | a link to the history page of its series, carrying the node, the metric and every label |
-| a series on `/` that [evaluation](evaluation.md#freezing) holds frozen when the page is read — its newest point older than three times the interval the node resolves for its sensor ([gaps](#gaps)), or its node silent past its `silence_after` — and that carries `removable: "true"` | not shown: an unplugged drive or an ejected disk image is not a reading |
+| a volume on `/` | one row: the sensor's name as its metric, the volume, and in one cell its free space in bytes then in percent, each value its own link |
+| a series whose metric no rule declares | a row of its own: its metric id and its single value |
+| a volume only one of whose series is stored | its row with that value alone |
+| the series of one volume collected at different times | the older of the times, and the row left out or marked by that age, as [evaluation](evaluation.md#freezing) freezes the volume by its older series |
+| the rows of one node | ordered by metric, then by volume, as the series are |
+| a row on `/` that [evaluation](evaluation.md#freezing) holds frozen when the page is read — the newest point of its older series older than three times the interval the node resolves for its sensor ([gaps](#gaps)), or its node silent past its `silence_after` — and that carries `removable: "true"` | not shown: an unplugged drive or an ejected disk image is not a reading |
 | the same, without `removable: "true"` | shown, its collected time marked, in the reader's language, as holding no fresh data |
-| a series on `/` exactly three intervals old | shown unmarked: the bound is inclusive, as for gaps |
-| that series reporting again | shown as before, unmarked |
+| a row on `/` exactly three intervals old | shown unmarked: the bound is inclusive, as for gaps |
+| that row reporting again | shown as before, unmarked |
 | a series whose node resolves no interval for its sensor — a metric in no rule, a sensor resolved `enabled: false`, a node the configuration no longer names | shown unmarked however old, and however long its node is silent: evaluation judges no subject for it |
 | a node silent past its `silence_after`, its series not yet three intervals old | its series hidden or marked already: evaluation freezes a silent node's subjects in the tick it falls silent |
 | a node whose every series is left out | "no current measurements" in place of its table, rather than the "no measurements yet" of a node that never sent one |
@@ -245,7 +250,7 @@ unit reads naturally.
   shown until real time passes them. Until the State API carries freshness
   ([0001](../decisions/0001-semantic-core-and-skins.md)), `/` applies that rule to the values
   it reads rather than reading the verdict from the core. Evaluation ages a volume by the
-  older of its two series; `/` ages each row by its own, and the two are collected together.
+  older of its two series, and `/` ages a volume's row the same way.
 - **A removable volume plugged back under another mount point** is a new series; the old one
   stays hidden.
 - **A sensor interval lowered while the agent still holds the old one** can hide a removable
