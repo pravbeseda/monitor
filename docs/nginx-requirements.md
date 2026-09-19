@@ -38,6 +38,7 @@ Its whole HTTP surface:
 | `/history` | GET | a person in a browser | no |
 | `/api/v1/series` | GET | a program, a chart renderer | no |
 | `/api/v1/history` | GET | a program, a chart renderer | no |
+| `/api/v1/state` | GET | a program, a skin | no |
 
 The version prefix `/api/v1/` is part of the contract and later endpoints keep it. Assume the
 path list grows; do not enumerate paths where a prefix rule will do.

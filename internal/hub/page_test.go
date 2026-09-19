@@ -20,14 +20,15 @@ var lastSeen = time.Date(2026, 8, 28, 10, 5, 0, 0, time.UTC)
 // stored is a storage that answers with whatever the test put in it.
 type stored struct {
 	states []storage.NodeState
+	levels []storage.State
 	err    error
 }
 
 func (s stored) SaveIngest(context.Context, storage.Ingest) error { return nil }
 func (s stored) Close() error                                     { return nil }
 
-func (s stored) States(context.Context) ([]storage.NodeState, error) {
-	return s.states, s.err
+func (s stored) Snapshot(context.Context, []string) (storage.Snapshot, error) {
+	return storage.Snapshot{Nodes: s.states, States: s.levels}, s.err
 }
 
 func (s stored) Series(context.Context, storage.Selection) ([]storage.SeriesRef, error) {
@@ -57,14 +58,14 @@ var laptop = storage.NodeState{
 	},
 }
 
-func show(t *testing.T, store storage.Storage, target, acceptLanguage string) *httptest.ResponseRecorder {
+func show(t *testing.T, store hub.Snapshots, target, acceptLanguage string) *httptest.ResponseRecorder {
 	t.Helper()
 	req := httptest.NewRequest(http.MethodGet, target, nil)
 	if acceptLanguage != "" {
 		req.Header.Set("Accept-Language", acceptLanguage)
 	}
 	rec := httptest.NewRecorder()
-	hub.Page(store, configured(time.Minute, time.Hour), func() time.Time { return lastSeen }).ServeHTTP(rec, req)
+	hub.Page(hub.ReadState(store, configured(time.Minute, time.Hour), func() time.Time { return lastSeen })).ServeHTTP(rec, req)
 	return rec
 }
 
@@ -339,7 +340,7 @@ func TestPageFreezesTheRowsOfASilentNode(t *testing.T) {
 	req := httptest.NewRequest(http.MethodGet, "/", nil)
 	rec := httptest.NewRecorder()
 
-	page := hub.Page(stored{states: []storage.NodeState{state}}, configured(time.Hour, 30*time.Second), func() time.Time { return lastSeen })
+	page := hub.Page(hub.ReadState(stored{states: []storage.NodeState{state}}, configured(time.Hour, 30*time.Second), func() time.Time { return lastSeen }))
 	page.ServeHTTP(rec, req)
 
 	body := rec.Body.String()
@@ -384,7 +385,7 @@ func TestPageShowsAVolumeAsOneRow(t *testing.T) {
 	if !strings.Contains(row, "<td>disk</td>") {
 		t.Errorf("row = %q, want it named by its sensor", row)
 	}
-	if cells := strings.Count(row, "<td>"); cells != 4 {
+	if cells := strings.Count(row, "<td>"); cells != 5 {
 		t.Errorf("row = %q, %d cells, want both values in one", row, cells)
 	}
 	bytes, pct := strings.Index(row, "1.5 GB"), strings.Index(row, "34.2%")

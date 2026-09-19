@@ -10,6 +10,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/pravbeseda/monitor/internal/hub"
 	"github.com/pravbeseda/monitor/internal/storage"
 )
 
@@ -51,7 +52,7 @@ func volume() storage.SeriesPoints {
 	}
 }
 
-func get(t *testing.T, store storage.Storage, target string) *httptest.ResponseRecorder {
+func get(t *testing.T, store hub.Store, target string) *httptest.ResponseRecorder {
 	t.Helper()
 	recorder := httptest.NewRecorder()
 	routesWith(t, store, at).ServeHTTP(recorder, httptest.NewRequest(http.MethodGet, target, nil))

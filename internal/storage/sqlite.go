@@ -214,11 +214,6 @@ func (s *SQLite) SaveIngest(ctx context.Context, in Ingest) (err error) {
 	return nil
 }
 
-// States reads what the web page shows: one entry per node, latest value per series.
-func (s *SQLite) States(ctx context.Context) ([]NodeState, error) {
-	return states(ctx, s.db)
-}
-
 func states(ctx context.Context, from querier) ([]NodeState, error) {
 	states, order, err := nodeStates(ctx, from)
 	if err != nil {

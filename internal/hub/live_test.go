@@ -7,6 +7,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/pravbeseda/monitor/internal/hub"
 	"github.com/pravbeseda/monitor/internal/storage"
 	"github.com/pravbeseda/monitor/internal/version"
 )
@@ -17,7 +18,7 @@ func liveMarker(notice, lang string) string {
 	return `<meta name="monitor-live" content="` + notice + `" data-rendering="` + version.Current + " " + lang + `">`
 }
 
-func getIn(t *testing.T, store storage.Storage, target, acceptLanguage string) *httptest.ResponseRecorder {
+func getIn(t *testing.T, store hub.Store, target, acceptLanguage string) *httptest.ResponseRecorder {
 	t.Helper()
 	req := httptest.NewRequest(http.MethodGet, target, nil)
 	req.Header.Set("Accept-Language", acceptLanguage)
@@ -30,7 +31,7 @@ func getIn(t *testing.T, store storage.Storage, target, acceptLanguage string) *
 // and failures rendered as pages included, with the notice in the reader's language.
 func TestEveryPageKeepsItselfCurrent(t *testing.T) {
 	pages := map[string]struct {
-		store  storage.Storage
+		store  hub.Store
 		target string
 	}{
 		"index":             {stored{states: []storage.NodeState{laptop}}, "/"},

@@ -8,6 +8,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/pravbeseda/monitor/internal/hub"
 	"github.com/pravbeseda/monitor/internal/storage"
 )
 
@@ -20,7 +21,7 @@ func TestMain(m *testing.M) {
 }
 
 // getFrom renders a page for a browser presenting a stored zone.
-func getFrom(t *testing.T, store storage.Storage, target, zone string) *httptest.ResponseRecorder {
+func getFrom(t *testing.T, store hub.Store, target, zone string) *httptest.ResponseRecorder {
 	t.Helper()
 	req := httptest.NewRequest(http.MethodGet, target, nil)
 	if zone != "" {
@@ -99,7 +100,7 @@ func TestAPIStaysInUTCForAReaderWithAZone(t *testing.T) {
 // carrying its own would be the one that is silently UTC, or the one a cache keeps.
 func TestEveryPageCarriesTheShell(t *testing.T) {
 	store := served{series: []storage.SeriesPoints{volume()}}
-	pages := map[string]storage.Storage{"/": stored{states: []storage.NodeState{laptop}}, oneVolume: store}
+	pages := map[string]hub.Store{"/": stored{states: []storage.NodeState{laptop}}, oneVolume: store}
 
 	for target, page := range pages {
 		t.Run(target, func(t *testing.T) {
@@ -129,7 +130,7 @@ func TestEveryPageCarriesTheShell(t *testing.T) {
 // spec: web.md#shell — every page, a refusal included, names its tab icon inline, so the
 // browser asks the hub for no /favicon.ico of its own.
 func TestEveryPageCarriesItsIcon(t *testing.T) {
-	pages := map[string]storage.Storage{
+	pages := map[string]hub.Store{
 		"/":       stored{states: []storage.NodeState{laptop}},
 		oneVolume: served{series: []storage.SeriesPoints{volume()}},
 		"/history?metric=disk.free_pct&nonsense=1": served{},

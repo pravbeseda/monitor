@@ -6,10 +6,11 @@ import (
 	"testing"
 	"time"
 
+	"github.com/pravbeseda/monitor/internal/hub"
 	"github.com/pravbeseda/monitor/internal/storage"
 )
 
-func page(t *testing.T, store storage.Storage, target string) (int, string) {
+func page(t *testing.T, store hub.Store, target string) (int, string) {
 	t.Helper()
 	recorder := get(t, store, target)
 	// Every page is HTML, refusals included: a header set after the status line is lost.

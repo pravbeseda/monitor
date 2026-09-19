@@ -50,8 +50,8 @@ func (t Target) Rule(name, mount string) (Rule, bool) {
 // Frozen reports whether a value of a sensor, stamped at ts, is past judging at now: its
 // node has been silent longer than its class allows, or the value is older than three of the
 // sensor's intervals. A sensor the node does not run has no interval and never freezes. It is
-// exported because the index page hides and marks rows by the same rule
-// (docs/specs/history.md#page).
+// exported because the state ages a reading no subject reads by the same rule
+// (docs/specs/state.md#staleness).
 func (t Target) Frozen(sensor string, lastSeen, ts, now time.Time) bool {
 	interval, runs := t.Intervals[sensor]
 	if !runs {
@@ -74,6 +74,9 @@ type Subject struct {
 	Since    time.Time
 	// Level is what the subject is at now.
 	Level Level
+	// Restored says Previous and Since were read back from a stored level rather than
+	// assumed for a subject with none, or with one this build cannot read.
+	Restored bool
 	// LastNotifiedAt is zero until a message about this subject has been delivered.
 	LastNotifiedAt time.Time
 	// Readings are the values that produced Level, keyed by metric id: the event log
@@ -183,7 +186,7 @@ func restore(s *Subject, stored map[string]storage.State, now time.Time) {
 			"node", s.Node, "rule", s.Rule, "level", state.Level)
 		return
 	}
-	s.Previous, s.Since = level, state.Since
+	s.Previous, s.Since, s.Restored = level, state.Since, true
 }
 
 // reading is the two series of one volume, joined on byte-identical labels.

@@ -50,6 +50,7 @@ One decision per file, each stating what was rejected and why. New records start
 | [0027](decisions/0027-the-hub-installer-reuses-the-binary-in-place.md) | The hub's installer reuses a binary in place that is already its release | accepted |
 | [0028](decisions/0028-agents-follow-a-target-the-hub-serves.md) | Agents follow a target the hub serves under `/api/v1/agent/` | accepted |
 | [0029](decisions/0029-pages-refresh-by-fetching-their-own-address.md) | Pages refresh themselves by fetching their own address | accepted |
+| [0030](decisions/0030-the-state-api-reports-the-stored-verdict.md) | The State API reports the verdict evaluation stored | accepted |
 
 ## Behaviour specs
 
@@ -67,6 +68,7 @@ can see ([ADR 0017](decisions/0017-one-spec-and-decision-gates.md)). New specs s
 | [agent.md](specs/agent.md) | The agent: local configuration, tick loop, delivery and configuration application | approved |
 | [evaluation.md](specs/evaluation.md) | Levels, hysteresis, the event log, silence, digests and the notifier boundary | approved |
 | [history.md](specs/history.md) | The history series, `/api/v1/series`, `/api/v1/history` and the drill-down page | approved |
+| [state.md](specs/state.md) | `/api/v1/state`: subjects, readings, stored levels and staleness, and the levels on `/` | approved |
 | [release.md](specs/release.md) | How a merge tags itself, what a tag publishes, how a release is signed, and how an artifact is checked | approved |
 | [installer.md](specs/installer.md) | One command that installs or upgrades a hub or an agent from a signed release, the hub following the version its host names, and an agent following the one the hub names | approved |
 | [deployment.md](specs/deployment.md) | The install layout, the units — the hub's and the agents' update timers among them — and what `install-agent.sh` does to a node | approved |
@@ -87,6 +89,7 @@ Reasoning from working sessions, including options that were rejected.
 | [2026-09-14](log/2026-09-14-auto-tag.md) | A merge tags itself: how the tag reaches the release, and the tokens and tools that lost |
 | [2026-09-17](log/2026-09-17-agent-updater.md) | Agents follow the hub's target: what three spec reviews changed before the code |
 | [2026-09-18](log/2026-09-18-vanished-volumes.md) | Vanished volumes: why `/` hides by `removable`, ages by the hub's clock, and groups snapshots |
+| [2026-09-19](log/2026-09-19-state-api.md) | State API: why it comes before the MVP, and what the spec reviews changed |
 
 ## Not written yet
 

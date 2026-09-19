@@ -51,16 +51,13 @@ type Value struct {
 	TS     time.Time
 }
 
-// Storage is what ingest and the web page need of persistence (ADR 0005): SQLite behind an
-// interface. Evaluation declares its own, wider boundary where it consumes one, so adding
-// to that one costs these callers nothing.
+// Storage is what ingest and the history pages need of persistence (ADR 0005): SQLite
+// behind an interface. Evaluation and the state declare their own boundaries where they
+// consume one, so adding to those costs these callers nothing.
 type Storage interface {
 	// SaveIngest stores one request atomically — measurements, manifest and last-seen —
 	// skipping measurements already stored under the same node, metric, labels and ts.
 	SaveIngest(ctx context.Context, in Ingest) error
-	// States returns every known node, ordered by name, with the latest value of each
-	// of its series.
-	States(ctx context.Context) ([]NodeState, error)
 	// Series lists every stored series of a metric, ordered by node then by labels.
 	Series(ctx context.Context, sel Selection) ([]SeriesRef, error)
 	// Points reads those series with the points stored from `from` onwards, oldest first.

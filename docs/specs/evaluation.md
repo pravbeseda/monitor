@@ -407,8 +407,9 @@ makes it consistent ([hub-config.md](hub-config.md#invariants)).
 
 ## Out of scope
 
-- Colouring the web page by level and showing the event log → the page is a skin
-  ([0001](../decisions/0001-semantic-core-and-skins.md)); a follow-up, not this spec.
+- Showing levels on the web page → the page is a skin
+  ([0001](../decisions/0001-semantic-core-and-skins.md)) reading them from
+  [state.md](state.md). Showing the event log → a follow-up, not this spec.
 - Inbound Telegram commands (`/status`) → after the POC; stage 2 only sends.
 - A locale per recipient, which [0008](../decisions/0008-english-repo-bilingual-ui.md)
   anticipates → while there is one recipient, `notify.locale` is that locale.

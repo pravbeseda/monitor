@@ -383,10 +383,11 @@ func TestOpeningAStageOneDatabase(t *testing.T) {
 	if err := migrated.ApplyTransition(ctx, transition(volume("/"), tickOne, "ok", "warning")); err != nil {
 		t.Fatalf("the migrated database refuses a transition: %v", err)
 	}
-	nodes, err := migrated.States(ctx)
+	snap, err := migrated.Snapshot(ctx, nil)
 	if err != nil {
-		t.Fatalf("States: %v", err)
+		t.Fatalf("Snapshot: %v", err)
 	}
+	nodes := snap.Nodes
 	if len(nodes) != 1 || len(nodes[0].Values) != 1 {
 		t.Fatalf("the migration lost history: %+v", nodes)
 	}

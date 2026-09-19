@@ -4,9 +4,10 @@
 - **Owns:** `internal/history` (series: selection, window, reduction, gaps) and its consumers
   in `internal/hub` — `GET /api/v1/series`, `GET /api/v1/history` and the drill-down page
   `GET /history`, plus the link the index page `/` grows to reach it and which series `/`
-  hides or marks as no longer arriving. Reading stored points stays with `internal/storage`;
-  the expected interval of a series comes from the resolved configuration `internal/config`
-  already computes; every user-facing string comes from `internal/i18n`.
+  hides or marks as no longer arriving, by the staleness [state](state.md#staleness) reports.
+  Reading stored points stays with `internal/storage`; the expected interval of a series
+  comes from the resolved configuration `internal/config` already computes; every
+  user-facing string comes from `internal/i18n`.
 - **Decisions:** [0001](../decisions/0001-semantic-core-and-skins.md),
   [0005](../decisions/0005-poc-stack.md),
   [0007](../decisions/0007-public-repository.md),
@@ -207,7 +208,7 @@ subject's values stale; one definition of "this node was not reporting", not two
 | a volume only one of whose series is stored | its row with that value alone |
 | the series of one volume collected at different times | the older of the times, and the row left out or marked by that age, as [evaluation](evaluation.md#freezing) freezes the volume by its older series |
 | the rows of one node | ordered by metric, then by volume, as the series are |
-| a row on `/` that [evaluation](evaluation.md#freezing) holds frozen when the page is read — the newest point of its older series older than three times the interval the node resolves for its sensor ([gaps](#gaps)), or its node silent past its `silence_after` — and that carries `removable: "true"` | not shown: an unplugged drive or an ejected disk image is not a reading |
+| a row on `/` that the [state](state.md#staleness) calls stale when the page is read — the newest point of its older series older than three times the interval the node resolves for its sensor ([gaps](#gaps)), or its node silent past its `silence_after` — and that carries `removable: "true"` | not shown: an unplugged drive or an ejected disk image is not a reading |
 | the same, without `removable: "true"` | shown, its collected time marked, in the reader's language, as holding no fresh data |
 | a row on `/` exactly three intervals old | shown unmarked: the bound is inclusive, as for gaps |
 | that row reporting again | shown as before, unmarked |
@@ -247,9 +248,8 @@ unit reads naturally.
   asleep overnight therefore shows its internal volume marked and its external drive gone
   until it reports again. An agent clock running behind by more than the bound hides and
   marks what evaluation freezes, and points stamped ahead by a clock since corrected stay
-  shown until real time passes them. Until the State API carries freshness
-  ([0001](../decisions/0001-semantic-core-and-skins.md)), `/` applies that rule to the values
-  it reads rather than reading the verdict from the core. Evaluation ages a volume by the
+  shown until real time passes them. `/` reads that verdict from the
+  [State API](state.md#staleness) rather than applying the rule itself. Evaluation ages a volume by the
   older of its two series, and `/` ages a volume's row the same way.
 - **A removable volume plugged back under another mount point** is a new series; the old one
   stays hidden.

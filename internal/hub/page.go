@@ -7,11 +7,11 @@ import (
 	"net/http"
 	"sort"
 	"strings"
-	"time"
 
 	"github.com/pravbeseda/monitor/internal/evaluate"
 	"github.com/pravbeseda/monitor/internal/history"
 	"github.com/pravbeseda/monitor/internal/i18n"
+	"github.com/pravbeseda/monitor/internal/state"
 	"github.com/pravbeseda/monitor/internal/storage"
 	"github.com/pravbeseda/monitor/internal/version"
 )
@@ -31,6 +31,7 @@ type view struct {
 	MetricLabel    string
 	VolumeLabel    string
 	ValueLabel     string
+	LevelLabel     string
 	CollectedLabel string
 	Nodes          []nodeView
 }
@@ -39,17 +40,27 @@ type nodeView struct {
 	Name     string
 	Version  string
 	LastSeen string
-	Rows     []rowView
+	// Level is shown beside the name only when it is worth a glance: warning or critical.
+	Level  *levelView
+	Silent string
+	Rows   []rowView
 	// Empty says why a node has no rows: nothing measured yet, or nothing current.
 	Empty string
 }
 
-// rowView is what one sensor measured about one volume, or one series of a metric no rule
-// declares (docs/specs/history.md#page).
+// levelView is a level as the reader sees it: its word, and the mark that sets it apart.
+type levelView struct {
+	Word  string
+	Class string
+}
+
+// rowView is one subject, or the readings of one volume or one metric no rule declares
+// (docs/specs/history.md#page). A nil Level is shown as a dash.
 type rowView struct {
 	Metric    string
 	Volume    string
 	Values    []valueView
+	Level     *levelView
 	Collected string
 	// Stale is the translated mark of a row that stopped arriving, empty on a fresh one.
 	Stale string
@@ -62,16 +73,16 @@ type valueView struct {
 	History string
 }
 
-// Page renders the latest state of every node, leaving out or marking what evaluation holds
-// frozen: targets resolves a node as evaluation reads it (docs/specs/history.md#page).
-func Page(store storage.Storage, targets func(node string) (evaluate.Target, bool), now func() time.Time) http.Handler {
+// Page renders the state of every node — the debug view of docs/specs/state.md#page —
+// leaving out or marking what the state calls stale (docs/specs/history.md#page).
+func Page(read StateReader) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		values := r.URL.Query()
 		printer := i18n.For(i18n.Negotiate(values.Get("lang"), r.Header.Get("Accept-Language"))).In(zoneOf(r))
 
-		states, err := store.States(r.Context())
+		current, err := read(r.Context())
 		if err != nil {
-			slog.Error("read node states", "error", err)
+			slog.Error("read the state", "error", err)
 			// Plain text rather than a page, but a failure is still live state.
 			w.Header().Set("Cache-Control", "no-store")
 			http.Error(w, printer.T("error.storage"), http.StatusInternalServerError)
@@ -79,13 +90,13 @@ func Page(store storage.Storage, targets func(node string) (evaluate.Target, boo
 		}
 
 		shellHeaders(w)
-		if err := pageTemplate.Execute(w, index(printer, states, targets, now(), language(values))); err != nil {
+		if err := pageTemplate.Execute(w, index(printer, current, language(values))); err != nil {
 			slog.Error("render the page", "error", err)
 		}
 	})
 }
 
-func index(printer *i18n.Printer, states []storage.NodeState, targets func(node string) (evaluate.Target, bool), now time.Time, lang string) view {
+func index(printer *i18n.Printer, current state.State, lang string) view {
 	out := view{
 		shell:          shellOf(printer, "page.title"),
 		Version:        version.Current,
@@ -94,42 +105,31 @@ func index(printer *i18n.Printer, states []storage.NodeState, targets func(node 
 		MetricLabel:    printer.T("table.metric"),
 		VolumeLabel:    printer.T("table.volume"),
 		ValueLabel:     printer.T("table.free"),
+		LevelLabel:     printer.T("table.level"),
 		CollectedLabel: printer.T("table.collected"),
-		Nodes:          make([]nodeView, 0, len(states)),
+		Nodes:          make([]nodeView, 0, len(current.Nodes)),
 	}
-	for _, state := range states {
-		target, configured := targets(state.Node)
+	rows, silent := rowsByNode(current)
+	for _, reported := range current.Nodes {
 		node := nodeView{
-			Name:     state.Node,
-			Version:  state.AgentVersion,
-			LastSeen: printer.Time(state.LastSeen),
+			Name:     reported.Node,
+			Version:  reported.AgentVersion,
+			LastSeen: printer.Time(reported.LastSeen),
 		}
-		for _, group := range byRow(state.Values) {
-			first := group.series[0]
-			row := rowView{Metric: group.key.name, Volume: volume(printer, first.Labels)}
-			oldest := first.TS
-			for _, value := range group.series {
-				if value.TS.Before(oldest) {
-					oldest = value.TS
-				}
-				row.Values = append(row.Values, valueView{
-					Metric:  value.Metric,
-					Value:   format(printer, value.Metric, value.Value),
-					History: historyLink(state.Node, value.Metric, value.Labels, lang, ""),
-				})
+		if reported.Level != nil && *reported.Level != evaluate.OK {
+			node.Level = levelOf(printer, reported.Level)
+		}
+		if silent[reported.Node] {
+			node.Silent = printer.T("node.silent")
+		}
+		for _, group := range rows[reported.Node] {
+			if group.stale && group.labels["removable"] == "true" {
+				continue
 			}
-			row.Collected = printer.Time(oldest)
-			// Aged by its older series, as evaluation freezes the volume.
-			if configured && group.key.declared && target.Frozen(group.key.name, state.LastSeen, oldest, now) {
-				if first.Labels["removable"] == "true" {
-					continue
-				}
-				row.Stale = printer.T("value.stale")
-			}
-			node.Rows = append(node.Rows, row)
+			node.Rows = append(node.Rows, rowOf(printer, reported.Node, group, lang))
 		}
 		switch {
-		case len(state.Values) == 0:
+		case len(rows[reported.Node]) == 0:
 			node.Empty = printer.T("node.no_values")
 		case len(node.Rows) == 0:
 			node.Empty = printer.T("node.no_current")
@@ -137,6 +137,38 @@ func index(printer *i18n.Printer, states []storage.NodeState, targets func(node 
 		out.Nodes = append(out.Nodes, node)
 	}
 	return out
+}
+
+func rowOf(printer *i18n.Printer, node string, group seriesRow, lang string) rowView {
+	row := rowView{
+		Metric: group.key.name,
+		Volume: volume(printer, group.labels),
+		Level:  levelOf(printer, group.level),
+	}
+	oldest := group.values[0].TS
+	for _, value := range group.values {
+		if value.TS.Before(oldest) {
+			oldest = value.TS
+		}
+		row.Values = append(row.Values, valueView{
+			Metric:  value.Metric,
+			Value:   format(printer, value.Metric, value.Value),
+			History: historyLink(node, value.Metric, group.labels, lang, ""),
+		})
+	}
+	// Aged by its older series, as evaluation freezes the volume.
+	row.Collected = printer.Time(oldest)
+	if group.stale {
+		row.Stale = printer.T("value.stale")
+	}
+	return row
+}
+
+func levelOf(printer *i18n.Printer, level *evaluate.Level) *levelView {
+	if level == nil {
+		return nil
+	}
+	return &levelView{Word: printer.T("level." + level.String()), Class: "level-" + level.String()}
 }
 
 // rowKey identifies the series one row shows: one sensor's, or one undeclared metric's,
@@ -147,45 +179,81 @@ type rowKey struct {
 	labels   string
 }
 
+// seriesRow is one row before it is translated: a subject, or readings grouped the way a
+// subject would group them.
 type seriesRow struct {
 	key    rowKey
-	series []storage.Value
+	labels map[string]string
+	values []state.Value
+	level  *evaluate.Level
+	stale  bool
 }
 
-// byRow groups values into rows ordered by name, then by labels, each row's series ordered
-// by metric: whatever order storage returns them in.
-func byRow(values []storage.Value) []seriesRow {
-	var rows []seriesRow
-	position := map[rowKey]int{}
-	for _, value := range values {
-		labels, err := storage.Subject{Labels: value.Labels}.Key()
-		if err != nil {
-			slog.Error("group a series into a row", "metric", value.Metric, "error", err)
+// rowsByNode is each node's rows ordered by name, then by labels, each row's series
+// ordered by metric — its subjects, then its readings grouped by sensor and labels — and
+// which nodes the state holds silent.
+func rowsByNode(current state.State) (map[string][]seriesRow, map[string]bool) {
+	rows := map[string][]seriesRow{}
+	silent := map[string]bool{}
+	for _, subject := range current.Subjects {
+		if subject.Rule == evaluate.SilenceRule {
+			silent[subject.Node] = subject.Level != nil && *subject.Level == evaluate.Critical
 			continue
 		}
-		key := rowKey{name: value.Metric, labels: labels}
-		if sensor, declared := evaluate.SensorOf(value.Metric); declared {
+		row := seriesRow{
+			key:    keyOf(subject.Rule, subject.Labels),
+			labels: subject.Labels,
+			values: subject.Values,
+			level:  subject.Level,
+			stale:  subject.Stale,
+		}
+		if definition, known := evaluate.Lookup(subject.Rule); known {
+			row.key.name, row.key.declared = definition.Sensor, true
+		}
+		rows[subject.Node] = append(rows[subject.Node], row)
+	}
+	position := map[string]map[rowKey]int{}
+	for _, reading := range current.Readings {
+		key := keyOf(reading.Metric, reading.Labels)
+		if sensor, declared := evaluate.SensorOf(reading.Metric); declared {
 			key.name, key.declared = sensor, true
 		}
-		at, seen := position[key]
+		if position[reading.Node] == nil {
+			position[reading.Node] = map[rowKey]int{}
+		}
+		at, seen := position[reading.Node][key]
 		if !seen {
-			at = len(rows)
-			position[key] = at
-			rows = append(rows, seriesRow{key: key})
+			at = len(rows[reading.Node])
+			position[reading.Node][key] = at
+			rows[reading.Node] = append(rows[reading.Node], seriesRow{key: key, labels: reading.Labels})
 		}
-		rows[at].series = append(rows[at].series, value)
-	}
-	sort.SliceStable(rows, func(i, j int) bool {
-		a, b := rows[i].key, rows[j].key
-		if a.name != b.name {
-			return a.name < b.name
+		group := &rows[reading.Node][at]
+		group.values = append(group.values, reading.Value)
+		if reading.Stale != nil && *reading.Stale {
+			group.stale = true
 		}
-		return a.labels < b.labels
-	})
-	for _, row := range rows {
-		sort.Slice(row.series, func(i, j int) bool { return row.series[i].Metric < row.series[j].Metric })
 	}
-	return rows
+	for _, list := range rows {
+		sort.SliceStable(list, func(i, j int) bool {
+			a, b := list[i], list[j]
+			if a.key.name != b.key.name {
+				return a.key.name < b.key.name
+			}
+			return storage.LabelKey(a.labels) < storage.LabelKey(b.labels)
+		})
+		for _, row := range list {
+			sort.Slice(row.values, func(i, j int) bool { return row.values[i].Metric < row.values[j].Metric })
+		}
+	}
+	return rows, silent
+}
+
+func keyOf(name string, labels map[string]string) rowKey {
+	encoded, err := storage.Subject{Labels: labels}.Key()
+	if err != nil {
+		slog.Error("group a series into a row", "name", name, "error", err)
+	}
+	return rowKey{name: name, labels: encoded}
 }
 
 // volume names the thing a series is about, from the labels the sensor set.
