@@ -24,7 +24,7 @@
     <section>
       <h2>{{ .Name }}{{ with .Version }} <small>{{ . }}</small>{{ end }}</h2>
       <p class="meta">{{ $.LastSeenLabel }}: {{ .LastSeen }}</p>
-      {{ if .Values }}
+      {{ if .Rows }}
         <table>
           <thead>
             <tr>
@@ -35,11 +35,11 @@
             </tr>
           </thead>
           <tbody>
-            {{ range .Values }}
+            {{ range .Rows }}
               <tr>
                 <td>{{ .Metric }}</td>
                 <td>{{ .Volume }}</td>
-                <td><a href="{{ .History }}">{{ .Value }}</a></td>
+                <td>{{ range $i, $_ := .Values }}{{ if $i }} · {{ end }}<a href="{{ .History }}" title="{{ .Metric }}">{{ .Value }}</a>{{ end }}</td>
                 <td>{{ .Collected }}{{ with .Stale }} <small class="stale">{{ . }}</small>{{ end }}</td>
               </tr>
             {{ end }}

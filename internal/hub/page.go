@@ -5,6 +5,7 @@ import (
 	"html/template"
 	"log/slog"
 	"net/http"
+	"sort"
 	"strings"
 	"time"
 
@@ -38,18 +39,25 @@ type nodeView struct {
 	Name     string
 	Version  string
 	LastSeen string
-	Values   []valueView
+	Rows     []rowView
 	// Empty says why a node has no rows: nothing measured yet, or nothing current.
 	Empty string
 }
 
-type valueView struct {
+// rowView is what one sensor measured about one volume, or one series of a metric no rule
+// declares (docs/specs/history.md#page).
+type rowView struct {
 	Metric    string
 	Volume    string
-	Value     string
+	Values    []valueView
 	Collected string
-	// Stale is the translated mark of a series that stopped arriving, empty on a fresh one.
+	// Stale is the translated mark of a row that stopped arriving, empty on a fresh one.
 	Stale string
+}
+
+type valueView struct {
+	Metric string
+	Value  string
 	// History addresses the drill-down page of this series (docs/specs/history.md#page).
 	History string
 }
@@ -95,34 +103,89 @@ func index(printer *i18n.Printer, states []storage.NodeState, targets func(node 
 			Name:     state.Node,
 			Version:  state.AgentVersion,
 			LastSeen: printer.Time(state.LastSeen),
-			Values:   make([]valueView, 0, len(state.Values)),
 		}
-		for _, value := range state.Values {
-			row := valueView{
-				Metric:    value.Metric,
-				Volume:    volume(printer, value.Labels),
-				Value:     format(printer, value.Metric, value.Value),
-				Collected: printer.Time(value.TS),
-				History:   historyLink(state.Node, value.Metric, value.Labels, lang, ""),
+		for _, group := range byRow(state.Values) {
+			first := group.series[0]
+			row := rowView{Metric: group.key.name, Volume: volume(printer, first.Labels)}
+			oldest := first.TS
+			for _, value := range group.series {
+				if value.TS.Before(oldest) {
+					oldest = value.TS
+				}
+				row.Values = append(row.Values, valueView{
+					Metric:  value.Metric,
+					Value:   format(printer, value.Metric, value.Value),
+					History: historyLink(state.Node, value.Metric, value.Labels, lang, ""),
+				})
 			}
-			sensor, declared := evaluate.SensorOf(value.Metric)
-			if configured && declared && target.Frozen(sensor, state.LastSeen, value.TS, now) {
-				if value.Labels["removable"] == "true" {
+			row.Collected = printer.Time(oldest)
+			// Aged by its older series, as evaluation freezes the volume.
+			if configured && group.key.declared && target.Frozen(group.key.name, state.LastSeen, oldest, now) {
+				if first.Labels["removable"] == "true" {
 					continue
 				}
 				row.Stale = printer.T("value.stale")
 			}
-			node.Values = append(node.Values, row)
+			node.Rows = append(node.Rows, row)
 		}
 		switch {
 		case len(state.Values) == 0:
 			node.Empty = printer.T("node.no_values")
-		case len(node.Values) == 0:
+		case len(node.Rows) == 0:
 			node.Empty = printer.T("node.no_current")
 		}
 		out.Nodes = append(out.Nodes, node)
 	}
 	return out
+}
+
+// rowKey identifies the series one row shows: one sensor's, or one undeclared metric's,
+// sharing every label.
+type rowKey struct {
+	name     string
+	declared bool
+	labels   string
+}
+
+type seriesRow struct {
+	key    rowKey
+	series []storage.Value
+}
+
+// byRow groups values into rows ordered by name, then by labels, each row's series ordered
+// by metric: whatever order storage returns them in.
+func byRow(values []storage.Value) []seriesRow {
+	var rows []seriesRow
+	position := map[rowKey]int{}
+	for _, value := range values {
+		labels, err := storage.Subject{Labels: value.Labels}.Key()
+		if err != nil {
+			slog.Error("group a series into a row", "metric", value.Metric, "error", err)
+			continue
+		}
+		key := rowKey{name: value.Metric, labels: labels}
+		if sensor, declared := evaluate.SensorOf(value.Metric); declared {
+			key.name, key.declared = sensor, true
+		}
+		at, seen := position[key]
+		if !seen {
+			at = len(rows)
+			position[key] = at
+			rows = append(rows, seriesRow{key: key})
+		}
+		rows[at].series = append(rows[at].series, value)
+	}
+	sort.SliceStable(rows, func(i, j int) bool {
+		a, b := rows[i].key, rows[j].key
+		if a.name != b.name {
+			return a.name < b.name
+		}
+		return a.labels < b.labels
+	})
+	for _, row := range rows {
+		sort.Slice(row.series, func(i, j int) bool { return row.series[i].Metric < row.series[j].Metric })
+	}
+	return rows
 }
 
 // volume names the thing a series is about, from the labels the sensor set.
