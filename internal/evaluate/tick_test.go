@@ -144,18 +144,24 @@ func TestASecondTickOverUnchangedDataWritesNothing(t *testing.T) {
 	}
 }
 
-// spec: evaluation.md#persistence-and-restart — a stored level this build does not know
-// leaves that subject evaluated as if it were new.
-func TestAnUnreadableStoredLevelIsEvaluatedAsNew(t *testing.T) {
-	db := open(t)
-	ctx := context.Background()
+// seedUnreadable stores a level for the root volume that this build cannot parse, the way a
+// newer hub might have written it.
+func seedUnreadable(t *testing.T, db *storage.SQLite) {
+	t.Helper()
 	subject := storage.Subject{Node: "server-b", Rule: "disk", Labels: volume("/")}
-	if err := db.ApplyTransition(ctx, storage.Transition{
+	if err := db.ApplyTransition(context.Background(), storage.Transition{
 		Subject: subject, At: tick.Add(-time.Hour), From: "ok", To: "puce",
 		FromSince: tick.Add(-2 * time.Hour), Readings: map[string]float64{},
 	}); err != nil {
 		t.Fatalf("seed an unreadable level: %v", err)
 	}
+}
+
+// spec: evaluation.md#persistence-and-restart — a stored level this build does not know
+// leaves that subject evaluated as if it were new.
+func TestAnUnreadableStoredLevelIsEvaluatedAsNew(t *testing.T) {
+	db := open(t)
+	seedUnreadable(t, db)
 
 	collect(t, db, tick, volume("/"), 19e9, 14.84)
 	pass(t, evaluator(db, tick, watching(t)))
@@ -163,6 +169,40 @@ func TestAnUnreadableStoredLevelIsEvaluatedAsNew(t *testing.T) {
 	events := logged(t, db)
 	if len(events) != 2 || events[1].From != "ok" || events[1].To != "warning" {
 		t.Fatalf("an unreadable level produced %+v, want a transition out of ok", events)
+	}
+}
+
+// spec: evaluation.md#persistence-and-restart — a stored level this build does not know
+// leaves that subject evaluated as if it were new, so one that stays ok is stored as ok
+// with `since` at that tick, and no event is written.
+func TestAnUnreadableStoredLevelThatStaysOKIsReplaced(t *testing.T) {
+	db := open(t)
+	seedUnreadable(t, db)
+
+	collect(t, db, tick, volume("/"), 40e9, 31.25)
+	pass(t, evaluator(db, tick, watching(t)))
+
+	if state := levelOf(t, db, "disk", "/"); state.Level != "ok" || !state.Since.Equal(tick) {
+		t.Fatalf("the tick left level %q since %v, want ok since %v", state.Level, state.Since, tick)
+	}
+	if events := logged(t, db); len(events) != 1 {
+		t.Fatalf("replacing an unreadable level wrote %+v, want only the seeded event", events)
+	}
+}
+
+// spec: evaluation.md#persistence-and-restart — the level does not change: `since` is
+// untouched by a later tick.
+func TestALaterTickAtTheSameLevelKeepsSince(t *testing.T) {
+	db := open(t)
+	collect(t, db, tick, volume("/"), 40e9, 31.25)
+	pass(t, evaluator(db, tick, watching(t)))
+
+	later := tick.Add(time.Minute)
+	collect(t, db, later, volume("/"), 40e9, 31.25)
+	pass(t, evaluator(db, later, watching(t)))
+
+	if state := levelOf(t, db, "disk", "/"); state.Level != "ok" || !state.Since.Equal(tick) {
+		t.Fatalf("the later tick left level %q since %v, want ok since %v", state.Level, state.Since, tick)
 	}
 }
 

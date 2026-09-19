@@ -173,20 +173,32 @@ func TestRecordNotifiedRefusesAnUnknownSubject(t *testing.T) {
 	}
 }
 
-// A subject already known keeps its level: changing one is a transition, with the event
-// that goes with it.
-func TestSaveStateLeavesAKnownSubjectAlone(t *testing.T) {
+// spec: evaluation.md#persistence-and-restart — a stored level this build does not know is
+// replaced as if the subject were new: no event, and what it was told about is kept.
+func TestSaveStateReplacesAStoredLevel(t *testing.T) {
 	db := open(t)
 	ctx := context.Background()
 
-	if err := db.ApplyTransition(ctx, transition(volume("/"), tickOne, "ok", "critical")); err != nil {
+	if err := db.ApplyTransition(ctx, transition(volume("/"), tickOne, "ok", "puce")); err != nil {
 		t.Fatalf("ApplyTransition: %v", err)
+	}
+	if err := db.RecordNotified(ctx, volume("/"), tickOne); err != nil {
+		t.Fatalf("RecordNotified: %v", err)
 	}
 	if err := db.SaveState(ctx, State{Subject: volume("/"), Level: "ok", Since: tickTwo}); err != nil {
 		t.Fatalf("SaveState: %v", err)
 	}
-	if got := db.statesByMount(t)["/"]; got.Level != "critical" || !got.Since.Equal(tickOne) {
-		t.Fatalf("state = %q since %v, want critical since %v", got.Level, got.Since, tickOne)
+	got := db.statesByMount(t)["/"]
+	if got.Level != "ok" || !got.Since.Equal(tickTwo) || !got.LastNotifiedAt.Equal(tickOne) {
+		t.Fatalf("state = %q since %v notified %v, want ok since %v notified %v",
+			got.Level, got.Since, got.LastNotifiedAt, tickTwo, tickOne)
+	}
+	events, err := db.EventsBetween(ctx, tickOne.Add(-time.Minute), tickTwo.Add(time.Minute))
+	if err != nil {
+		t.Fatalf("EventsBetween: %v", err)
+	}
+	if len(events) != 1 {
+		t.Fatalf("replacing a level wrote %+v, want only the seeded event", events)
 	}
 }
 

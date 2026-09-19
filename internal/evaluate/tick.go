@@ -161,10 +161,14 @@ func (e *Evaluator) send(ctx context.Context, deliver func(context.Context) erro
 }
 
 // record writes what the pass made of one subject. A change is a level and an event
-// together; a subject that has not moved is only ever inserted, so a first evaluation at
-// ok appears without an event and `since` survives every tick that follows.
+// together. A subject that has not moved is written only when no readable level was stored
+// for it, so a first evaluation at ok appears without an event, an unreadable level is
+// replaced, and `since` survives every tick that follows.
 func (e *Evaluator) record(ctx context.Context, subject Subject, now time.Time) (*storage.Transition, error) {
 	if !subject.Changed() {
+		if subject.Restored {
+			return nil, nil
+		}
 		return nil, e.store.SaveState(ctx, storage.State{
 			Subject: subject.Subject,
 			Level:   subject.Level.String(),

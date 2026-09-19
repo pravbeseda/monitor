@@ -139,18 +139,15 @@ func loadStates(ctx context.Context, from querier) ([]State, error) {
 	return out, nil
 }
 
-// SaveState records a subject seen for the first time, which is the only case with a level
-// and no event. A subject already known is left exactly as it is: changing a level is
-// ApplyTransition's business, and doing it here would drop the event that goes with it.
+// SaveState sets a subject's level without an event: the subject was seen for the first
+// time, or the level stored for it is one the caller cannot read. Which levels are readable
+// is the caller's rule, so a stored row is overwritten rather than second-guessed here.
 func (s *SQLite) SaveState(ctx context.Context, state State) error {
 	labels, err := encodeLabels(state.Labels)
 	if err != nil {
 		return fmt.Errorf("state of %s: %w", state.describe(), err)
 	}
-	if _, err := s.db.ExecContext(ctx, `
-		INSERT INTO states (node, rule, labels, level, since, last_notified_at)
-		VALUES (?, ?, ?, ?, ?, '')
-		ON CONFLICT(node, rule, labels) DO NOTHING`,
+	if _, err := s.db.ExecContext(ctx, upsertState,
 		state.Node, state.Rule, labels, state.Level, formatTime(state.Since)); err != nil {
 		return fmt.Errorf("save state of %s: %w", state.describe(), err)
 	}
