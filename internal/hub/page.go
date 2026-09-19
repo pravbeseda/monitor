@@ -200,9 +200,6 @@ func rowsByNode(current state.State) (map[string][]seriesRow, map[string]bool) {
 			silent[subject.Node] = subject.Level != nil && *subject.Level == evaluate.Critical
 			continue
 		}
-		if len(subject.Values) == 0 {
-			continue // nothing to show a row of.
-		}
 		row := seriesRow{
 			key:    keyOf(subject.Rule, subject.Labels),
 			labels: subject.Labels,

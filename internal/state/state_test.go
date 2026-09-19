@@ -146,20 +146,6 @@ func TestListing(t *testing.T) {
 		}
 	})
 
-	t.Run("a configured node that has never reported", func(t *testing.T) {
-		s := build(t, storage.Snapshot{Nodes: []storage.NodeState{heard("server-b", 0)}})
-		for _, one := range s.Nodes {
-			if one.Node != "server-b" {
-				t.Fatalf("node %s listed, but it never reported", one.Node)
-			}
-		}
-		for _, one := range s.Subjects {
-			if one.Node != "server-b" {
-				t.Fatalf("subject of %s listed, but it never reported", one.Node)
-			}
-		}
-	})
-
 	t.Run("a node the configuration no longer names", func(t *testing.T) {
 		values := append(reported(volume("/"), time.Hour), storage.Value{Metric: "load.one", Value: 0.4, TS: now})
 		s := build(t, storage.Snapshot{Nodes: []storage.NodeState{heard("server-b", 0, values...)}}, "server-b")

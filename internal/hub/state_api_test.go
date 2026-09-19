@@ -111,6 +111,28 @@ func TestStateWireFormat(t *testing.T) {
 	}
 }
 
+// spec: state.md#listing — a configured node that has never reported appears nowhere: the
+// configuration names laptop-a and server-b, and only server-b has reported.
+func TestStateLeavesOutANodeThatNeverReported(t *testing.T) {
+	var body struct {
+		Nodes    []struct{ Node string }
+		Subjects []struct{ Node string }
+	}
+	if err := json.Unmarshal(getState(t, reporting(), "/api/v1/state", at).Body.Bytes(), &body); err != nil {
+		t.Fatalf("decode: %v", err)
+	}
+	for _, node := range body.Nodes {
+		if node.Node != "server-b" {
+			t.Errorf("node %s listed, but it never reported", node.Node)
+		}
+	}
+	for _, subject := range body.Subjects {
+		if subject.Node != "server-b" {
+			t.Errorf("a subject of %s listed, but it never reported", subject.Node)
+		}
+	}
+}
+
 // spec: state.md#endpoint — two requests with nothing changed between them differ only by
 // `at`.
 func TestStateIsStable(t *testing.T) {
