@@ -74,6 +74,9 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	body := api.Response{}
 	if req.ConfigVersion != node.Version {
 		body = api.Response{ConfigVersion: node.Version, Config: deliver(node.Agent)}
+		// A rollout is invisible otherwise: the version is opaque to the agent, so the
+		// journal is the only place the two can be compared.
+		slog.Info("deliver a configuration", "node", node.Name, "from", req.ConfigVersion, "to", node.Version)
 	}
 	write(w, http.StatusOK, body)
 }

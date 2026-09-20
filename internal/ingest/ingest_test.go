@@ -1,8 +1,10 @@
 package ingest_test
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
+	"log/slog"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -303,6 +305,58 @@ func TestStoresUndeclaredMetric(t *testing.T) {
 	if store.saved[0].Measurements[0].Metric != "coffee.level" {
 		t.Errorf("measurements = %+v, want the undeclared metric stored", store.saved[0].Measurements)
 	}
+}
+
+// captureLog redirects the hub's log for one test and hands back what was written.
+func captureLog(t *testing.T) *bytes.Buffer {
+	t.Helper()
+	var out bytes.Buffer
+	before := slog.Default()
+	slog.SetDefault(slog.New(slog.NewTextHandler(&out, nil)))
+	t.Cleanup(func() { slog.SetDefault(before) })
+	return &out
+}
+
+// spec: ingest.md#configuration-delivery — delivering a configuration logs one line naming
+// the node, the version the agent held and the version it was given; holding the hub's own
+// version delivers nothing and logs nothing.
+func TestConfigurationDeliveryIsLogged(t *testing.T) {
+	for _, tc := range []struct {
+		name    string
+		version string
+		want    string
+	}{
+		{"the agent holds an older version", "0000deadbeef", "from=0000deadbeef"},
+		{"the agent holds no version yet", "", `from=""`},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			h, _, node := newHandler(t)
+			logged := captureLog(t)
+
+			post(t, h, bearer(), strings.ReplaceAll(validBody, "%s", tc.version))
+
+			line := logged.String()
+			if count := strings.Count(line, "\n"); count != 1 {
+				t.Fatalf("the delivery wrote %d log lines: %q", count, line)
+			}
+			for _, want := range []string{"node=laptop-a", tc.want, "to=" + node.Version} {
+				if !strings.Contains(line, want) {
+					t.Errorf("log line = %q, want %q in it", line, want)
+				}
+			}
+		})
+	}
+
+	t.Run("the agent already holds the hub's version", func(t *testing.T) {
+		h, _, node := newHandler(t)
+		logged := captureLog(t)
+
+		post(t, h, bearer(), strings.ReplaceAll(validBody, "%s", node.Version))
+
+		if line := logged.String(); line != "" {
+			t.Errorf("a request that delivered nothing logged %q", line)
+		}
+	})
 }
 
 // spec: ingest.md#configuration-delivery

@@ -301,7 +301,7 @@ occurrence, because that is the day it speaks for. On a database that has never 
 | a database that has never digested | no digest over history: `last_digest_at` starts at the hub's first start time |
 | a subject both transitioned to `warning` and is still in `warning` | listed once |
 | a warning transition written by the same tick that sends the digest | included: a transition recorded by a tick falls inside that tick's digest window |
-| no warning transition since the last digest and no subject in `warning` | no message: silence while all is well |
+| no warning transition since the last digest and no subject in `warning` | no message: silence while all is well, and the window still closes at that tick |
 | a subject is in `critical` and nothing is in `warning` | no digest: the critical was reported instantly |
 | several warnings on several nodes | one message, not one per subject, entries ordered by node name then by mount |
 | a frozen subject in `warning` | left out: its data is stale, so it is neither a transition nor a current reading |
@@ -334,7 +334,11 @@ occurrence, because that is the day it speaks for. On a database that has never 
 restart: each subject's level, when it reached it, and when it was last notified about; an
 append-only log of transitions carrying the values that produced each one, which is the
 event stream skins subscribe to ([0001](../decisions/0001-semantic-core-and-skins.md)); and
-when the last digest went out. How that is stored is the implementation's business
+how far the digest window has closed, which is the hub's first start time until a tick
+crosses `digest.at` and that tick's own time afterwards — silence closes the window as a
+delivered message does, a refused delivery leaves it open ([Digest](#digest)), and a
+stored value is a boundary, never proof that a message went out. How that is stored is
+the implementation's business
 ([0017](../decisions/0017-one-spec-and-decision-gates.md)).
 
 ### Configuration changes
@@ -386,7 +390,8 @@ makes it consistent ([hub-config.md](hub-config.md#invariants)).
 - Nothing a threshold touches reaches an agent, so no threshold edit changes a
   `config_version` ([hub-config.md](hub-config.md#configuration-version)).
 - A restart never re-notifies what was delivered and never drops what was not:
-  `last_notified_at` and `last_digest_at` are the record of both.
+  `last_notified_at` is the record of a delivery, and `last_digest_at` the boundary of the
+  window still to be reported.
 - No level is ever computed from a frozen subject's values, so stale data cannot recover a
   state or repeat an alert.
 - Recovery is the negated entry rule with a margin on every comparison, never a

@@ -132,9 +132,9 @@ One row = one test. Anchors: `spec: ingest.md#<heading>`.
 | Request | Response | Side effect |
 |---|---|---|
 | `config_version` equals the hub's for this node | 200, body `{}` | — |
-| `config_version` differs | 200 with `config` + `config_version` | — |
-| `config_version` empty or missing (first run) | 200 with `config` + `config_version` | — |
-| node has no node-specific config on the hub | 200, config resolved from sensor defaults and node class | — |
+| `config_version` differs | 200 with `config` + `config_version` | one log line naming the node, the version it held and the version delivered |
+| `config_version` empty or missing (first run) | 200 with `config` + `config_version` | the same log line, with an empty version held |
+| node has no node-specific config on the hub | 200, config resolved from sensor defaults and node class | the same log line whenever that config is delivered |
 
 ### Limits
 
