@@ -228,10 +228,11 @@ func TestReadsOfSeriesNeverScanTheMeasurements(t *testing.T) {
 	db := open(t)
 	store(t, db, "server-b", pct("/", collected, 42))
 
-	query, args := newestStatement(Selection{Metric: "disk.free_pct"}, collected.Add(-time.Hour))
+	window, windowArgs := newestStatement(Selection{Metric: "disk.free_pct"}, collected.Add(-time.Hour))
+	listing, listingArgs := seriesStatement(Selection{Metric: "disk.free_pct"})
 	plans := map[string]string{
-		"newest":   explain(t, db, query, args...),
-		"listing":  explain(t, db, `SELECT node, labels FROM series WHERE metric = ?`, "disk.free_pct"),
+		"newest":   explain(t, db, window, windowArgs...),
+		"listing":  explain(t, db, listing, listingArgs...),
 		"snapshot": explain(t, db, latestValuesQuery),
 	}
 	for read, plan := range plans {

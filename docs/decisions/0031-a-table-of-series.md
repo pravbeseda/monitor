@@ -22,7 +22,7 @@ points.
 | the window's newest point per series, 24h | 63 ms |
 | the same, 365d | 162 ms |
 | the series listing | 89 ms |
-| the latest value of every series ([#45](https://github.com/pravbeseda/monitor/issues/45)) | 330 ms, on every evaluation tick and every render of `/` |
+| the latest value of every series ([#45](https://github.com/pravbeseda/monitor/issues/45)) | 1105 ms, on every evaluation tick and every render of `/` |
 
 Indexing cannot fix the shape. An index leading with `(metric, node, labels, ts)` makes the
 cost follow the whole history; one leading with `(metric, ts)` makes it follow the window and

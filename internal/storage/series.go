@@ -42,9 +42,8 @@ type SeriesNewest struct {
 // Series lists every stored series of a metric, whatever the age of its last point. It
 // reads the series table rather than ranking points, so it costs what it answers (ADR 0031).
 func (s *SQLite) Series(ctx context.Context, sel Selection) ([]SeriesRef, error) {
-	where, args := sel.where()
-	rows, err := s.db.QueryContext(ctx,
-		`SELECT node, labels FROM series WHERE `+where, args...)
+	query, args := seriesStatement(sel)
+	rows, err := s.db.QueryContext(ctx, query, args...)
 	if err != nil {
 		return nil, fmt.Errorf("read series of %s: %w", sel.Metric, err)
 	}
@@ -151,8 +150,13 @@ func (s *SQLite) Points(ctx context.Context, ref SeriesRef, from, to time.Time) 
 	}
 }
 
-// newestStatement is one statement so that a test can EXPLAIN exactly what Newest runs: one
-// row per series, never a pass over the points (ADR 0031).
+// seriesStatement and newestStatement are single statements so that a test can EXPLAIN
+// exactly what these reads run: one row per series, never a pass over the points (ADR 0031).
+func seriesStatement(sel Selection) (string, []any) {
+	where, args := sel.where()
+	return `SELECT node, labels FROM series WHERE ` + where, args
+}
+
 func newestStatement(sel Selection, from time.Time) (string, []any) {
 	where, args := sel.where()
 	return `SELECT node, labels, last_ts FROM series WHERE ` + where + ` AND last_ts >= ?`,

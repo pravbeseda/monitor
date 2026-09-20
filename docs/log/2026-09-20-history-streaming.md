@@ -80,7 +80,7 @@ read scans the table any more, so its primary key is the whole of it.
 | the same, 365d | 162 ms | 0.06 ms |
 | the same, one node named, 365d | 16 ms | 0.02 ms |
 | the series listing | 89 ms | 0.05 ms |
-| the latest value of every series ([#45](https://github.com/pravbeseda/monitor/issues/45)) | ~1.4 s | 0.98 ms |
+| the latest value of every series ([#45](https://github.com/pravbeseda/monitor/issues/45)) | 1105 ms | 0.98 ms |
 | the database on disk | 238 MB | 131 MB |
 
 The join that reads the latest values is written `CROSS JOIN` on purpose: with a plain join
