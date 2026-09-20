@@ -16,13 +16,14 @@ func save(t *testing.T, db *SQLite, th Threshold) {
 	}
 }
 
+// thresholds reads them the way the tick does: through the snapshot it evaluates against.
 func thresholds(t *testing.T, db *SQLite) []Threshold {
 	t.Helper()
-	got, err := db.Thresholds(context.Background())
+	snap, err := db.Snapshot(context.Background(), nil)
 	if err != nil {
-		t.Fatalf("Thresholds: %v", err)
+		t.Fatalf("Snapshot: %v", err)
 	}
-	return got
+	return snap.Thresholds
 }
 
 func bytesRef(node, mount string) SeriesRef {

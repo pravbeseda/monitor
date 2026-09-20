@@ -191,7 +191,7 @@ func refuseForm(w http.ResponseWriter, printer *i18n.Printer, ref storage.Series
 
 func emptyForm(printer *i18n.Printer, ref storage.SeriesRef, lang string) thresholdView {
 	return thresholdView{
-		shell:          shellOf(printer, "threshold.title"),
+		shell:          still(printer, "threshold.title"),
 		Series:         ref.Node + " · " + ref.Metric,
 		Volume:         volume(printer, ref.Labels),
 		Unit:           printer.T("unit." + string(history.UnitOf(ref.Metric))),
@@ -240,8 +240,10 @@ func exists(ctx context.Context, store ThresholdStore, ref storage.SeriesRef) (b
 	if err != nil {
 		return false, err
 	}
+	// Compared as storage keys them, not as a page renders them: LabelKey escapes
+	// nothing, so `{"a": "b,c=d"}` and `{"a": "b", "c": "d"}` read alike in it.
 	for _, candidate := range stored {
-		if storage.LabelKey(candidate.Labels) == storage.LabelKey(ref.Labels) {
+		if maps.Equal(candidate.Labels, ref.Labels) {
 			return true, nil
 		}
 	}
@@ -276,7 +278,10 @@ func parseValue(metric, written string) (*float64, error) {
 	if err != nil {
 		return nil, err
 	}
-	value *= scale
+	// A finite number can stop being one once its unit is applied: 1e300GB is not a size.
+	if value *= scale; math.IsInf(value, 0) {
+		return nil, errNotANumber
+	}
 	return &value, nil
 }
 
@@ -316,12 +321,10 @@ func splitUnit(text string) (string, float64) {
 	return lowered, 1
 }
 
-// typed renders a stored value back into the field it was typed in: a size the way sizes
-// are written, everything else as the number it is.
 // typed renders a stored value back into the field it was typed in, exactly and in a
 // spelling this same form accepts: a size takes the largest unit that divides it without
 // a remainder, and anything else is the plain number. Rendering it the way a page renders
-// a reading would round it — and a reader who saves the form as drawn would store the
+// a reading would round it, and a reader who saved the form as drawn would store the
 // rounding (docs/specs/thresholds.md#saving).
 func typed(metric string, value *float64) string {
 	if value == nil {

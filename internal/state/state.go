@@ -126,9 +126,10 @@ func Build(targets func(node string) (evaluate.Target, bool), snap storage.Snaps
 			// says "something is set", which a reader has to be able to tell from
 			// "nobody set anything" (docs/specs/state.md#listing).
 			one.Watched = isWatched
-			// A tick freezes a watched series, but a series no freshness rule applies to
-			// says so rather than reading as fresh — watched or not.
-			if !isWatched || !known || !target.Ages(value.Sensor, reported.LastSeen, now) {
+			// A tick freezes the series it judged; everything else — unwatched, or
+			// watched by a threshold this build cannot read — is aged here by the same
+			// rule, so nothing reads as fresh merely because nothing judged it.
+			if !judged || !known || !target.Ages(value.Sensor, reported.LastSeen, now) {
 				one.Stale = staleOf(target, known, reported.LastSeen, value, now)
 			}
 			one.Unit, one.Value, one.TS = history.UnitOf(value.Metric), &value.Value, value.TS

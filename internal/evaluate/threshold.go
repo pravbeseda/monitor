@@ -10,16 +10,15 @@ import (
 // leaves it when the value clears the threshold by 20% of its magnitude in the other
 // direction (ADR 0013, ADR 0033). A level with no value is neither entered nor held.
 //
-// The margin is applied as 5×value against 5×threshold ± |threshold| rather than as
-// value against 1.2×threshold, because 1.2 has no exact binary form and a value sitting
-// exactly on its clearing value must count as cleared. tolerance absorbs what is left of
-// the float error, scaled to the threshold so that it cannot bridge the gap between two
-// values a sensor can tell apart.
-const marginDenominator = 5
+// The exit is compared as a distance — how far the value has moved past the threshold,
+// against the margin — rather than as the value against threshold ± margin. Both say the
+// same thing, but the difference cannot overflow the way `1.2 × 1e308` does, and it keeps
+// its meaning for a threshold small enough that an absolute slack would swallow its whole
+// margin. tolerance is relative for the same reason: it absorbs the float error of the
+// products and nothing else.
+func margin(threshold float64) float64 { return math.Abs(threshold) / 5 }
 
-func tolerance(threshold float64) float64 {
-	return 1e-9 * math.Max(1, math.Abs(threshold))
-}
+func tolerance(threshold float64) float64 { return 1e-9 * math.Abs(threshold) }
 
 // Readable reports whether a stored threshold is one this build can judge by: a direction
 // it knows, and values that are finite. Anything else is skipped rather than guessed at —
@@ -39,28 +38,21 @@ func Readable(th storage.Threshold) bool {
 }
 
 // entered reports whether a value falls into a level at all.
-func entered(threshold *float64, direction storage.Direction, value float64) bool {
-	if threshold == nil {
-		return false
-	}
+func entered(threshold float64, direction storage.Direction, value float64) bool {
 	if direction == storage.Above {
-		return value > *threshold
+		return value > threshold
 	}
-	return value < *threshold
+	return value < threshold
 }
 
-// cleared is the negation of entered with the margin. A level with no value counts as
-// cleared, so that nothing can hold a subject at a level nobody configured.
-func cleared(threshold *float64, direction storage.Direction, value float64) bool {
-	if threshold == nil {
-		return true
-	}
-	t := *threshold
-	margin := math.Abs(t)
+// cleared is the negation of entered with the margin: how far the value has moved past
+// the threshold, against how far it has to move.
+func cleared(threshold float64, direction storage.Direction, value float64) bool {
+	moved := value - threshold
 	if direction == storage.Above {
-		return marginDenominator*value <= marginDenominator*t-margin+tolerance(t)
+		moved = threshold - value
 	}
-	return marginDenominator*value+tolerance(t) >= marginDenominator*t+margin
+	return moved >= margin(threshold)-tolerance(threshold)
 }
 
 // levelOf is the level a subject reaches from previous at this value. Levels are tried
@@ -68,14 +60,16 @@ func cleared(threshold *float64, direction storage.Direction, value float64) boo
 // subject was already at least that severe and has not cleared it.
 func levelOf(th storage.Threshold, previous Level, value float64) Level {
 	for _, level := range []Level{Critical, Warning} {
-		threshold := thresholdOf(th, level)
-		if threshold == nil {
+		// A level with no value is never entered and never held: nothing can hold a
+		// subject at a level nobody configured.
+		at := thresholdOf(th, level)
+		if at == nil {
 			continue
 		}
-		if entered(threshold, th.Direction, value) {
+		if entered(*at, th.Direction, value) {
 			return level
 		}
-		if previous >= level && !cleared(threshold, th.Direction, value) {
+		if previous >= level && !cleared(*at, th.Direction, value) {
 			return level
 		}
 	}

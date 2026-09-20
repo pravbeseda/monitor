@@ -4,6 +4,8 @@ package notify
 
 import (
 	"fmt"
+	"maps"
+	"slices"
 	"strings"
 
 	"github.com/pravbeseda/monitor/internal/evaluate"
@@ -24,8 +26,8 @@ var levelKeys = map[evaluate.Level]string{
 // than as a change.
 func Render(p *i18n.Printer, m evaluate.Message) string {
 	subject := m.Node
-	if mount := m.Labels["mount"]; mount != "" {
-		subject += " " + mount
+	if named := naming(m.Labels); named != "" {
+		subject += " " + named
 	}
 
 	var line string
@@ -40,6 +42,28 @@ func Render(p *i18n.Printer, m evaluate.Message) string {
 		line += " — " + detail
 	}
 	return line
+}
+
+// decoration are the labels that say nothing to a reader of an alert: the filesystem a
+// volume is formatted with, and whether it can be unplugged. Everything else names the
+// series, and a message that cannot be told from another one about the same metric is a
+// message about nothing (ADR 0033).
+var decoration = map[string]bool{"fs": true, "removable": true}
+
+// naming is what identifies the series inside its node: a mount point reads as itself,
+// and any other label as the pair it is.
+func naming(labels map[string]string) string {
+	named := make([]string, 0, len(labels))
+	for _, key := range slices.Sorted(maps.Keys(labels)) {
+		switch {
+		case decoration[key] || labels[key] == "":
+		case key == "mount":
+			named = append(named, labels[key])
+		default:
+			named = append(named, key+"="+labels[key])
+		}
+	}
+	return strings.Join(named, " ")
 }
 
 // RenderDigest is the day's summary as one message: a title, one line per subject, and

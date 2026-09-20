@@ -271,11 +271,17 @@ the metric id, the subject's labels, the level it left and the level it reached,
 that produced it, and how long the subject has been in the level it left (`since`). A
 digest carries a list of those, one entry per subject.
 
+What a channel writes names the series, or two subjects of one metric on one node read
+alike: the node, then a mount point as itself and every other label as the pair it is.
+`fs` and `removable` are left out — they decorate a volume rather than identify it.
+
 | Configuration | Result |
 |---|---|
 | `channel: log` | one English log line per message; nothing is sent, so the default channel needs no secret |
 | `channel: telegram` | one message per notification to the configured chat |
 | a value whose metric id ends in `_bytes`, `_pct` or `_seconds` | rendered in that unit; any other metric is rendered as a plain number ([history.md](history.md#wire-format)) |
+| two subjects of one metric on one node, differing only by a label | two messages a reader can tell apart: each names its own labels |
+| a volume's subject | named by its mount point; `fs` and `removable` are not in the text |
 | `locale: ru` | text, sizes and times of delivered messages come from the Russian catalogue ([0008](../decisions/0008-english-repo-bilingual-ui.md)) |
 | `channel: log` with `locale: ru` | the log line stays English: logs are diagnostic, and the locale governs delivered channels only |
 

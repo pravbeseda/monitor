@@ -54,12 +54,17 @@ path list grows; do not enumerate paths where a prefix rule will do.
    is rotated, not reused.
 
 2. **Every request goes to the hub, unchanged.** Method, path, query string, body **and
-   headers** arrive as they were sent. Three headers matter by name: `Authorization`, which
+   headers** arrive as they were sent. Four headers matter by name: `Authorization`, which
    carries a node's token, `Accept-Language`, which is how the page picks English or
    Russian ([ADR 0008](decisions/0008-english-repo-bilingual-ui.md)) — a role that normalises
-   or strips headers silently makes the interface English-only — and `Origin`, which is how
-   the hub tells a save made on its own page from one a third-party page made on the
-   reader's behalf: stripped or rewritten, every save is refused. No path rewriting, no
+   or strips headers silently makes the interface English-only — and the pair `Origin` and
+   `Host`, which is how the hub tells a save made on its own page from one a third-party
+   page made on the reader's behalf: it compares the two, so both have to arrive as the
+   browser sent them, **`Host` with its port**. nginx does not do that by default —
+   `proxy_pass` sets `Host` to the upstream it proxies to, which is the loopback address,
+   and `$host` drops the port that `Origin` keeps — so the role has to send
+   `proxy_set_header Host $http_host`. Get it wrong and every save is refused with a 403
+   that says nothing about the proxy. No path rewriting, no
    trailing-slash normalisation, no static file served from disk, no directory listing, no
    default vhost answering for this name.
 
@@ -182,7 +187,20 @@ curl -s -o /dev/null -w '%{http_code}\n' -u "$human_cred" -X POST \
 
 The second must not be `405`: that is nginx refusing the method, and it makes every
 threshold unsettable. Anything the hub answers there — it refuses a save that names no
-series and carries no form token — proves the request arrived.
+series — proves the request arrived.
+
+And the pair `Origin`/`Host`, which is what decides whether a save from the page is taken
+at all:
+
+```sh
+curl -s -o /dev/null -w '%{http_code}\n' -u "$human_cred" -X POST \
+     -H 'Origin: https://hub.example.com' \
+     https://hub.example.com/thresholds       # must not be 403
+```
+
+A `403` there means the two do not match at the hub: `Host` is arriving as something else —
+the loopback upstream, or the name without its port — and every save made in a browser is
+refused the same way.
 
 Requirement 4 — the one that proves agents still get in:
 

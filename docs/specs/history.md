@@ -214,7 +214,8 @@ subject's values stale; one definition of "this node was not reporting", not two
 | the same, without `removable: "true"` | shown, its collected time marked, in the reader's language, as holding no fresh data |
 | a row on `/` exactly three intervals old | shown unmarked: the bound is inclusive, as for gaps |
 | that row reporting again | shown as before, unmarked |
-| a series whose newest value names no sensor | shown unmarked however old, and however long its node is silent: no freshness rule applies to it ([state](state.md#staleness)) |
+| a series whose newest value names no sensor | shown unmarked however old, while its node is reporting: no freshness rule applies to it ([state](state.md#staleness)) |
+| the same series once its node is silent past its `silence_after` | marked with the rest of that node's series: silence is the node's, not the series' |
 | a series whose node runs its sensor no longer — resolved `enabled: false`, or a node the file no longer names | marked as holding no fresh data, or hidden if it is removable: nothing will refresh it |
 | a node silent past its `silence_after`, its series not yet three intervals old | its series hidden or marked already: evaluation freezes a silent node's subjects in the tick it falls silent |
 | a node whose every series is left out | "no current measurements" in place of its table, rather than the "no measurements yet" of a node that never sent one |

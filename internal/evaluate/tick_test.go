@@ -173,9 +173,10 @@ func TestASecondTickOverUnchangedDataWritesNothing(t *testing.T) {
 // newer hub might have written it.
 func seedUnreadable(t *testing.T, db *storage.SQLite) {
 	t.Helper()
-	subject := storage.Subject{Node: "server-b", Metric: "disk", Labels: volume("/")}
+	subject := storage.Subject{Node: "server-b", Metric: "disk.free_bytes", Labels: volume("/")}
 	if err := db.ApplyTransition(context.Background(), storage.Transition{
 		Subject: subject, At: tick.Add(-time.Hour), From: "ok", To: "puce",
+		Direction: string(storage.Below),
 		FromSince: tick.Add(-2 * time.Hour), Readings: map[string]float64{},
 	}); err != nil {
 		t.Fatalf("seed an unreadable level: %v", err)

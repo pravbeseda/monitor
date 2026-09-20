@@ -176,11 +176,14 @@ func TestAnUndeliveredEventIsSentOnALaterTick(t *testing.T) {
 func TestASubjectNeverNotifiedIsDue(t *testing.T) {
 	db := open(t)
 	ctx := context.Background()
-	subject := storage.Subject{Node: "server-b", Metric: "disk", Labels: volume("/")}
+	// A transition writes the level and the event together, which is the history this
+	// row is about: the change is recorded, nothing has been told about it yet.
+	subject := storage.Subject{Node: "server-b", Metric: "disk.free_bytes", Labels: volume("/")}
 	if err := db.ApplyTransition(ctx, storage.Transition{
 		Subject: subject, At: tick.Add(-time.Hour), From: "ok", To: "critical",
+		Direction: string(storage.Below),
 		FromSince: tick.Add(-2 * time.Hour),
-		Readings:  map[string]float64{"disk.free_bytes": 3e9, "disk.free_pct": 2.34},
+		Readings:  map[string]float64{"disk.free_bytes": 3e9},
 	}); err != nil {
 		t.Fatalf("seed an undelivered event: %v", err)
 	}

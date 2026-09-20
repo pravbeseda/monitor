@@ -302,3 +302,30 @@ func TestTheDigestSaysWhatIsNotWatched(t *testing.T) {
 		t.Fatalf("a digest with entries did not name the unwatched series:\n%s", listed)
 	}
 }
+
+// spec: evaluation.md#messages — a message names the series it is about: two subjects of
+// one metric on one node must not read alike.
+func TestAMessageNamesTheSeriesItIsAbout(t *testing.T) {
+	printer := i18n.For(i18n.English)
+	one, other := entering(), entering()
+	one.Metric, other.Metric = "queue.depth", "queue.depth"
+	one.Labels = map[string]string{"queue": "payments"}
+	other.Labels = map[string]string{"queue": "email"}
+	one.Readings = map[string]float64{"queue.depth": 42}
+	other.Readings = map[string]float64{"queue.depth": 42}
+
+	first, second := notify.Render(printer, one), notify.Render(printer, other)
+	if first == second {
+		t.Fatalf("two series of one metric render alike:\n%s", first)
+	}
+	if !strings.Contains(first, "queue=payments") {
+		t.Errorf("message = %q, want it to name the series", first)
+	}
+
+	// A volume still reads as its mount point, without the labels that decorate it.
+	volume := entering()
+	volume.Labels = map[string]string{"mount": "/data", "fs": "ext4", "removable": "false"}
+	if got := notify.Render(printer, volume); !strings.Contains(got, "server-b /data:") {
+		t.Errorf("message = %q, want the volume named by its mount point alone", got)
+	}
+}

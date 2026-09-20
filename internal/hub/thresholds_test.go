@@ -547,3 +547,55 @@ func TestTheRussianFormShowsASizeItWouldAccept(t *testing.T) {
 		t.Fatalf("stored %+v, want the value unchanged by a round trip through the form", held)
 	}
 }
+
+// spec: thresholds.md#saving — a number that stops being finite once its unit is applied
+// is refused, so the store never holds one.
+func TestThresholdSaveRefusesASizeThatOverflows(t *testing.T) {
+	store := holding(dataSeries)
+
+	rec := saveForm(t, store, dataAddress, url.Values{"direction": {"below"}, "warning": {"1e300GB"}}, "")
+
+	if rec.Code != http.StatusBadRequest {
+		t.Fatalf("status = %d, want 400: %s", rec.Code, rec.Body)
+	}
+	if held, stored := store.held[key(dataSeries)]; stored {
+		t.Fatalf("stored %+v, want nothing: an infinity is no threshold", held)
+	}
+}
+
+// spec: thresholds.md#form — the address names one series, and label sets are compared
+// as the storage keys them: two different sets must not read alike.
+func TestThresholdFormTellsLabelSetsApart(t *testing.T) {
+	odd := storage.SeriesRef{
+		Node:   "server-b",
+		Metric: "disk.free_bytes",
+		Labels: map[string]string{"a": "b,c=d"},
+	}
+	store := holding(odd)
+
+	status, body := openForm(t, store, "/thresholds?label.a=b&label.c=d&metric=disk.free_bytes&node=server-b")
+
+	if status != http.StatusNotFound {
+		t.Fatalf("status = %d, want 404: a different label set is a different series: %s", status, body)
+	}
+}
+
+// spec: thresholds.md#form — the page is not refreshed under the reader: nothing on a
+// form changes by itself, and a refresh would replace what they typed or the refusal
+// they are reading.
+func TestThresholdPageIsNotRefreshed(t *testing.T) {
+	store := holding(dataSeries)
+
+	_, body := openForm(t, store, dataAddress)
+	if strings.Contains(body, `<meta name="monitor-live"`) {
+		t.Fatalf("the form page declares itself live: %s", body)
+	}
+
+	rec := saveForm(t, store, dataAddress, url.Values{"direction": {"below"}, "warning": {"nonsense"}}, "")
+	if rec.Code != http.StatusBadRequest {
+		t.Fatalf("status = %d, want 400", rec.Code)
+	}
+	if strings.Contains(rec.Body.String(), `<meta name="monitor-live"`) {
+		t.Fatalf("the refused save declares itself live, so the error would be refreshed away: %s", rec.Body)
+	}
+}

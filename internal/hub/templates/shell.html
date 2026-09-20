@@ -22,7 +22,7 @@
     body { background: var(--bg); color: var(--fg); }
     a { color: var(--link); }
   </style>
-  <meta name="monitor-live" content="{{ .StalledNotice }}" data-rendering="{{ .Rendering }}">
+  {{ if .Live }}<meta name="monitor-live" content="{{ .StalledNotice }}" data-rendering="{{ .Rendering }}">{{ end }}
   <script>
     (function () {
       // The reader's time zone is the one thing the server cannot know (ADR 0026): state it,
@@ -45,16 +45,10 @@
       var inFlight = false;
       var halted = false;
       var leaving = false;
-      var edited = false;
       var next;
 
-      // A page carrying a form the reader has typed into is left alone: a refresh
-      // replaces the content, and what was typed would go with it
-      // (docs/specs/thresholds.md#form).
-      document.addEventListener("input", function () { edited = true; });
-
       function refresh() {
-        if (inFlight || halted || edited) return;
+        if (inFlight || halted) return;
         clearTimeout(next);
         if (document.visibilityState !== "visible") return;
         inFlight = true;

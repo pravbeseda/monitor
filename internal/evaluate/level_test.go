@@ -229,3 +229,27 @@ func withValues(direction storage.Direction, warning, critical *float64) *storag
 }
 
 func ptr(th storage.Threshold) *storage.Threshold { return &th }
+
+// spec: evaluation.md#hysteresis — the margin is a proportion of the threshold, so it
+// keeps its meaning at both ends of what the form accepts.
+func TestTheMarginHoldsAtTheEndsOfTheRange(t *testing.T) {
+	run(t, []levelCase{
+		{
+			name:     "a threshold small enough to vanish under an absolute slack",
+			previous: evaluate.Warning, threshold: withValues(storage.Below, num(1e-12), nil),
+			value: 1e-12, want: evaluate.Warning,
+		},
+		{
+			name: "the same value once it clears its own margin", previous: evaluate.Warning,
+			threshold: withValues(storage.Below, num(1e-12), nil), value: 1.3e-12, want: evaluate.OK,
+		},
+		{
+			name: "a threshold whose margin would overflow the arithmetic", previous: evaluate.Warning,
+			threshold: withValues(storage.Below, num(1e308), nil), value: 1.1e308, want: evaluate.Warning,
+		},
+		{
+			name: "the same, past the clearing value", previous: evaluate.Warning,
+			threshold: withValues(storage.Below, num(1e308), nil), value: 1.25e308, want: evaluate.OK,
+		},
+	})
+}

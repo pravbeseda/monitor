@@ -51,13 +51,9 @@ func (s *SQLite) ThresholdOf(ctx context.Context, ref SeriesRef) (Threshold, boo
 	return th, true, nil
 }
 
-// Thresholds reads every stored threshold, ordered as subjects are
-// (docs/specs/state.md#ordering). The tick reads them all on every pass, so an edit needs
-// no restart (docs/specs/evaluation.md#configuration).
-func (s *SQLite) Thresholds(ctx context.Context) ([]Threshold, error) {
-	return readThresholds(ctx, s.db)
-}
-
+// readThresholds reads every stored threshold, ordered as subjects are
+// (docs/specs/state.md#ordering). A tick reads them all through its snapshot, so an edit
+// needs no restart (docs/specs/evaluation.md#configuration).
 func readThresholds(ctx context.Context, from querier) ([]Threshold, error) {
 	rows, err := from.QueryContext(ctx, `
 		SELECT node, metric, labels, direction, warning, critical FROM thresholds

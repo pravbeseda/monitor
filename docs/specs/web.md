@@ -80,7 +80,7 @@ tell which of them they are.
 | the browser has moved to another zone, or dropped what it stored | the next refresh in the browser's current zone |
 | the hub was upgraded, or the page's language changed | the page reloads once, whole, in the new rendering |
 | the reader uses the back button afterwards | the page they came from; refreshing added nothing to the browser's history |
-| a page carrying a form the reader has typed into — `/thresholds` | not refreshed while it is being edited: a refresh that replaced the content would eat what was typed ([thresholds.md](thresholds.md#form)) |
+| a page whose content is a form — `/thresholds` | never refreshed: nothing on it changes on its own, and a refresh would replace what the reader typed or the refusal they are reading ([thresholds.md](thresholds.md#form)) |
 | scripting is turned off | the page as it was drawn, never refreshed; reloading it by hand still works |
 
 What the script does in a browser — the timing, the swap, the scroll, the notice — is
