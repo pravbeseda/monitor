@@ -4,23 +4,25 @@
 - **Owns:** `internal/evaluate` (hub): the tick, thresholds, hysteresis, silence detection
   and the notification boundary. The channels behind that boundary — the log line and the
   Telegram bot — are `internal/notify`, which formats and delivers but never decides.
-  Persistence of levels, events and the digest mark stays with `internal/storage`; the
-  `rules`, `digest`, `notify` and `volumes` keys are parsed and validated by
-  `internal/config`, which keeps owning the file, using the rule names `internal/evaluate`
-  exports.
+  Persistence of thresholds, levels, events and the digest mark stays with
+  `internal/storage`; the `digest`, `notify` and `silence_after` keys are parsed and
+  validated by `internal/config`, which keeps owning the file. Editing a threshold is the
+  page's business ([thresholds.md](thresholds.md)); this spec owns what a stored threshold
+  means.
 - **Decisions:** [0001](../decisions/0001-semantic-core-and-skins.md),
   [0006](../decisions/0006-alerting-rules.md),
   [0007](../decisions/0007-public-repository.md),
-  [0012](../decisions/0012-threshold-model.md),
   [0013](../decisions/0013-relative-hysteresis.md),
   [0015](../decisions/0015-evaluation-on-a-tick.md),
-  [0016](../decisions/0016-leaving-critical-is-instant.md)
+  [0016](../decisions/0016-leaving-critical-is-instant.md),
+  [0032](../decisions/0032-thresholds-are-set-in-the-interface.md),
+  [0033](../decisions/0033-a-subject-is-a-series.md)
 
 ## Purpose
 
-Evaluation turns stored measurements into meaning: every subject gets a level (`ok`,
-`warning`, `critical`), a change of level is written to an event log, and events become
-notifications under the rules of [0006](../decisions/0006-alerting-rules.md) and
+Evaluation turns stored measurements into meaning: every configured subject gets a level
+(`ok`, `warning`, `critical`), a change of level is written to an event log, and events
+become notifications under the rules of [0006](../decisions/0006-alerting-rules.md) and
 [0016](../decisions/0016-leaving-critical-is-instant.md). It runs on its own tick, never
 inside a request ([0015](../decisions/0015-evaluation-on-a-tick.md)), so
 [ingest](ingest.md) keeps checking shape and not meaning.
@@ -30,36 +32,42 @@ never reaches an agent ([0010](../decisions/0010-agent-configuration.md)).
 
 ## Model
 
-**A subject is what has a level**: the triple `(node, rule, labels)`. For the `disk` rule a
-subject is one volume — `server-b`, `disk`, `{mount: /, fs: ext4, removable: false}` — and
-its two metrics are read together, because the threshold model of
-[0012](../decisions/0012-threshold-model.md) needs both. A rule whose metric list holds one
-entry (a future finance or health metric) is the same shape with one series.
+**A subject is a series**: the triple `(node, metric, labels)`
+([0033](../decisions/0033-a-subject-is-a-series.md)). A volume contributes two of them —
+`disk.free_bytes` and `disk.free_pct` on `server-b` with
+`{mount: /, fs: ext4, removable: false}` — and each is judged on its own. Nothing here knows
+that either is about a disk.
 
-**A rule declares the metrics it reads and the sensor they come from.** The `disk` rule
-reads `disk.free_bytes` (`free`) and `disk.free_pct` (`pct`) from sensor `disk`, joined on
-byte-identical labels. Naming the sensor is what makes staleness computable, below; the
-metric ids alone do not identify one.
+**A subject has a level only while a threshold is configured for it.** A series nobody has
+configured is stored, listed and charted, and has no level, no event and no notification.
+The thresholds come from the store, are entered in the interface
+([0032](../decisions/0032-thresholds-are-set-in-the-interface.md),
+[thresholds.md](thresholds.md#form)) and are read afresh by every tick.
 
-**Levels are ordered** `ok < warning < critical`. A level is entered and left by the
-floor-plus-band of [0012](../decisions/0012-threshold-model.md), with the 20% margin of
-[0013](../decisions/0013-relative-hysteresis.md) on every comparison of the exit:
+**A configuration is a direction and up to two values.** The direction — `below` or
+`above` — belongs to the subject; `warning` and `critical` are independent values in the
+unit of the series, and either may be absent. Entry is the strict comparison; exit negates
+it with the 20% margin of [0013](../decisions/0013-relative-hysteresis.md), measured on the
+threshold's magnitude so that a negative threshold clears in the same direction a positive
+one does:
 
 ```
-enter L   when  free < floor(L)   or  (pct < ratio(L)  and  free < ceiling(L))
-leave L   when  free >= 1.2·floor(L)  and  (pct >= 1.2·ratio(L)  or  free >= 1.2·ceiling(L))
+below    enter L when v <  T(L)      leave L when v >= T(L) + 0.2·|T(L)|
+above    enter L when v >  T(L)      leave L when v <= T(L) − 0.2·|T(L)|
 ```
 
-The exit rule is the negation of the entry rule, never a per-condition clearance. Only
-`free` and `pct` are inputs, compared over decimal bytes and percentage points at full
-precision, with each margin computed as `threshold × 1.2`; a value exactly at a margin
-counts as cleared. The size of the volume appears in the tables below to make the pairs
-plausible and is never read.
+The **margin** is `0.2·|T|`; the value on the far side of it — `T + margin` going up,
+`T − margin` going down — is the level's **clearing value**. Comparisons are made at full
+precision on the stored value, and a value exactly at a clearing value counts as cleared.
 
-**A rule with no band** — a volume whose `role` is `backup` — keeps only the floor
-comparison on both sides. The absent band contributes `false` to the entry disjunction and
-`true` to the exit conjunction, so neither side degenerates: `true` at entry would alert
-every volume, `false` at exit would latch every one of them.
+**A level with no value is never entered and never held**, so removing `critical` from a
+subject standing in `critical` drops it to whatever `warning` and the value say on the next
+tick. The subject's previous level is still whatever was last stored, even when that level
+is no longer configured: it is what the remaining levels are held against.
+
+**A change of direction discards the level it held.** Hysteresis holds a level against the
+comparison that created it, and the negation of the other direction would hold it in a band
+where the value is perfectly good.
 
 **The level of a subject** is chosen from its previous level, most severe first; a subject
 with no stored state has previous level `ok`:
@@ -71,10 +79,18 @@ for L in [critical, warning]:
 -> ok
 ```
 
-The margin is 20% and no key changes it: a file naming one is refused as an unknown key
-([hub-config.md](hub-config.md#startup)). [0013](../decisions/0013-relative-hysteresis.md)
-allows a per-metric override for an inherently noisy metric; no metric needs one yet, so
-the key is deferred rather than shipped unused.
+The margin is 20% and nothing changes it.
+[0013](../decisions/0013-relative-hysteresis.md) allows a per-subject override for an
+inherently noisy metric; none has proved noisy yet, so the field is deferred rather than
+shipped unused.
+
+**Staleness needs an interval, and a measurement names its sensor**
+([ingest](ingest.md#wire-format)). The series keeps the sensor its newest value named, and
+`stale_after` is 3× the interval that node resolves for that sensor
+([hub-config.md](hub-config.md#resolution)). A series whose newest value names no sensor has
+no staleness at all; a series whose node runs that sensor no longer — resolved
+`enabled: false`, or no interval for it — is frozen outright, because nothing will refresh
+it.
 
 ## The tick
 
@@ -84,7 +100,7 @@ measurement that arrives while a tick is running is evaluated by the next tick, 
 half of this one. Within a tick a node's silence is decided before its other subjects, so a
 node that has just fallen silent has its subjects frozen in that same tick rather than the
 next. A level change is recorded before any message about it is sent. Messages and digest
-entries come out in a stable order: by node name, then by the subject's `mount` label.
+entries come out in a stable order: by node name, then metric id, then labels.
 
 Two ticks never run at once: a tick that would start while the previous one is still
 running is skipped, and the skip is logged. A notifier that does not return cannot hold
@@ -93,46 +109,22 @@ a later tick.
 
 ## Configuration
 
-These keys extend [hub-config.md](hub-config.md). None of them reaches an agent, so none
-of them changes a `config_version`.
+**Thresholds are not in the file.** What a subject is judged by lives in the store and is
+edited on the page ([0032](../decisions/0032-thresholds-are-set-in-the-interface.md)); the
+file keeps only what is true of the installation as a whole. These keys extend
+[hub-config.md](hub-config.md), and none of them reaches an agent, so none of them changes a
+`config_version`.
 
 ```yaml
 digest: { at: "09:00", timezone: UTC }   # product default
 notify: { channel: log, locale: en }     # channel: log | telegram
-
-rules:
-  disk:
-    warning:  { floor: 10GB, ratio: 15, ceiling: 100GB }
-    critical: { floor: 4GB,  ratio: 7,  ceiling: 40GB }
-    backup:
-      warning:  { floor: 50GB }
-      critical: { floor: 10GB }
-
-classes:
-  server:
-    rules: { disk: { critical: { floor: 8GB } } }
-
-nodes:
-  server-b:
-    volumes:
-      "/data/backup": { role: backup }
 ```
 
-- **Product defaults** are the numbers above, from [0012](../decisions/0012-threshold-model.md);
-  the evaluation tick is 1m ([0015](../decisions/0015-evaluation-on-a-tick.md)) and no key
-  changes it.
-- **Layering** follows [0010](../decisions/0010-agent-configuration.md) and merges field by
-  field: product default → top-level `rules` → class `rules` → node `rules` → volume
-  `rules`. The `backup` branch is a rule of its own, not an overlay on the default one: it
-  merges only with the `backup` branch of the layers below it, so an absent `ratio` or
-  `ceiling` stays absent instead of being inherited.
-- **A `volumes` key selects a subject by a byte-identical `mount` label**, the mount point
-  exactly as the OS reports it ([disk-sensor.md](disk-sensor.md#labels)). Nothing is
-  normalised: a trailing slash is a different volume.
-- **Sizes are decimal** (`10GB` = 10 000 000 000), matching how the interface renders them
-  and how disks are sold. `ratio` is a percentage number, not a fraction, and a band is
-  removed by setting both of its halves to zero — half of one is refused, because half a
-  band would be ignored in silence.
+- **The evaluation tick is 1m** ([0015](../decisions/0015-evaluation-on-a-tick.md)) and no
+  key changes it. `silence_after` stays a property of a node class
+  ([hub-config.md](hub-config.md)), because silence must work before anyone opens a page.
+- **A threshold edit needs no restart**: the tick reads the store, so the next tick after a
+  save judges by the new numbers.
 - **Secrets are never in the file**: with `channel: telegram` the bot token and the chat id
   come from `MONITOR_TELEGRAM_TOKEN` and `MONITOR_TELEGRAM_CHAT_ID`
   ([0007](../decisions/0007-public-repository.md) rule 4).
@@ -144,56 +136,58 @@ asserts what is delivered on the configured channel.
 
 ### Levels
 
-A 128 GB volume unless the row says otherwise; defaults from the table above. `pct` is
-carried to two decimals, as the sensor reports it ([disk-sensor.md](disk-sensor.md)).
+Unless a row says otherwise, the subject is `disk.free_bytes` on one volume, configured
+`below` with `warning: 10GB` and `critical: 4GB`. Sizes are decimal, as the interface
+renders them.
 
-| Previous | free / pct | Level | Why |
-|---|---|---|---|
-| ok | 40 GB, 31.25% | ok | neither arm holds |
-| ok | exactly 10 GB on a 40 GB volume, 25.00% | ok | the floor comparison is strict, and 25% is above the ratio |
-| ok | 19 GB, 14.84% | warning | band: under 15% and under the 100 GB ceiling |
-| ok | 19.2 GB, 15.00% | ok | the ratio comparison is strict |
-| ok | 9 GB on a 20 GB volume, 45.00% | warning | floor: under 10 GB, whatever the percentage |
-| ok | 99 GB on an 8 TB volume, 1.24% | warning | the warning band holds, and 99 GB is above the 40 GB critical ceiling, so it is not critical |
-| ok | 1.1 TB on an 8 TB volume, 13.75% | ok | under the ratio, so only the ceiling can decide, and 1.1 TB is above it |
-| ok | 5 GB, 3.91% | critical | the critical band alone: under 7% and under the 40 GB ceiling |
-| ok | exactly 4 GB on a 40 GB volume, 10.00% | warning | the critical floor is strict, and 10% is above the critical ratio |
-| ok | 45 GB on a 900 GB volume, 5.00% | warning | under the critical ratio but above the 40 GB critical ceiling |
-| ok | 40 GB on a 1 TB volume, 4.00% | warning | the ceiling comparison is strict, so the critical band does not hold |
-| ok | 3 GB, 2.34% | critical | both critical arms hold |
-| warning | 3 GB, 2.34% | critical | the more severe level wins immediately |
-| ok | 0 GB, 0.00% | critical | a full volume is critical, not an error |
+| Previous | Configuration | Value | Level | Why |
+|---|---|---|---|---|
+| ok | default | 40 GB | ok | neither comparison holds |
+| ok | default | 10 GB | ok | entry is strict |
+| ok | default | 9.99 GB | warning | below the warning value, above the critical one |
+| ok | default | 4 GB | warning | the critical comparison is strict too |
+| ok | default | 3 GB | critical | below the critical value |
+| warning | default | 3 GB | critical | the more severe level is entered at once |
+| ok | default | 0 | critical | an empty volume is a value, not an error |
+| ok | `critical: 4GB` only | 9 GB | ok | a level with no value is never entered |
+| ok | `warning: 10GB` only | 1 GB | warning | with no critical value, warning is the worst it can reach |
+| — | nothing configured | 1 GB | none | no threshold, no level, and no previous level either: the series is listed and charted only |
+| ok | `above`, `warning: 4`, `critical: 8` | 3.5 | ok | below both, and this subject is judged upwards |
+| ok | `above`, `warning: 4`, `critical: 8` | 4 | ok | entry is strict in this direction as well |
+| ok | `above`, `warning: 4`, `critical: 8` | 4.1 | warning | past the warning value |
+| ok | `above`, `warning: 4`, `critical: 8` | 8 | warning | exactly the critical value: entry is strict in this direction too |
+| ok | `above`, `warning: 4`, `critical: 8` | 8.2 | critical | past the critical value |
 
 ### Hysteresis
 
-| Previous | free / pct | Level | Why |
-|---|---|---|---|
-| warning | 11 GB on a 40 GB volume, 27.50% | warning | past entry, below the 12 GB margin |
-| warning | 12 GB on a 40 GB volume, 30.00% | ok | clears the floor with its margin |
-| warning | 20 GB, 15.63% | warning | past entry, below the 18% margin |
-| warning | 23 GB, 17.97% | warning | one step below the margin: 18% of 128 GB is 23.04 GB |
-| warning | 23.04 GB, 18.00% | ok | exactly the ratio margin |
-| warning | 24 GB, 18.75% | ok | clears 12 GB and the 18% margin |
-| warning | 12 GB on a 128 GB volume, 9.38% | warning | the rule re-enters at that size, so no exit is considered: clearing the floor is not clearing the rule |
-| warning | 120 GB on an 8 TB volume, 1.50% | ok | the ceiling comparison clears first |
-| critical | 4.5 GB on a 45 GB volume, 10.00% | critical | only the 4.8 GB floor margin holds it: the band cleared at 8.4% |
-| warning | 4.5 GB on a 45 GB volume, 10.00% | warning | hysteresis holds a level, it never raises one |
-| critical | 6 GB on a 20 GB volume, 30.00% | warning | clears critical, still under the warning floor |
-| critical | 24 GB, 18.75% | ok | clears both levels in one tick |
+The same subject: `below`, `warning: 10GB`, `critical: 4GB`, so the margins are 12 GB and
+4.8 GB.
 
-### Backup volumes
-
-A 2 TB volume the node's `volumes` map declares as `role: backup`.
-
-| Previous | free / pct | Level | Why |
-|---|---|---|---|
-| ok | 40 GB, 2.00% | warning | under the 50 GB floor |
-| warning | 55 GB, 2.75% | warning | below the 60 GB margin |
-| warning | 60 GB, 3.00% | ok | clears the floor with its margin |
-| ok | 70 GB, 3.50% | ok | the default rule would warn at 3.5%; a backup rule has no band |
-| ok | 9 GB, 0.45% | critical | under the 10 GB floor |
-| critical | 11 GB, 0.55% | critical | below the 12 GB margin |
-| critical | 12 GB, 0.60% | warning | clears the critical margin, still under the 50 GB warning floor |
+| Previous | Configuration | Value | Level | Why |
+|---|---|---|---|---|
+| warning | default | 11 GB | warning | past entry, below the 12 GB clearing value |
+| warning | default | 12 GB | ok | exactly the clearing value counts as cleared |
+| warning | default | 9 GB | warning | entry still holds, so no exit is considered |
+| ok | default | 11 GB | ok | hysteresis holds a level, it never creates one |
+| warning | default | 4.5 GB | warning | the hold clause needs the previous level to be at least as severe, so it never raises one |
+| critical | default | 4.5 GB | critical | inside the 4.8 GB clearing value, so the level is held although entry no longer applies |
+| critical | default | 4 GB | critical | exactly the critical value: entry is strict, and 4 does not reach 4.8 either |
+| critical | default | 4.9 GB | warning | clears the 4.8 GB critical clearing value, still below the warning value |
+| critical | default | 11 GB | warning | critical clears, the 12 GB warning clearing value does not: a level steps down one band at a time |
+| critical | default | 12 GB | ok | clears both levels in one tick |
+| warning | `above`, `warning: 4` | 3.5 | warning | above the 3.2 clearing value |
+| warning | `above`, `warning: 4` | 3.2 | ok | exactly the clearing value, cleared downwards |
+| critical | `above`, `warning: 4`, `critical: 8` | 7 | critical | inside the 6.4 clearing value |
+| warning | `below`, `warning: −100` | −90 | warning | the margin is 20% of the magnitude, so the clearing value is −80 |
+| warning | `below`, `warning: −100` | −80 | ok | exactly the clearing value, cleared upwards |
+| warning | `above`, `warning: −100` | −120 | ok | an `above` threshold clears downwards: −100 − 20 |
+| ok | `below`, `warning: 0` | 0 | ok | entry is strict, so a zero threshold alerts below zero only |
+| warning | `below`, `warning: 0` | 0 | ok | a margin of zero clears at the threshold itself |
+| critical | `warning: 10GB` only | 11 GB | warning | critical cannot be held without a value, and the previous level still counts against warning's 12 GB |
+| warning | `critical: 4GB` only | 9 GB | ok | warning has no value, so it is neither entered nor held, and the fall waits for the digest |
+| warning | direction flipped to `above`, `warning: 10GB` | 9 GB | ok | the flip discards the held level: 9 GB is good under the new comparison |
+| warning | `warning` edited from 10GB to 5GB | 9 GB | ok | a held level clears against the configuration of the tick that judges it: the clearing value is now 6 GB |
+| warning | `warning` edited from 10GB to 20GB | 9 GB | warning | re-entered outright, not held |
 
 ### Freezing
 
@@ -202,20 +196,21 @@ writes no event, sends no repeat, and is left out of the digest. What freezing w
 judgement of stale values, not a record already written: a message recorded from fresh
 values and never delivered is still owed.
 
-`stale_after` is 3× the interval the node resolves for the rule's sensor
-([hub-config.md](hub-config.md#resolution)). Age is the tick time minus the measurement's
-own `ts`, measured against the **older** of the joined series.
+Age is the tick time minus the measurement's own `ts`, against `stale_after` = 3× the
+interval the node resolves for the series' sensor.
 
 | Situation | Result |
 |---|---|
 | the node is silent (see below) | its subjects are frozen in that same tick, except the `silence` subject itself |
-| a subject's older series is older than `stale_after` | that subject is frozen; the others are evaluated |
-| one of the two series is stale and the other fresh | frozen: the join is only as fresh as its older half |
-| a subject whose second series has never arrived | no subject at all: an incomplete join is not a level |
+| a subject's newest value is older than `stale_after` | that subject is frozen; the others are evaluated |
+| a subject's newest value is exactly `stale_after` old | evaluated: the bound is inclusive, as it is for a chart's gaps ([history](history.md#gaps)) |
 | a removable volume is unplugged | frozen by the same rule; it neither recovers nor repeats |
-| the node resolves the rule's sensor as `enabled: false` | no subjects for that rule on that node; stored states are left untouched |
-| the node resolves no interval for the rule's sensor | no subjects for that rule on that node |
-| a volume that reappears under different labels | a new subject starting at `ok`; the old one freezes |
+| the node resolves the series' sensor as `enabled: false`, or resolves no interval for it | frozen: nothing will refresh those values |
+| the series' newest value names no sensor | never frozen on age: with no interval, staleness has no meaning, and the value is judged as it stands |
+| a series reported again under a different sensor name | `stale_after` follows the newest value's sensor from that tick on; the level is untouched |
+| a series that reported with a sensor and now reports without one | never frozen on age from then on, by the row above it |
+| a stored threshold naming a series that has never reported — a store written by hand | nothing is evaluated for it: there is no value to judge |
+| a volume that reappears under different labels | a new subject, unconfigured until it is given a threshold; the old one freezes |
 | the node reports again | evaluation resumes on the next tick, and a changed level writes one event |
 | a subject freezes with an instant message still undelivered | the message is delivered anyway: it was recorded from values that were fresh at the time |
 
@@ -225,8 +220,10 @@ state, so nothing is lost when the clock is corrected.
 
 ### Node silence
 
-The node is a subject too: rule `silence`, empty labels, level `ok` or `critical`. The
-window is the `silence_after` its class resolves to ([0006](../decisions/0006-alerting-rules.md)).
+The node is a subject too: metric `silence`, empty labels, level `ok` or `critical`. It
+needs no configuration — a node that goes quiet must be noticed on a fresh install
+([0032](../decisions/0032-thresholds-are-set-in-the-interface.md)) — and the window is the
+`silence_after` its class resolves to ([0006](../decisions/0006-alerting-rules.md)).
 
 | State | Event | New state | Side effect |
 |---|---|---|---|
@@ -235,6 +232,7 @@ window is the `silence_after` its class resolves to ([0006](../decisions/0006-al
 | critical | now − last_seen > `silence_after`, notified 24h ago or more | critical | notify again |
 | critical | now − last_seen within `silence_after` | ok | notify recovery |
 | ok | now − last_seen within `silence_after` | ok | nothing |
+| ok | now − last_seen exactly `silence_after` | ok | nothing: the window is inclusive, and only past it is silence |
 | any | a node listed in the file that has never reported | no subject | nothing: an uninstalled agent is not an incident |
 
 Recovery has no margin and no separate trigger: `last_seen` advances on every accepted
@@ -266,15 +264,16 @@ a failed send is retried rather than lost.
 ### Messages
 
 Every message carries the same fields, so a channel formats rather than decides: the node,
-the rule, the subject's labels, the level it left and the level it reached, the joined
-values that produced it, and how long the subject has been in the level it left (`since`).
-A digest carries a list of those, one entry per subject.
+the metric id, the subject's labels, the level it left and the level it reached, the value
+that produced it, and how long the subject has been in the level it left (`since`). A
+digest carries a list of those, one entry per subject.
 
 | Configuration | Result |
 |---|---|
 | `channel: log` | one English log line per message; nothing is sent, so the default channel needs no secret |
 | `channel: telegram` | one message per notification to the configured chat |
-| `locale: ru` | text, byte sizes and times of delivered messages come from the Russian catalogue ([0008](../decisions/0008-english-repo-bilingual-ui.md)) |
+| a value whose metric id ends in `_bytes`, `_pct` or `_seconds` | rendered in that unit; any other metric is rendered as a plain number ([history.md](history.md#wire-format)) |
+| `locale: ru` | text, sizes and times of delivered messages come from the Russian catalogue ([0008](../decisions/0008-english-repo-bilingual-ui.md)) |
 | `channel: log` with `locale: ru` | the log line stays English: logs are diagnostic, and the locale governs delivered channels only |
 
 ### Digest
@@ -303,8 +302,11 @@ occurrence, because that is the day it speaks for. On a database that has never 
 | a warning transition written by the same tick that sends the digest | included: a transition recorded by a tick falls inside that tick's digest window |
 | no warning transition since the last digest and no subject in `warning` | no message: silence while all is well, and the window still closes at that tick |
 | a subject is in `critical` and nothing is in `warning` | no digest: the critical was reported instantly |
-| several warnings on several nodes | one message, not one per subject, entries ordered by node name then by mount |
-| a frozen subject in `warning` | left out: its data is stale, so it is neither a transition nor a current reading |
+| several warnings on several nodes | one message, not one per subject, entries ordered by node name, then metric id, then labels |
+| a frozen subject whose move into `warning` was recorded while its values were fresh | listed as the transition it was: freezing withholds judgement, not a record already written |
+| a frozen subject standing in `warning` with no transition inside the window | left out of the standing list: its reading is stale |
+| the digest hour on a hub where no subject is configured at all | one message saying that nothing here is being judged and where to set a threshold, every day until something is: a hub watching nothing must not look like a quiet one |
+| a digest that is sent on a hub where some series have no threshold | a closing line naming how many, so a volume nobody configured is visible |
 | the digest notifier returns an error | `last_digest_at` is not advanced; the next tick sends the same window again |
 | the hub restarts between a warning transition and `digest.at` | the transition is still in the digest: it was recorded when it happened |
 | the digest already went out today and the hub restarts | no second digest: `last_digest_at` is the guard |
@@ -331,60 +333,57 @@ occurrence, because that is the day it speaks for. On a database that has never 
 | a stored level this build does not know | that subject is evaluated as if it were new, and the fact is logged: corrupt data must not stop the hub from watching the rest |
 
 `since` and `last_notified_at` above are concepts, not columns. What must survive a
-restart: each subject's level, when it reached it, and when it was last notified about; an
-append-only log of transitions carrying the values that produced each one, which is the
-event stream skins subscribe to ([0001](../decisions/0001-semantic-core-and-skins.md)); and
-how far the digest window has closed, which is the hub's first start time until a tick
-crosses `digest.at` and that tick's own time afterwards — silence closes the window as a
-delivered message does, a refused delivery leaves it open ([Digest](#digest)), and a
-stored value is a boundary, never proof that a message went out. How that is stored is
-the implementation's business
+restart: each subject's configuration and level, when it reached it, and when it was last
+notified about; an append-only log of transitions carrying the value that produced each
+one, which is the event stream skins subscribe to
+([0001](../decisions/0001-semantic-core-and-skins.md)); and how far the digest window has
+closed, which is the hub's first start time until a tick crosses `digest.at` and that
+tick's own time afterwards — silence closes the window as a delivered message does, a
+refused delivery leaves it open ([Digest](#digest)), and a stored value is a boundary, never
+proof that a message went out. How that is stored is the implementation's business
 ([0017](../decisions/0017-one-spec-and-decision-gates.md)).
 
 ### Configuration changes
 
-The file is read once at startup ([hub-config.md](hub-config.md)), so every row here is
-about the first tick after a restart with a changed file.
+A threshold is stored, not filed, so an edit applies on the next tick with no restart. The
+rows about the file are about the first tick after a restart with a changed file.
 
 | Change | Result |
 |---|---|
-| a threshold edited while a subject is in `warning` | the next tick evaluates with the new numbers; a resulting level change is an ordinary transition with an ordinary event |
+| a threshold edited while a subject is in `warning` | the next tick evaluates with the new value; a resulting level change is an ordinary transition with an ordinary event |
+| a subject's direction flipped while it holds a level | the level is dropped and recomputed from entry alone, so a value that is good under the new comparison reads as `ok` at once |
+| `critical` removed while a subject stands in `critical` | the next tick recomputes from `warning` and the value alone; the fall is an ordinary transition, and leaving `critical` is announced as ever ([0016](../decisions/0016-leaving-critical-is-instant.md)) |
+| every threshold of a subject removed while it stands in `warning` or `critical` | it stops being a subject: its level is forgotten, no event is written and no recovery is announced — the level did not recover, the question was withdrawn |
+| a threshold configured for a subject that is currently frozen | stored, and judged on the first tick that finds the values fresh again |
+| every threshold removed while the subject is frozen | it stops being a subject at once: freezing withholds judgement of stale values, and a removal is not a judgement |
+| a threshold set again on a subject whose configuration was removed while it stood in `critical` | judged as a new subject, previous level `ok`, so a value still past the threshold transitions and alerts again |
+| a stored threshold this build cannot read — an unknown direction, a value that is not finite | that subject is not judged and the fact is logged; the rest of the tick runs |
+| a threshold configured for a series that is already past it | the first tick transitions it like any other: a subject that arrives critical alerts at once |
 | `silence_after` widened while a node is silent-critical | the next tick finds `now − last_seen` inside the new window and recovers it |
 | a sensor interval lowered while the agent still holds the old one | `stale_after` shrinks first, so healthy subjects may freeze for up to one configuration delivery ([ingest](ingest.md#configuration-delivery)) |
-| a `volumes` entry for a mount no measurement has ever carried | the hub starts; the override applies if that volume appears |
-| a `volumes` key that differs from a reported `mount` only by a trailing slash | a different subject: mounts are matched byte-identically |
-| a node removed from the file | no subjects for it: its stored states are left untouched and never evaluated, and no recovery is notified |
-| a rule removed from the file | the same: its subjects' states are left untouched and unevaluated |
+| a node removed from the file | no subjects for it: its stored levels are left untouched and never evaluated, and no recovery is notified |
 
 ### Startup validation
 
 Rows the hub refuses to start on, in the manner of [hub-config.md](hub-config.md#startup).
-What a layer says on its own terms — a size, a ratio, a rule name, the shape of a `backup`
-branch — is checked at every layer, including a class no node uses yet. What only a
-finished rule can be judged on — critical against warning — is checked on the resolved rule
-of every node and every declared volume, because a layer above may raise the value that
-makes it consistent ([hub-config.md](hub-config.md#invariants)).
+Threshold values are not among them: they are checked by the form that writes them
+([thresholds.md](thresholds.md#saving)), and the hub must survive whatever is already
+stored.
 
 | Configuration | Result |
 |---|---|
-| a size that is not a number with a known unit (`10GB`, `500MB`) | startup error naming the key |
-| `ratio` outside 0–100 | startup error naming the key |
-| a rule name no rule reads | startup error naming the rule: an unknown map key is not caught by the unknown-field check |
-| a resolved rule whose critical `floor`, `ratio` or `ceiling` is above the warning value for the same field | startup error naming node, volume and field |
-| `ratio` or `ceiling` under a `backup` branch | startup error: a backup rule is a floor |
-| a resolved rule left with a `ratio` and no `ceiling`, or the reverse | startup error naming the rule: a band needs both, and half of one would be ignored in silence. A layer may still write one half and inherit the other, the way every other field layers |
-| `role` other than `backup` | startup error naming node and mount |
 | `digest.at` not `HH:MM`, or a timezone the system's zone database does not carry | startup error naming the key |
 | `notify.locale` outside `en`, `ru`; `notify.channel` outside `log`, `telegram` | startup error naming the key |
 | `channel: telegram` with either environment variable unset | startup error naming the variable, never its value |
+| a stored threshold this build cannot read — an unknown direction, a value that is not finite | that subject is skipped and the fact is logged; the hub starts and keeps watching the rest |
 
 ## Invariants
 
 - One state change produces exactly one event and at most one instant message; a subject
   that stays in `warning` is listed in each daily digest, which is not a repeat of that
   change but a statement of the current state.
-- The tick is idempotent at a fixed instant: called twice with the same clock and the same
-  stored data, it changes nothing.
+- The tick is idempotent at a fixed instant: called twice with the same clock, the same
+  stored data and the same thresholds, it changes nothing.
 - A message is never delivered for a transition that was not recorded first, so the log is
   never behind what a reader was told.
 - Nothing a threshold touches reaches an agent, so no threshold edit changes a
@@ -394,15 +393,21 @@ makes it consistent ([hub-config.md](hub-config.md#invariants)).
   window still to be reported.
 - No level is ever computed from a frozen subject's values, so stale data cannot recover a
   state or repeat an alert.
-- Recovery is the negated entry rule with a margin on every comparison, never a
-  per-condition clearance ([0013](../decisions/0013-relative-hysteresis.md)).
+- Recovery is the negated entry comparison with a margin on the threshold's magnitude, never
+  a separate rule ([0013](../decisions/0013-relative-hysteresis.md)).
+- Nothing alerts that was not configured to: an unconfigured series has no level, and a
+  fresh installation is silent until someone sets a number
+  ([0032](../decisions/0032-thresholds-are-set-in-the-interface.md)).
 - Every user-facing string is delivered in `notify.locale`; logs stay English
   ([0008](../decisions/0008-english-repo-bilingual-ui.md)).
 
 ## Edge cases
 
-- **A metric the configuration does not declare** is stored by ingest and ignored here: no
-  rule reads it, so it has no subject and no level.
+- **Two subjects of one volume** — bytes and percent — are independent: they can hold
+  different levels at the same time, and the node's level is the most severe among them,
+  as it is among any other subjects ([state.md](state.md#model)).
+- **A threshold of zero** has a margin of zero, so it cannot flap-protect: entry is strict
+  below zero and exit clears at zero itself. It is legal, and the form says what it means.
 - **Clock skew on the agent** cannot affect silence, which runs on hub receipt time, but a
   measurement stamped in the future is still the newest value of its series and is
   evaluated as such until a later one arrives.
@@ -412,16 +417,17 @@ makes it consistent ([hub-config.md](hub-config.md#invariants)).
 
 ## Out of scope
 
+- Entering and validating a threshold → [thresholds.md](thresholds.md).
 - Showing levels on the web page → the page is a skin
   ([0001](../decisions/0001-semantic-core-and-skins.md)) reading them from
   [state.md](state.md). Showing the event log → a follow-up, not this spec.
-- Inbound Telegram commands (`/status`) → after the POC; stage 2 only sends.
+- Inbound Telegram commands (`/status`) → after the POC; the bot only sends.
 - A locale per recipient, which [0008](../decisions/0008-english-repo-bilingual-ui.md)
   anticipates → while there is one recipient, `notify.locale` is that locale.
-- A per-metric hysteresis margin, which [0013](../decisions/0013-relative-hysteresis.md)
+- A per-subject hysteresis margin, which [0013](../decisions/0013-relative-hysteresis.md)
   allows → deferred until a metric proves noisy.
-- Forecast alerting ("full in ~12 days") → [0012](../decisions/0012-threshold-model.md)
-  defers it until history is long enough.
+- Forecast alerting ("full in ~12 days") → a later addition on top of thresholds
+  ([0033](../decisions/0033-a-subject-is-a-series.md)).
 - Which sensors run and how often → [hub-config.md](hub-config.md), [agent.md](agent.md).
 - Storing measurements and advancing last-seen → [ingest.md](ingest.md).
 

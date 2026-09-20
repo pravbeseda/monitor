@@ -36,6 +36,7 @@ Its whole HTTP surface:
 | `/api/v1/agent/target`, and every later path under `/api/v1/agent/` | GET | the update timer on every node | yes — the same per-node bearer token ([ADR 0028](decisions/0028-agents-follow-a-target-the-hub-serves.md)) |
 | `/` | GET | a person in a browser | no |
 | `/history` | GET | a person in a browser | no |
+| `/thresholds` | GET, POST | a person in a browser | no |
 | `/api/v1/series` | GET | a program, a chart renderer | no |
 | `/api/v1/history` | GET | a program, a chart renderer | no |
 | `/api/v1/state` | GET | a program, a skin | no |
@@ -53,12 +54,21 @@ path list grows; do not enumerate paths where a prefix rule will do.
    is rotated, not reused.
 
 2. **Every request goes to the hub, unchanged.** Method, path, query string, body **and
-   headers** arrive as they were sent. Two headers matter by name: `Authorization`, which
-   carries a node's token, and `Accept-Language`, which is how the page picks English or
+   headers** arrive as they were sent. Three headers matter by name: `Authorization`, which
+   carries a node's token, `Accept-Language`, which is how the page picks English or
    Russian ([ADR 0008](decisions/0008-english-repo-bilingual-ui.md)) — a role that normalises
-   or strips headers silently makes the interface English-only. No path rewriting, no
+   or strips headers silently makes the interface English-only — and `Origin`, which is how
+   the hub tells a save made on its own page from one a third-party page made on the
+   reader's behalf: stripped or rewritten, every save is refused. No path rewriting, no
    trailing-slash normalisation, no static file served from disk, no directory listing, no
    default vhost answering for this name.
+
+   **`POST` is not only an ingest method.** `/thresholds` is a form, and it is the whole
+   configuration surface for alerting ([specs/thresholds.md](specs/thresholds.md)): a method
+   allow-list that admits `POST` on ingest and only `GET` elsewhere leaves the panel
+   readable and unconfigurable. The answer to a save is a redirect, so a `Location` header
+   the hub returns has to arrive at the browser as the hub wrote it — a role that rewrites
+   it sends the reader somewhere else after every save.
 
 3. **The hub stays unreachable except through the proxy.** It binds to loopback, and the
    host's firewall keeps its port closed from outside. This is the one requirement whose
@@ -82,6 +92,11 @@ path list grows; do not enumerate paths where a prefix rule will do.
    person and one for a program, so a script's credential can be replaced without locking the
    browser out, and adding or removing one is an Ansible change rather than a rewrite. None of
    them may be a node's ingest token, and none of them belongs in this repository.
+
+   **`POST /thresholds` is the person's alone.** The program credential is for reading; a
+   script that has leaked it may not also be able to clear every threshold on the panel and
+   silence every alert, which is a change nothing would report. Everything else stays as
+   requirement 5 describes it, both credentials included.
 
 7. **A 1 MiB request body passes; a larger one is rejected with `413`.** That is the hub's own
    cap on an ingest body, so the two agree on the size. Refusing it *by size* is something
@@ -155,6 +170,19 @@ curl -sI https://hub.example.com/api/v1/series      # 401 — no credential, no 
 curl -s -u "$cred" "https://hub.example.com/api/v1/series?metric=disk.free_pct" | head -c 200
 curl -s -u "$human_cred" https://hub.example.com/ -o /dev/null -w '%{http_code}\n'   # 200
 ```
+
+Requirements 2 and 6 — the form is reachable, writable, and writable by a person only:
+
+```sh
+curl -s -o /dev/null -w '%{http_code}\n' -u "$cred" -X POST \
+     https://hub.example.com/thresholds       # 401: a program credential may not save
+curl -s -o /dev/null -w '%{http_code}\n' -u "$human_cred" -X POST \
+     https://hub.example.com/thresholds       # the hub's own refusal of an empty save
+```
+
+The second must not be `405`: that is nginx refusing the method, and it makes every
+threshold unsettable. Anything the hub answers there — it refuses a save that names no
+series and carries no form token — proves the request arrived.
 
 Requirement 4 — the one that proves agents still get in:
 

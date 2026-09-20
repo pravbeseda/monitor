@@ -1,9 +1,16 @@
 # 0013. Hysteresis is a relative margin, not a fixed number of points
 
-- **Status:** accepted
+- **Status:** accepted; amended by [0033](0033-a-subject-is-a-series.md)
 - **Date:** 2026-08-28
 - **Supersedes:** the recovery margin in [0006](0006-alerting-rules.md); the rest of that
   decision stands
+
+*The compound-rule half below — negating a conjunction, and the floor-and-band examples —
+went with [0012](0012-threshold-model.md). The 20% margin stands, measured on the magnitude
+of the threshold and applied in the direction the single comparison's negation points
+([0033](0033-a-subject-is-a-series.md)); the per-metric override named in the consequences
+would today be set per series in the store
+([0032](0032-thresholds-are-set-in-the-interface.md)), not as a layer in the file.*
 
 ## Context
 

@@ -5,7 +5,7 @@
   contract of `disk.free_bytes` and `disk.free_pct`
 - **Decisions:** [0003](../decisions/0003-sensors-are-modules.md),
   [0010](../decisions/0010-agent-configuration.md),
-  [0012](../decisions/0012-threshold-model.md)
+  [0033](../decisions/0033-a-subject-is-a-series.md)
 
 ## Purpose
 
@@ -18,8 +18,9 @@ volume that changes its labels between runs breaks its own history.
 
 ## Measurements
 
-Every collected volume yields both metrics of [0012](../decisions/0012-threshold-model.md),
-which needs an absolute and a proportional reading of the same volume:
+Every collected volume yields both metrics, so that a volume can be judged in whichever of
+the two reads better on it ([0033](../decisions/0033-a-subject-is-a-series.md)) and charted
+in either:
 
 | Metric | Value |
 |---|---|
@@ -121,8 +122,8 @@ One row = one test. Anchors: `spec: disk-sensor.md#<heading>`.
 
 ## Out of scope
 
-- Thresholds, roles and health for a volume → [evaluation](evaluation.md),
-  [0012](../decisions/0012-threshold-model.md).
+- Thresholds and health for a volume → [evaluation](evaluation.md),
+  [thresholds.md](thresholds.md).
 - Scheduling: when the sensor runs and how often → agent spec,
   [0010](../decisions/0010-agent-configuration.md).
 - Inode exhaustion, SMART health, IO latency — later sensors, not this one.

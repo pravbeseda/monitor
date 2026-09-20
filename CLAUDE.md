@@ -184,9 +184,9 @@ Each line is an index into the ADR that owns it.
   silence is an expected state configured per node class (`silence_after`). → 0002
 - **Sensors are in-process modules** (`Sensor: collect() -> []Measurement`); the interface
   must not reveal whether an implementation is built in or external. → 0003
-- **Metrics are declared, not coded**: id, domain, source, unit, direction, thresholds and
-  expected interval come from the hub's YAML config. Health, anomaly and silence detection
-  all derive from that schema.
+- **A metric costs no code**: a measurement declares itself, its id carries its unit, and
+  what a series is judged by — a direction and up to two values — is set on its page and
+  stored with the data. What an agent collects and how often stays configuration. → 0032, 0033
 - **The semantic core is the single source of truth**; the State API carries semantics only,
   never skin-specific fields. Skins are equal consumers of it, and drill-down, `at=` time
   travel and the event stream live outside them. → 0001
@@ -195,20 +195,20 @@ Each line is an index into the ADR that owns it.
   day. → 0006, 0016
 - **Evaluation runs on the hub's own tick**, never inside an ingest request: one writer of
   the event log, and silence, digest and repeat are the same pass. → 0015
-- **Hysteresis is relative**: recovery is the negated entry rule with every comparison
-  shifted by 20% of its threshold, whatever the unit. → 0013
+- **Hysteresis is relative**: recovery is the entry comparison negated and shifted by 20%
+  of the threshold's magnitude, whatever the unit. → 0013, 0033
 - **Stack**: Go for both binaries, SQLite (`modernc.org/sqlite`, no CGO) behind a `Storage`
   interface, server-side `html/template`, systemd/launchd, TLS terminated by the host's
   nginx with the hub bound to localhost. → 0005
 - **The agent carries no configuration** beyond the hub address and its token: which sensors
-  run, how often and with which thresholds comes from the hub in the ingest response, layered
-  sensor default → node class → node → sensor or volume. → 0010
+  run and how often comes from the hub in the ingest response, layered sensor default →
+  node class → node → sensor. Thresholds are not in it at all. → 0010, 0032
 - **Quality is machine-enforced**: CI runs `gofmt`, `go vet`, `golangci-lint`,
   `go test -race -cover` and `shellcheck` over the shell the project ships, and a red check
   blocks the merge; the pre-commit hook runs the fast pair (`gofmt`, `go vet`). → 0011, 0021
-- **Disk thresholds are a floor plus a band**: alert below the floor, or below the ratio
-  while absolute headroom is under the ceiling; `role: backup` volumes use headroom only.
-  → 0012
+- **A subject is a series and a threshold is one comparison per level**: a direction
+  (`below`/`above`) and up to two values, set per series in the interface and stored with
+  the data; nothing has a level until someone sets one. → 0032, 0033
 - The versioned API prefix (`/api/v1/...`) is deliberate — keep it on every new endpoint.
 - The project's value is the normalization and prioritization layer, not storage or
   charting; weigh new low-level work against what off-the-shelf tools already do.

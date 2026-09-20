@@ -1,6 +1,7 @@
 # 0012. Disk thresholds are a floor plus a proportional band
 
-- **Status:** accepted
+- **Status:** superseded by [0033](0033-a-subject-is-a-series.md), whose
+  [0032](0032-thresholds-are-set-in-the-interface.md) also replaces the layering below
 - **Date:** 2026-08-28
 - **Source:** [POC](../poc.md) question 4
 

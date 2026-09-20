@@ -7,7 +7,7 @@
   `internal/hub/templates/shell.html` and the printer's zone in `internal/i18n`. Formatting
   itself stays with `internal/i18n`; what a page *contains* stays with that page's own spec
   ([history.md](history.md) for `/history` and for the values on `/`, [state.md](state.md)
-  for the levels on `/`); the reader's language
+  for the levels on `/`, [thresholds.md](thresholds.md) for `/thresholds`); the reader's language
   is settled by [0008](../decisions/0008-english-repo-bilingual-ui.md) and needs nothing
   here. The JSON API is not a reader: nothing here touches it.
 - **Decisions:** [0005](../decisions/0005-poc-stack.md),
@@ -80,6 +80,7 @@ tell which of them they are.
 | the browser has moved to another zone, or dropped what it stored | the next refresh in the browser's current zone |
 | the hub was upgraded, or the page's language changed | the page reloads once, whole, in the new rendering |
 | the reader uses the back button afterwards | the page they came from; refreshing added nothing to the browser's history |
+| a page carrying a form the reader has typed into — `/thresholds` | not refreshed while it is being edited: a refresh that replaced the content would eat what was typed ([thresholds.md](thresholds.md#form)) |
 | scripting is turned off | the page as it was drawn, never refreshed; reloading it by hand still works |
 
 What the script does in a browser — the timing, the swap, the scroll, the notice — is

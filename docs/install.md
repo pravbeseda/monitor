@@ -188,10 +188,13 @@ itself and refuses the whole file over one such line
 ([ADR 0020](decisions/0020-agent-reads-its-environment-file.md)). Edit `agent.env` as plain
 `KEY=VALUE` lines and `#` comments only — an `export` prefix works in neither file.
 
-Now edit both. `hub.yaml` is the product configuration — nodes, classes, thresholds,
-digest, notifier ([specs/hub-config.md](specs/hub-config.md)). `hub.env` holds only secrets:
-one token per node, named by that node's `token_env`, plus the Telegram credentials when the
-channel is `telegram`. Generate a token per node, long and random:
+Now edit both. `hub.yaml` is the product configuration — nodes, classes, digest, notifier
+([specs/hub-config.md](specs/hub-config.md)); thresholds are not in it, they are set on the
+hub's own `/thresholds` page once a series is reporting
+([specs/thresholds.md](specs/thresholds.md),
+[ADR 0032](decisions/0032-thresholds-are-set-in-the-interface.md)). `hub.env` holds only
+secrets: one token per node, named by that node's `token_env`, plus the Telegram credentials
+when the channel is `telegram`. Generate a token per node, long and random:
 
 ```sh
 openssl rand -base64 32
@@ -321,8 +324,9 @@ sudo systemctl restart monitor-hub.service
 
 ### Upgrading the hub
 
-Section 0 is one command for this. By hand it is a new binary in place and a restart, with no
-configuration to change. Verify it first as in step 1, then, from the checkout:
+Section 0 is one command for this. By hand it is a new binary in place and a restart, and
+usually nothing in `hub.yaml` changes — the one release that does is the next subsection.
+Verify it first as in step 1, then, from the checkout:
 
 ```sh
 scp dist/monitor-hub hub.example.com:
@@ -336,6 +340,64 @@ own ([ADR 0022](decisions/0022-updates-are-pulled.md)).
 
 On a hub host with the update timer below, the target is what chooses the version: a hub
 installed by hand is replaced at the next run by whatever the target names.
+
+### Upgrading past the threshold change
+
+One upgrade is not just a binary. From the release that carries
+[ADR 0032](decisions/0032-thresholds-are-set-in-the-interface.md), no threshold lives in
+`hub.yaml` any more: what a series is judged by is entered on the hub's `/thresholds` page
+and stored with the measurements. The old numbers are **not migrated**, and until they are
+entered again nothing alerts. Do it in this order:
+
+1. **Pin the target to the version now running**, so the hourly timer does not land the
+   upgrade while you are halfway through. A host without the timer skips this and step 4.
+
+   ```sh
+   monitor-hub --version                                          # monitor-hub 1.2.3
+   printf '1.2.3\n' | sudo tee /etc/monitor/hub.target >/dev/null
+   ```
+
+2. **Write down the thresholds the file still carries.** Copy the `rules:` and `volumes:`
+   blocks of `/etc/monitor/hub.yaml` somewhere off the host: they are the only record of
+   what each volume was judged by, and step 6 asks for numbers in their place.
+
+   ```sh
+   sudo cat /etc/monitor/hub.yaml
+   ```
+
+3. **Delete `rules:` and `volumes:` from `hub.yaml`.** The new hub starts with them still
+   in place and logs a warning naming each, but that tolerance lasts one release only
+   ([specs/hub-config.md](specs/hub-config.md#startup)); left in the file they become a hub
+   that refuses to start later, on an upgrade nobody is watching.
+
+4. **Let the upgrade land.** With the timer, point the target back where it was and run it
+   now rather than within the hour; by hand, it is the four commands above.
+
+   ```sh
+   printf 'latest\n' | sudo tee /etc/monitor/hub.target >/dev/null
+   sudo systemctl start monitor-hub-update.service
+   ```
+
+5. **Confirm it came back up.** The journal's listening line names the new version, and no
+   warning about `rules` or `volumes` appears once step 3 is done.
+
+   ```sh
+   systemctl status monitor-hub.service
+   sudo journalctl -u monitor-hub.service -n 20
+   ```
+
+6. **Give every volume its levels again**, from the link each series row on the hub's page
+   carries ([specs/thresholds.md](specs/thresholds.md)). A volume is **two** series — one in
+   bytes, `disk.free_bytes`, one in percent, `disk.free_pct` — configured separately, each
+   with a direction (`below`, for free space) and a warning and a critical value; either
+   value may be left empty, and a series with neither never alerts. Setting only the one
+   that matters for that volume is a legitimate answer.
+
+7. **Check `agent_target` is set** in `hub.yaml`, at the top level, per class or per node,
+   so every node reaches this release too. An agent older than it does not name the sensor
+   behind a measurement, and staleness is measured against that name
+   ([ADR 0033](decisions/0033-a-subject-is-a-series.md)), so a node left behind is charted
+   and judged but never marked stale.
 
 ### Keeping the hub upgraded unattended
 

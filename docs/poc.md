@@ -35,7 +35,8 @@ The reasoning and the rejected alternatives are in the ADRs; the POC only applie
 - [0007](decisions/0007-public-repository.md) — what may not enter this repository
 - [0010](decisions/0010-agent-configuration.md) — where the agent's configuration comes from
 - [0011](decisions/0011-quality-gates.md) — the quality gates
-- [0012](decisions/0012-threshold-model.md) — the disk threshold model
+- [0012](decisions/0012-threshold-model.md) — the disk threshold model, since superseded by
+  [0033](decisions/0033-a-subject-is-a-series.md)
 - [0013](decisions/0013-relative-hysteresis.md) — how a state recovers
 - [0014](decisions/0014-macos-available-space.md) — what "free space" means
 - [0015](decisions/0015-evaluation-on-a-tick.md) — evaluation runs on its own tick
@@ -56,29 +57,29 @@ POST /api/v1/ingest
   "ts": "2026-08-28T10:00:00Z",
   "measurements": [
     { "metric": "disk.free_bytes", "labels": {"mount": "/", "fs": "apfs", "removable": "false"},
-      "value": 123456789 },
+      "sensor": "disk", "value": 123456789 },
     { "metric": "disk.free_pct",   "labels": {"mount": "/", "fs": "apfs", "removable": "false"},
-      "value": 34.2 }
+      "sensor": "disk", "value": 34.2 }
   ]
 }
 ```
 
 `config_version` is the configuration the agent currently holds; when it differs from the
 hub's, the response carries the newer one ([0010](decisions/0010-agent-configuration.md)).
-The shape of that response belongs in the ingest spec.
+`sensor` names the module that took the reading, which is what staleness is measured
+against ([0033](decisions/0033-a-subject-is-a-series.md)). The canonical shape of both the
+request and the response is the ingest spec's.
 
-Thresholds and node classes are declared in the hub's YAML configuration, never hard-coded
-in the evaluation logic; product defaults apply where that file says nothing
-([0007](decisions/0007-public-repository.md)). The deployment file itself lives on the server
-and is not part of this repository, which ships only `config.example.yaml`. The full key
-set lives in [hub-config](specs/hub-config.md) and [evaluation](specs/evaluation.md):
+Node classes are declared in the hub's YAML configuration, never hard-coded in the
+evaluation logic; product defaults apply where that file says nothing
+([0007](decisions/0007-public-repository.md)). **Thresholds are not in that file**: since
+[0032](decisions/0032-thresholds-are-set-in-the-interface.md) they are entered per series on
+the hub's own page and stored with the measurements, and nothing alerts until they are. The
+deployment file itself lives on the server and is not part of this repository, which ships
+only `config.example.yaml`. The full key set lives in [hub-config](specs/hub-config.md) and
+[evaluation](specs/evaluation.md):
 
 ```yaml
-rules:
-  disk:
-    warning:  { floor: 10GB, ratio: 15, ceiling: 100GB }
-    critical: { floor: 4GB,  ratio: 7,  ceiling: 40GB }
-
 classes:
   laptop: { silence_after: 48h }
   server: { silence_after: 10m }
@@ -100,10 +101,11 @@ nodes:
 - [x] Run by hand on one laptop and one server
 
 **Stage 2 — evaluation and alerts**
-- [x] Evaluation on its own tick ([0015](decisions/0015-evaluation-on-a-tick.md)): `rules`
-      in the hub's YAML, levels with the relative hysteresis of
-      [0013](decisions/0013-relative-hysteresis.md), stale subjects frozen
-      ([evaluation spec](specs/evaluation.md))
+- [x] Evaluation on its own tick ([0015](decisions/0015-evaluation-on-a-tick.md)): levels
+      with the relative hysteresis of [0013](decisions/0013-relative-hysteresis.md), stale
+      subjects frozen ([evaluation spec](specs/evaluation.md)). The POC took its thresholds
+      from `rules` in the hub's YAML; they are now set per series in the interface
+      ([0032](decisions/0032-thresholds-are-set-in-the-interface.md))
 - [x] `states` and `events` tables: one event per transition, read back after a restart
 - [x] Notifier behind an interface (log and Telegram), silence detector, the instant rule
       of [0016](decisions/0016-leaving-critical-is-instant.md), daily digest
@@ -158,7 +160,10 @@ rest are recorded here, which is where they belong.
    response. → [0010](decisions/0010-agent-configuration.md). Starting values: disk every 15m
    on servers and 1h on laptops, above a 5m base tick.
 4. **Thresholds** — a floor plus a proportional band, with backup volumes declared by role.
-   → [0012](decisions/0012-threshold-model.md).
+   → [0012](decisions/0012-threshold-model.md), overtaken after the POC by
+   [0032](decisions/0032-thresholds-are-set-in-the-interface.md) and
+   [0033](decisions/0033-a-subject-is-a-series.md): a threshold is one comparison per level,
+   set per series in the interface, not layered in the file.
 5. **Volumes and sensors** — an allow-list of filesystem types (`apfs`, `ext4`, `xfs`,
    `btrfs`, `zfs`, `ntfs`) delivered with the configuration; external drives are collected
    and flagged removable so an unplugged one is not read as a volume that vanished. Which

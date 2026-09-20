@@ -1,6 +1,8 @@
 # 0030. The State API reports the verdict evaluation stored
 
-- **Status:** accepted
+- **Status:** accepted; amended by [0033](0033-a-subject-is-a-series.md) — `subjects` and
+  `readings` became one list, because every series is now a subject; never evaluating on
+  read, staleness decided at read, the node rollup and the refusal of `at=` stand
 - **Date:** 2026-09-19
 - **Source:** [state spec](../specs/state.md), [design notes](../log/2026-09-19-state-api.md)
 
