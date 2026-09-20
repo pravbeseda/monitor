@@ -355,3 +355,26 @@ func TestAnEmptyMountStillNamesItsSeries(t *testing.T) {
 		t.Fatalf("an empty mount reads like no labels at all:\n%s", notify.Render(printer, bare))
 	}
 }
+
+// spec: evaluation.md#messages — a label whose value carries a space or an `=` is quoted:
+// two different label maps must not read as one.
+func TestLabelsThatWouldReadAlikeAreQuoted(t *testing.T) {
+	printer := i18n.For(i18n.English)
+	one, split := entering(), entering()
+	one.Metric, split.Metric = "queue.depth", "queue.depth"
+	one.Labels = map[string]string{"queue": "payments region=eu"}
+	split.Labels = map[string]string{"queue": "payments", "region": "eu"}
+	one.Readings = map[string]float64{"queue.depth": 42}
+	split.Readings = map[string]float64{"queue.depth": 42}
+
+	first, second := notify.Render(printer, one), notify.Render(printer, split)
+	if first == second {
+		t.Fatalf("two label maps read as one:\n%s", first)
+	}
+	if !strings.Contains(first, `queue="payments region=eu"`) {
+		t.Errorf("message = %q, want the value quoted", first)
+	}
+	if !strings.Contains(second, "queue=payments region=eu") {
+		t.Errorf("message = %q, want two plain pairs", second)
+	}
+}

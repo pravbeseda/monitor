@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"maps"
 	"slices"
+	"strconv"
 	"strings"
 
 	"github.com/pravbeseda/monitor/internal/evaluate"
@@ -51,19 +52,30 @@ func Render(p *i18n.Printer, m evaluate.Message) string {
 var decoration = map[string]bool{"fs": true, "removable": true}
 
 // naming is what identifies the series inside its node: a mount point reads as itself,
-// and any other label as the pair it is.
+// and any other label as the pair it is. A value carrying a space or an `=` is quoted, or
+// it would read as two labels — `{queue: "payments region=eu"}` is one series and
+// `{queue: payments, region: eu}` is another.
 func naming(labels map[string]string) string {
 	named := make([]string, 0, len(labels))
 	for _, key := range slices.Sorted(maps.Keys(labels)) {
 		switch {
 		case decoration[key]:
 		case key == "mount" && labels[key] != "":
-			named = append(named, labels[key])
+			named = append(named, plain(labels[key]))
 		default:
-			named = append(named, key+"="+labels[key])
+			named = append(named, plain(key)+"="+plain(labels[key]))
 		}
 	}
 	return strings.Join(named, " ")
+}
+
+// plain is a label's key or value as it reads in a message, quoted when reading it back
+// would otherwise be ambiguous.
+func plain(text string) string {
+	if strings.ContainsAny(text, " =\"") {
+		return strconv.Quote(text)
+	}
+	return text
 }
 
 // RenderDigest is the day's summary as one message: a title, one line per subject, and
