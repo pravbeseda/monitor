@@ -47,7 +47,7 @@ func lastDigest(t *testing.T, db *storage.SQLite) (time.Time, bool) {
 // transition the current pass did not write.
 func warned(t *testing.T, db *storage.SQLite, at time.Time, mount string) {
 	t.Helper()
-	collect(t, db, at, volume(mount), 19e9, 14.84)
+	collect(t, db, at, volume(mount), gb(9))
 	pass(t, evaluator(db, at, watching(t)))
 }
 
@@ -60,13 +60,13 @@ func TestTheDigestCarriesTransitionsAndStandingWarnings(t *testing.T) {
 
 	// /data recovers before the digest, so its last move of the window is that recovery.
 	recovered := yesterday.Add(3 * time.Hour)
-	collect(t, db, recovered, volume("/data"), 40e9, 31.25)
+	collect(t, db, recovered, volume("/data"), gb(40))
 	pass(t, evaluator(db, recovered, watching(t)))
 
 	channel := &recorder{}
 	at := occurrence.Add(3 * time.Hour)
-	collect(t, db, at, volume("/data"), 40e9, 31.25)
-	collect(t, db, at, volume("/srv"), 19e9, 14.84)
+	collect(t, db, at, volume("/data"), gb(40))
+	collect(t, db, at, volume("/srv"), gb(9))
 	pass(t, digesting(db, channel, at, watching(t)))
 
 	summaries := channel.summaries()
@@ -111,7 +111,7 @@ func TestASubjectStillInWarningIsListedOnce(t *testing.T) {
 
 	channel := &recorder{}
 	at := occurrence.Add(time.Hour)
-	collect(t, db, at, volume("/data"), 19e9, 14.84)
+	collect(t, db, at, volume("/data"), gb(9))
 	pass(t, digesting(db, channel, at, watching(t)))
 
 	summaries := channel.summaries()
@@ -128,7 +128,7 @@ func TestATransitionOfTheDigestTickIsIncluded(t *testing.T) {
 
 	channel := &recorder{}
 	at := occurrence.Add(time.Hour)
-	collect(t, db, at, volume("/data"), 19e9, 14.84)
+	collect(t, db, at, volume("/data"), gb(9))
 	pass(t, digesting(db, channel, at, watching(t)))
 
 	summaries := channel.summaries()
@@ -144,7 +144,7 @@ func TestAnEmptyDigestSendsNothingAndStillCloses(t *testing.T) {
 	mark(t, db, yesterday)
 	channel := &recorder{}
 	at := occurrence.Add(time.Hour)
-	collect(t, db, at, volume("/"), 40e9, 31.25)
+	collect(t, db, at, volume("/"), gb(40))
 	pass(t, digesting(db, channel, at, watching(t)))
 
 	if got := channel.summaries(); len(got) != 0 {
@@ -162,7 +162,7 @@ func TestACriticalAloneIsNoDigest(t *testing.T) {
 	mark(t, db, yesterday)
 	channel := &recorder{}
 	at := occurrence.Add(time.Hour)
-	collect(t, db, at, volume("/"), 3e9, 2.34)
+	collect(t, db, at, volume("/"), gb(3))
 	pass(t, digesting(db, channel, at, watching(t)))
 
 	if got := channel.summaries(); len(got) != 0 {
@@ -181,16 +181,23 @@ func TestOneDigestForEveryNodeOrderedByNodeThenMount(t *testing.T) {
 	second := watching(t)
 	second.Node = "laptop-a"
 	for _, mount := range []string{"/srv", "/data"} {
-		collect(t, db, at, volume(mount), 19e9, 14.84)
+		collect(t, db, at, volume(mount), gb(9))
 	}
 	if err := db.SaveIngest(context.Background(), storage.Ingest{
 		Node: "laptop-a", AgentVersion: "test", ConfigVersion: "test", ReceivedAt: at,
 		Measurements: []storage.Measurement{
-			{Metric: "disk.free_bytes", Labels: volume("/"), Value: 19e9, TS: at},
-			{Metric: "disk.free_pct", Labels: volume("/"), Value: 14.84, TS: at},
+			{Metric: "disk.free_bytes", Sensor: "disk", Labels: volume("/"), Value: gb(9), TS: at},
 		},
 	}); err != nil {
 		t.Fatalf("SaveIngest: %v", err)
+	}
+	if err := db.SaveThreshold(context.Background(), storage.Threshold{
+		Series:    storage.SeriesRef{Node: "laptop-a", Metric: "disk.free_bytes", Labels: volume("/")},
+		Direction: storage.Below,
+		Warning:   num(gb(10)),
+		Critical:  num(gb(4)),
+	}); err != nil {
+		t.Fatalf("SaveThreshold: %v", err)
 	}
 
 	channel := &recorder{}
@@ -216,14 +223,42 @@ func TestOneDigestForEveryNodeOrderedByNodeThenMount(t *testing.T) {
 // so it is neither a transition nor a current reading.
 func TestAFrozenWarningIsLeftOutOfTheDigest(t *testing.T) {
 	db := open(t)
+	// The transition is older than the window the digest reports on, so all that is left
+	// of this subject is a stale reading standing in warning.
 	warned(t, db, yesterday.Add(time.Hour), "/data")
+	mark(t, db, occurrence.Add(-time.Minute))
+
+	channel := &recorder{}
+	pass(t, digesting(db, channel, occurrence.Add(time.Hour), watching(t)))
+
+	for _, summary := range channel.summaries() {
+		for _, entry := range summary {
+			if entry.Labels["mount"] == "/data" {
+				t.Fatalf("a stale reading was digested as standing in warning: %+v", entry)
+			}
+		}
+	}
+}
+
+// spec: evaluation.md#digest — a frozen subject whose move into warning was recorded while
+// its values were fresh is listed as the transition it was: freezing withholds judgement,
+// not a record already written.
+func TestAFrozenSubjectsRecordedTransitionIsDigested(t *testing.T) {
+	db := open(t)
+	// The warning is recorded inside the window; two hours later its values are stale,
+	// and the digest hour has passed.
+	warned(t, db, occurrence.Add(-time.Hour), "/data")
 	mark(t, db, yesterday)
 
 	channel := &recorder{}
 	pass(t, digesting(db, channel, occurrence.Add(time.Hour), watching(t)))
 
-	if got := channel.summaries(); len(got) != 0 {
-		t.Fatalf("a stale warning was digested: %v", got)
+	summaries := channel.summaries()
+	if len(summaries) != 1 || len(summaries[0]) != 1 {
+		t.Fatalf("the digest went out as %v, want the one recorded transition", summaries)
+	}
+	if got := summaries[0][0]; got.To != evaluate.Warning || got.Labels["mount"] != "/data" {
+		t.Fatalf("the entry is %+v, want the frozen subject's recorded move into warning", got)
 	}
 }
 
@@ -233,7 +268,7 @@ func TestARefusedDigestIsSentAgain(t *testing.T) {
 	db := open(t)
 	mark(t, db, yesterday)
 	at := occurrence.Add(time.Hour)
-	collect(t, db, at, volume("/data"), 19e9, 14.84)
+	collect(t, db, at, volume("/data"), gb(9))
 
 	down := &recorder{digestFails: true}
 	pass(t, digesting(db, down, at, watching(t)))
@@ -243,7 +278,7 @@ func TestARefusedDigestIsSentAgain(t *testing.T) {
 
 	channel := &recorder{}
 	later := at.Add(time.Minute)
-	collect(t, db, later, volume("/data"), 19e9, 14.84)
+	collect(t, db, later, volume("/data"), gb(9))
 	pass(t, digesting(db, channel, later, watching(t)))
 	if got := channel.summaries(); len(got) != 1 || len(got[0]) != 1 {
 		t.Fatalf("the retry sent %v", got)
@@ -266,7 +301,7 @@ func TestARestartKeepsTheTransitionInTheDigest(t *testing.T) {
 	}
 
 	at := occurrence.Add(time.Hour)
-	collect(t, db, at, volume("/data"), 19e9, 14.84)
+	collect(t, db, at, volume("/data"), gb(9))
 	fresh := &recorder{}
 	pass(t, digesting(db, fresh, at, watching(t)))
 
@@ -286,7 +321,7 @@ func TestADigestAlreadySentIsNotRepeated(t *testing.T) {
 	db := open(t)
 	mark(t, db, occurrence)
 	at := occurrence.Add(time.Hour)
-	collect(t, db, at, volume("/data"), 19e9, 14.84)
+	collect(t, db, at, volume("/data"), gb(9))
 
 	channel := &recorder{}
 	pass(t, digesting(db, channel, at, watching(t)))
@@ -301,7 +336,7 @@ func TestADigestMissedWhileDownGoesOutAtStartup(t *testing.T) {
 	db := open(t)
 	mark(t, db, yesterday)
 	late := occurrence.Add(5 * time.Hour)
-	collect(t, db, late, volume("/data"), 19e9, 14.84)
+	collect(t, db, late, volume("/data"), gb(9))
 
 	channel := &recorder{}
 	pass(t, digesting(db, channel, late, watching(t)))
@@ -319,7 +354,7 @@ func TestTwoMissedDaysSendOneDigest(t *testing.T) {
 	db := open(t)
 	mark(t, db, occurrence.AddDate(0, 0, -3))
 	at := occurrence.Add(time.Hour)
-	collect(t, db, at, volume("/data"), 19e9, 14.84)
+	collect(t, db, at, volume("/data"), gb(9))
 
 	channel := &recorder{}
 	pass(t, digesting(db, channel, at, watching(t)))
@@ -339,7 +374,7 @@ func TestARecoveryFromWarningIsCarriedByTheDigest(t *testing.T) {
 	mark(t, db, yesterday)
 
 	at := occurrence.Add(time.Hour)
-	collect(t, db, at, volume("/data"), 40e9, 31.25)
+	collect(t, db, at, volume("/data"), gb(40))
 	channel := &recorder{}
 	pass(t, digesting(db, channel, at, watching(t)))
 
@@ -362,12 +397,12 @@ func TestAWarningOvertakenByCriticalIsNotDigested(t *testing.T) {
 	mark(t, db, yesterday)
 
 	warning := occurrence.Add(time.Hour)
-	collect(t, db, warning, volume("/data"), 19e9, 14.84)
+	collect(t, db, warning, volume("/data"), gb(9))
 	pass(t, digesting(db, &recorder{}, warning, watching(t)))
 	mark(t, db, yesterday)
 
 	critical := warning.Add(time.Minute)
-	collect(t, db, critical, volume("/data"), 3e9, 2.34)
+	collect(t, db, critical, volume("/data"), gb(3))
 	channel := &recorder{}
 	pass(t, digesting(db, channel, critical, watching(t)))
 
@@ -390,7 +425,7 @@ func TestATransitionReportedOnceIsNotDigestedAgainTomorrow(t *testing.T) {
 	// The hub was down at 09:00 and starts an hour later, so this tick both records the
 	// recovery and sends the day's digest carrying it.
 	late := occurrence.Add(time.Hour)
-	collect(t, db, late, volume("/data"), 40e9, 31.25)
+	collect(t, db, late, volume("/data"), gb(40))
 	first := &recorder{}
 	pass(t, digesting(db, first, late, watching(t)))
 	summaries := first.summaries()
@@ -400,7 +435,7 @@ func TestATransitionReportedOnceIsNotDigestedAgainTomorrow(t *testing.T) {
 
 	// A day passes with nothing happening to the volume at all.
 	tomorrow := late.AddDate(0, 0, 1)
-	collect(t, db, tomorrow, volume("/data"), 40e9, 31.25)
+	collect(t, db, tomorrow, volume("/data"), gb(40))
 	second := &recorder{}
 	pass(t, digesting(db, second, tomorrow, watching(t)))
 
@@ -419,7 +454,7 @@ func TestTheFirstStartSurvivesARestart(t *testing.T) {
 	// the first start itself can mark where its window began.
 	started := occurrence.AddDate(0, 0, -1).Add(time.Hour)
 	recorded := started.Add(time.Hour)
-	collect(t, db, recorded, volume("/data"), 19e9, 14.84)
+	collect(t, db, recorded, volume("/data"), gb(9))
 	pass(t, evaluate.New(evaluate.Options{
 		Store: db, Notifier: &recorder{}, Targets: []evaluate.Target{watching(t)},
 		Digest: schedule, Started: started, Now: func() time.Time { return recorded },
@@ -428,7 +463,7 @@ func TestTheFirstStartSurvivesARestart(t *testing.T) {
 	// It restarts the next day, so its own idea of "first start" moves; the database's
 	// does not, and the window still reaches back over the transition.
 	at := occurrence.Add(time.Hour)
-	collect(t, db, at, volume("/data"), 40e9, 31.25)
+	collect(t, db, at, volume("/data"), gb(40))
 	channel := &recorder{}
 	pass(t, evaluate.New(evaluate.Options{
 		Store: db, Notifier: channel, Targets: []evaluate.Target{watching(t)},
@@ -447,8 +482,8 @@ func TestAnInterruptedFirstPassStillOpensTheWindow(t *testing.T) {
 	db := open(t)
 	started := occurrence.AddDate(0, 0, -1).Add(time.Hour)
 	recorded := started.Add(time.Hour)
-	collect(t, db, recorded, volume("/"), 19e9, 14.84)
-	collect(t, db, recorded, volume("/data"), 19e9, 14.84)
+	collect(t, db, recorded, volume("/"), gb(9))
+	collect(t, db, recorded, volume("/data"), gb(9))
 
 	// The hub is asked to stop the moment its first change is recorded, so the pass never
 	// reaches its digest.
@@ -465,7 +500,7 @@ func TestAnInterruptedFirstPassStillOpensTheWindow(t *testing.T) {
 
 	// It restarts the next day, so its own idea of "first start" has moved.
 	at := occurrence.Add(time.Hour)
-	collect(t, db, at, volume("/"), 40e9, 31.25)
+	collect(t, db, at, volume("/"), gb(40))
 	channel := &recorder{}
 	pass(t, evaluate.New(evaluate.Options{
 		Store: db, Notifier: channel, Targets: []evaluate.Target{watching(t)},
@@ -474,5 +509,47 @@ func TestAnInterruptedFirstPassStillOpensTheWindow(t *testing.T) {
 
 	if got := channel.summaries(); len(got) != 1 {
 		t.Fatalf("the restarted hub digested %v, want the window the interrupted pass opened", got)
+	}
+}
+
+// spec: evaluation.md#digest — a hub where nothing is watched says so every day, because
+// silence while all is well means nothing when nothing is being judged.
+func TestAHubThatWatchesNothingSaysSoDaily(t *testing.T) {
+	db := open(t)
+	mark(t, db, yesterday)
+	at := occurrence.Add(time.Hour)
+	collect(t, db, at, volume("/"), gb(40))
+	unwatch(t, db, volume("/"))
+
+	channel := &recorder{}
+	pass(t, digesting(db, channel, at, watching(t)))
+
+	summaries := channel.summaries()
+	if len(summaries) != 1 || len(summaries[0]) != 0 {
+		t.Fatalf("a hub judging nothing sent %v, want one empty digest", summaries)
+	}
+	if got := channel.unwatchedCounts(); len(got) != 1 || got[0] != 1 {
+		t.Fatalf("the digest counted %v unwatched series, want [1]", got)
+	}
+}
+
+// spec: evaluation.md#digest — a digest that is sent names how many series have no
+// threshold, so a volume nobody configured is visible.
+func TestTheDigestNamesTheSeriesNobodyWatches(t *testing.T) {
+	db := open(t)
+	warned(t, db, yesterday.Add(time.Hour), "/")
+	at := occurrence.Add(time.Hour)
+	collect(t, db, at, volume("/"), gb(9))
+	collect(t, db, at, volume("/data"), gb(40))
+	unwatch(t, db, volume("/data"))
+
+	channel := &recorder{}
+	pass(t, digesting(db, channel, at, watching(t)))
+
+	if got := channel.unwatchedCounts(); len(got) != 1 || got[0] != 1 {
+		t.Fatalf("the digest counted %v unwatched series, want [1]", got)
+	}
+	if summaries := channel.summaries(); len(summaries) != 1 || len(summaries[0]) != 1 {
+		t.Fatalf("the digest listed %v, want the one warning", summaries)
 	}
 }

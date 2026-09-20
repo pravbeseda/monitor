@@ -1,0 +1,34 @@
+<!DOCTYPE html>
+<html lang="{{ .Locale }}">
+<head>
+{{ template "shell" . }}
+  <style>
+    body { font-family: system-ui, sans-serif; margin: 2rem auto; max-width: 40rem; }
+    h1 { font-size: 1.3rem; margin-bottom: 0.2rem; }
+    p.meta { color: var(--muted); margin-top: 0; font-size: 0.9rem; }
+    form { display: grid; gap: 0.8rem; margin-top: 1.5rem; }
+    label { display: block; font-size: 0.9rem; }
+    input[type=text] { padding: 0.3rem 0.4rem; width: 12rem; }
+    p.error { color: var(--bad); font-weight: 600; }
+    p.note { color: var(--muted); font-size: 0.9rem; }
+  </style>
+</head>
+<body>
+  <h1>{{ .Title }}</h1>
+  <p class="meta">{{ .Series }}{{ with .Volume }} · {{ . }}{{ end }}</p>
+  {{ with .Error }}<p class="error">{{ . }}</p>{{ end }}
+  {{ with .Unwatched }}<p class="note">{{ . }}</p>{{ end }}
+  {{ with .Detached }}<p class="note">{{ . }}</p>{{ end }}
+  {{ with .Unreadable }}<p class="note">{{ . }}</p>{{ end }}
+  <form method="post" action="{{ .Action }}">
+    <fieldset>
+      <legend>{{ .DirectionLabel }}</legend>
+      <label><input type="radio" name="direction" value="below" {{ if .Below }}checked{{ end }}> {{ .BelowLabel }}</label>
+      <label><input type="radio" name="direction" value="above" {{ if not .Below }}checked{{ end }}> {{ .AboveLabel }}</label>
+    </fieldset>
+    <label>{{ .WarningLabel }} <input type="text" name="warning" value="{{ .Warning }}" inputmode="decimal"> <small>{{ .Unit }}</small></label>
+    <label>{{ .CriticalLabel }} <input type="text" name="critical" value="{{ .Critical }}" inputmode="decimal"> <small>{{ .Unit }}</small></label>
+    <div><button type="submit">{{ .SaveLabel }}</button> <a href="{{ .BackURL }}">{{ .BackLabel }}</a></div>
+  </form>
+</body>
+</html>

@@ -18,6 +18,8 @@ type Store interface {
 	Snapshot(ctx context.Context, owed []string) (storage.Snapshot, error)
 
 	SaveState(ctx context.Context, state storage.State) error
+	// DeleteState forgets a subject nothing watches any more (ADR 0032).
+	DeleteState(ctx context.Context, subject storage.Subject) error
 	ApplyTransition(ctx context.Context, change storage.Transition) error
 	RecordNotified(ctx context.Context, subject storage.Subject, at time.Time) error
 

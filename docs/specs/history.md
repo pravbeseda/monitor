@@ -31,15 +31,16 @@ below is deliberately direction-free for that reason. Reading history never writ
 
 **A series is `(node, metric, labels)`** — `server-b`, `disk.free_pct`,
 `{mount: /, fs: ext4, removable: false}` — carrying the points stored for it inside the
-window, oldest first. An [evaluation](evaluation.md) subject is `(node, rule, labels)` and
-reads several series that share its node and labels: the `disk` subject of a volume reads
-that volume's `disk.free_bytes` and `disk.free_pct`.
+window, oldest first. An [evaluation](evaluation.md) subject is the same triple: a series
+is what carries a level, so a volume contributes two of them, `disk.free_bytes` and
+`disk.free_pct` ([0033](../decisions/0033-a-subject-is-a-series.md)).
 
 **A series carries its expected interval** — the one the node resolves for the sensor the
-metric belongs to, the same input [evaluation](evaluation.md) ages a subject against. It is
-what makes a gap in the series distinguishable from a series that is simply sparse, and it
-is stated rather than guessed so that every renderer breaks a line in the same place. A
-metric no rule declares has no interval and no gaps.
+series names ([ingest](ingest.md#wire-format)), the same input [evaluation](evaluation.md)
+ages a subject against. It is what makes a gap in the series distinguishable from a series
+that is simply sparse, and it is stated rather than guessed so that every renderer breaks a
+line in the same place. A series that names no sensor, or whose node resolves no interval
+for it, has no interval and no gaps.
 
 **A query selects series and a window.** `metric` is required; `node` and label filters
 narrow the selection by exact equality, and what is not named is not constrained, so a query
@@ -100,9 +101,10 @@ GET /api/v1/history?metric=disk.free_pct&node=server-b&label.mount=/&window=7d
 
 Every timestamp is RFC 3339 in UTC with milliseconds, the resolution measurements are stored
 at ([ingest](ingest.md)). `unit` is read from the metric id — `_bytes` is `bytes`, `_pct` is
-`percent`, anything else is `number`, meaning the id declares no unit — and the set is open:
+`percent`, `_seconds` is `duration`, anything else is `number`, meaning the id declares no
+unit — and the set is open:
 a consumer treats a unit it does not know as opaque rather than as a number. `interval` is
-empty when the metric belongs to no rule. `stored` is how many points the window actually
+empty when the series names no sensor, or its node resolves no interval for it. `stored` is how many points the window actually
 holds, so a consumer can see what a reduction cost it.
 
 ## Behaviour
@@ -183,7 +185,7 @@ one.
 |---|---|
 | consecutive points no further apart than three times the interval | one continuous line |
 | consecutive points further apart than that | the line is broken between them |
-| a series whose metric belongs to no rule, so it has no interval | one continuous line, never broken |
+| a series with no interval — it names no sensor, or its node resolves none for it | one continuous line, never broken |
 
 Three times the interval is the same age at which [evaluation](evaluation.md) calls a
 subject's values stale; one definition of "this node was not reporting", not two.
@@ -203,16 +205,18 @@ subject's values stale; one definition of "this node was not reporting", not two
 | a series with a two-day silence inside a seven-day window | the line broken across the gap, not drawn straight through it |
 | a query the endpoint refuses, or a read that fails | the same status the endpoint answers, as a translated page |
 | a value on `/` | a link to the history page of its series, carrying the node, the metric and every label |
-| a volume on `/` | one row: the sensor's name as its metric, the volume, and in one cell its free space in bytes then in percent, each value its own link |
-| a series whose metric no rule declares | a row of its own: its metric id and its single value |
-| a volume only one of whose series is stored | its row with that value alone |
-| the series of one volume collected at different times | the older of the times, and the row left out or marked by that age, as [evaluation](evaluation.md#freezing) freezes the volume by its older series |
-| the rows of one node | ordered by metric, then by volume, as the series are |
-| a row on `/` that the [state](state.md#staleness) calls stale when the page is read — the newest point of its older series older than three times the interval the node resolves for its sensor ([gaps](#gaps)), or its node silent past its `silence_after` — and that carries `removable: "true"` | not shown: an unplugged drive or an ejected disk image is not a reading |
+| any series on `/` | one row of its own: its metric id, the volume its labels name if they name one, its newest value and the time it was collected |
+| a volume | two rows, one per series, since each is judged on its own ([0033](../decisions/0033-a-subject-is-a-series.md)) |
+| any row | a link to the page that sets what that series is judged by ([thresholds.md](thresholds.md)) |
+| the series of one volume collected at different times | each row its own time, and each left out or marked by its own age: nothing ages a series by another one |
+| the rows of one node | grouped so that the series of one volume sit together, and ordered by metric inside the group; the grouping is the page's own, since the [State API](state.md#ordering) privileges no label |
+| a row on `/` that the [state](state.md#staleness) calls stale when the page is read — its newest point older than three times the interval the node resolves for its sensor ([gaps](#gaps)), or its node silent past its `silence_after` — and that carries `removable: "true"` | not shown: an unplugged drive or an ejected disk image is not a reading |
 | the same, without `removable: "true"` | shown, its collected time marked, in the reader's language, as holding no fresh data |
 | a row on `/` exactly three intervals old | shown unmarked: the bound is inclusive, as for gaps |
 | that row reporting again | shown as before, unmarked |
-| a series whose node resolves no interval for its sensor — a metric in no rule, a sensor resolved `enabled: false`, a node the configuration no longer names | shown unmarked however old, and however long its node is silent: evaluation judges no subject for it |
+| a series whose newest value names no sensor | shown unmarked however old, while its node is reporting: no freshness rule applies to it ([state](state.md#staleness)) |
+| the same series once its node is silent past its `silence_after` | marked with the rest of that node's series: silence is the node's, not the series' |
+| a series whose node runs its sensor no longer — resolved `enabled: false`, or a node the file no longer names | marked as holding no fresh data, or hidden if it is removable: nothing will refresh it |
 | a node silent past its `silence_after`, its series not yet three intervals old | its series hidden or marked already: evaluation freezes a silent node's subjects in the tick it falls silent |
 | a node whose every series is left out | "no current measurements" in place of its table, rather than the "no measurements yet" of a node that never sent one |
 | a node still reporting but sending no measurements — its mount table unreadable | its series age like any other and are hidden or marked once past the bound |
@@ -251,16 +255,17 @@ unit reads naturally.
   until it reports again. An agent clock running behind by more than the bound hides and
   marks what evaluation freezes, and points stamped ahead by a clock since corrected stay
   shown until real time passes them. `/` reads that verdict from the
-  [State API](state.md#staleness) rather than applying the rule itself. Evaluation ages a volume by the
-  older of its two series, and `/` ages a volume's row the same way.
+  [State API](state.md#staleness) rather than applying the rule itself. Each series ages on
+  its own, so one row of a volume can be marked while the other is not.
 - **A removable volume plugged back under another mount point** is a new series; the old one
   stays hidden.
 - **A sensor interval lowered while the agent still holds the old one** can hide a removable
   volume that is still plugged in, until the agent picks up the new interval — the same
   window in which [evaluation](evaluation.md#freezing) may freeze it.
-- **A metric the hub's configuration does not declare** is stored by [ingest](ingest.md) and
-  served here with no interval, so its line is never broken. Its unit still comes from its
-  id, which is where the unit lives until metrics are declared.
+- **A series that names no sensor** — pushed by something other than an agent, or by an
+  agent too old to name it — is stored by [ingest](ingest.md) and served here with no
+  interval, so its line is never broken. Its unit still comes from its id, which is where
+  the unit lives until metrics are declared.
 - **A label filter naming a label no series carries** matches nothing rather than being
   ignored.
 - **A node whose interval was changed** ages by the interval it resolves now, so a line drawn
@@ -274,12 +279,12 @@ unit reads naturally.
   a page session alone would lock out the very consumers
   [0018](../decisions/0018-history-through-the-api.md) exists to enable. Ingest's per-node
   limiter has no counterpart here yet.
-- **Thresholds drawn on the chart** — the bands of
-  [0012](../decisions/0012-threshold-model.md) are meaning, and putting them on the chart is a
-  later step reading them from [evaluation](evaluation.md).
-- **Events on the chart.** Events are keyed by rule and series by metric, and one rule reads
-  several metrics, so the join has to be designed rather than discovered when the overlay is
-  built.
+- **Thresholds drawn on the chart** — a series' own warning and critical values
+  ([thresholds.md](thresholds.md)) are meaning, and drawing them as lines on its chart is a
+  later step.
+- **Events on the chart.** An event and a series now key alike — both on
+  `(node, metric, labels)` ([0033](../decisions/0033-a-subject-is-a-series.md)) — so the
+  overlay is a design question of what to draw, not of how to join it.
 - **`at=` time travel, arbitrary `from`/`to` ranges and several metrics in one query** —
   later extensions of the same endpoints ([0001](../decisions/0001-semantic-core-and-skins.md)).
 - **A metric whose values fall below zero.** The value axis starts at zero, so such a series

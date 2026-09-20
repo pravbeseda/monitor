@@ -8,64 +8,53 @@ import (
 	"github.com/pravbeseda/monitor/internal/storage"
 )
 
-// SilenceRule is the rule of the subject that carries a node's own silence. It is not a
-// configurable rule: it has no thresholds, only the window its class resolves to, and its
-// input is hub receipt time, which is always fresh.
-const SilenceRule = "silence"
-
-// StaleFactor turns a sensor's interval into the age at which its values stop being
-// evidence: three collections missed is no longer a hiccup. It is exported because a
-// history chart breaks its line at the same age (docs/specs/history.md#gaps), and two
-// copies of the number would let the two drift apart.
-const StaleFactor = 3
-
 // Target is one configured node as evaluation reads it. The hub resolves the layers of
-// ADR 0010 and hands over what a tick needs; none of it ever reaches an agent.
+// ADR 0010 and hands over what a tick needs; none of it ever reaches an agent, and none
+// of it carries a threshold — those are stored beside the measurements (ADR 0032).
 type Target struct {
 	Node         string
 	SilenceAfter time.Duration
-	// Intervals is the interval each sensor this node runs resolves to. A rule whose
-	// sensor is absent — switched off, or named by no layer — has no subjects here,
-	// because nothing collects for it.
+	// Intervals is the interval each sensor this node runs resolves to. A series whose
+	// sensor is absent — switched off, or named by no layer — is frozen: nothing will
+	// refresh it.
 	Intervals map[string]time.Duration
-	// Rules judge a volume the file says nothing about; Volumes carries the rules of the
-	// mounts it names, keyed by mount and then by rule name.
-	Rules   map[string]Rule
-	Volumes map[string]map[string]Rule
 }
 
-// Rule returns the thresholds that judge one subject of this node: the rules of the volume
-// at that mount when the file names it, and the node's own otherwise. A mount is matched
-// byte for byte, exactly as the sensor reports it, so a trailing slash is another volume.
-func (t Target) Rule(name, mount string) (Rule, bool) {
-	if volume, named := t.Volumes[mount]; named {
-		if found, ok := volume[name]; ok {
-			return found, true
-		}
-	}
-	found, ok := t.Rules[name]
-	return found, ok
-}
-
-// Frozen reports whether a value of a sensor, stamped at ts, is past judging at now: its
-// node has been silent longer than its class allows, or the value is older than three of the
-// sensor's intervals. A sensor the node does not run has no interval and never freezes. It is
-// exported because the state ages a reading no subject reads by the same rule
-// (docs/specs/state.md#staleness).
+// Frozen reports whether a value of a sensor, stamped at ts, is past judging at now. A
+// silent node freezes everything under it, whatever produced it. Otherwise a series whose
+// newest value names no sensor has no freshness rule at all and is never frozen on age;
+// one whose node does not run that sensor is frozen outright, because nothing will
+// refresh it; and the rest age out after three intervals. It is exported because the
+// state reports the same verdict (docs/specs/state.md#staleness).
 func (t Target) Frozen(sensor string, lastSeen, ts, now time.Time) bool {
-	interval, runs := t.Intervals[sensor]
-	if !runs {
+	if t.silent(lastSeen, now) {
+		return true
+	}
+	if sensor == "" {
 		return false
 	}
-	return t.silent(lastSeen, now) || now.Sub(ts) > StaleFactor*interval
+	interval, runs := t.Intervals[sensor]
+	if !runs {
+		return true
+	}
+	return now.Sub(ts) > StaleFactor*interval
+}
+
+// Ages reports whether a series has a freshness rule at all: a silent node ages
+// everything, and otherwise only a series that names a sensor can be judged stale
+// (docs/specs/state.md#staleness).
+func (t Target) Ages(sensor string, lastSeen, now time.Time) bool {
+	return sensor != "" || t.silent(lastSeen, now)
 }
 
 func (t Target) silent(lastSeen, now time.Time) bool {
 	return now.Sub(lastSeen) > t.SilenceAfter
 }
 
-// Subject is one thing that has a level, as one tick sees it: the triple (node, rule,
-// labels), what it was, what it is now, and the values that decided it.
+// Subject is one thing that has a level, as one tick sees it: a series — the triple
+// (node, metric, labels) — with what it was, what it is now, and the value that decided
+// it. Only a watched series is one: an unconfigured series is stored and displayed,
+// never judged (ADR 0032).
 type Subject struct {
 	storage.Subject
 	// Previous is the level the subject held when the tick began, and Since is when it
@@ -74,29 +63,29 @@ type Subject struct {
 	Since    time.Time
 	// Level is what the subject is at now.
 	Level Level
+	// Direction is what it is judged under now, and what is stored with the level: a
+	// level earned under the other direction is dropped rather than held.
+	Direction storage.Direction
 	// Restored says Previous and Since were read back from a stored level rather than
-	// assumed for a subject with none, or with one this build cannot read.
+	// assumed for a subject with none, one this build cannot read, or one earned under
+	// another direction.
 	Restored bool
 	// LastNotifiedAt is zero until a message about this subject has been delivered.
 	LastNotifiedAt time.Time
-	// Readings are the values that produced Level, keyed by metric id: the event log
-	// outlives any rule's own names for them.
+	// Readings are the values that produced Level, keyed by metric id. A subject is one
+	// series, so this holds its own value alone; the silence subject has none.
 	Readings map[string]float64
-	// Frozen says the values behind the subject are stale, so none of them was judged: it
-	// keeps its level and its Since, writes no event, sends no repeat, and is left out of
-	// the digest.
+	// Frozen says the value behind the subject is stale, so it was not judged: it keeps
+	// its level and its Since, writes no event, sends no repeat, and is left out of the
+	// digest.
 	Frozen bool
 }
 
 // Changed reports whether this tick moved the subject, which is what writes an event.
 func (s Subject) Changed() bool { return !s.Frozen && s.Level != s.Previous }
 
-// Mount is the volume a subject speaks for, and what messages are ordered by within a
-// node. The silence subject has none.
-func (s Subject) Mount() string { return s.Labels["mount"] }
-
-// Subjects is what one tick evaluates: every subject of every configured node that has
-// reported, in the order messages leave in — by node name, then by mount.
+// Subjects is what one tick evaluates: every node's silence, and every series a threshold
+// is stored for, in the order messages leave in — by node, then metric, then labels.
 func Subjects(targets []Target, snap storage.Snapshot, now time.Time) []Subject {
 	reported := make(map[string]storage.NodeState, len(snap.Nodes))
 	for _, node := range snap.Nodes {
@@ -108,6 +97,18 @@ func Subjects(targets []Target, snap storage.Snapshot, now time.Time) []Subject 
 			stored[key] = state
 		}
 	}
+	watched := make(map[string]storage.Threshold, len(snap.Thresholds))
+	for _, threshold := range snap.Thresholds {
+		key, err := storage.Subject{
+			Node: threshold.Series.Node, Metric: threshold.Series.Metric, Labels: threshold.Series.Labels,
+		}.Key()
+		if err != nil {
+			slog.Error("identify a threshold", "node", threshold.Series.Node,
+				"metric", threshold.Series.Metric, "error", err)
+			continue
+		}
+		watched[key] = threshold
+	}
 
 	var out []Subject
 	for _, target := range targets {
@@ -118,14 +119,14 @@ func Subjects(targets []Target, snap storage.Snapshot, now time.Time) []Subject 
 		// Silence and freezing read one clock, so a node that has just fallen silent freezes
 		// its other subjects in this tick rather than the next.
 		out = append(out, silenceSubject(target, target.silent(node.LastSeen, now), stored, now))
-		out = append(out, volumeSubjects(target, node, stored, now)...)
+		out = append(out, seriesSubjects(target, node, watched, stored, now)...)
 	}
 	sortSubjects(out)
 	return out
 }
 
 func silenceSubject(target Target, silent bool, stored map[string]storage.State, now time.Time) Subject {
-	subject := Subject{Subject: storage.Subject{Node: target.Node, Rule: SilenceRule}}
+	subject := Subject{Subject: storage.Subject{Node: target.Node, Metric: SilenceMetric}}
 	restore(&subject, stored, now)
 	subject.Level = OK
 	if silent {
@@ -134,45 +135,54 @@ func silenceSubject(target Target, silent bool, stored map[string]storage.State,
 	return subject
 }
 
-// volumeSubjects builds one subject per complete join of every rule the node runs a sensor
-// for. A rule whose sensor is not delivered has no subjects: nothing collects for it, so
-// every value it could read would be stale by definition.
-func volumeSubjects(target Target, node storage.NodeState, stored map[string]storage.State, now time.Time) []Subject {
+// seriesSubjects builds one subject per watched series of a node. A series nobody has
+// given a threshold is not judged at all, so it produces no subject, no event and no
+// message (ADR 0032).
+func seriesSubjects(target Target, node storage.NodeState, watched map[string]storage.Threshold,
+	stored map[string]storage.State, now time.Time,
+) []Subject {
 	var out []Subject
-	for _, name := range Names() {
-		definition, _ := Lookup(name)
-		if _, runs := target.Intervals[definition.Sensor]; !runs {
+	for _, value := range node.Values {
+		subject := Subject{
+			Subject:  storage.Subject{Node: target.Node, Metric: value.Metric, Labels: value.Labels},
+			Readings: map[string]float64{value.Metric: value.Value},
+			Frozen:   target.Frozen(value.Sensor, node.LastSeen, value.TS, now),
+		}
+		key, err := subject.Key()
+		if err != nil {
+			slog.Error("identify a subject", "node", subject.Node, "metric", subject.Metric, "error", err)
 			continue
 		}
-		for _, joined := range join(definition, node.Values) {
-			rule, judged := target.Rule(name, joined.labels["mount"])
-			if !judged {
-				continue
-			}
-			subject := Subject{
-				Subject:  storage.Subject{Node: target.Node, Rule: name, Labels: joined.labels},
-				Readings: map[string]float64{definition.Free: joined.free, definition.Pct: joined.pct},
-				Frozen:   target.Frozen(definition.Sensor, node.LastSeen, joined.oldest, now),
-			}
-			restore(&subject, stored, now)
-			subject.Level = subject.Previous
-			if !subject.Frozen {
-				subject.Level = rule.Level(subject.Previous, joined.free, joined.pct)
-			}
-			out = append(out, subject)
+		threshold, isWatched := watched[key]
+		if !isWatched {
+			continue
 		}
+		if !Readable(threshold) {
+			slog.Warn("a stored threshold this build cannot read",
+				"node", subject.Node, "metric", subject.Metric, "direction", string(threshold.Direction))
+			continue
+		}
+		subject.Direction = threshold.Direction
+		restore(&subject, stored, now)
+		subject.Level = subject.Previous
+		if !subject.Frozen {
+			subject.Level = levelOf(threshold, subject.Previous, value.Value)
+		}
+		out = append(out, subject)
 	}
 	return out
 }
 
 // restore fills in what a restart left behind. A level this build cannot read is treated
 // as a new subject rather than guessed at: corrupt data must not stop the hub watching the
-// rest.
+// rest. A level earned under another direction is dropped the same way: hysteresis holds
+// a level against the comparison that created it, and the mirrored band would hold a
+// subject at a value that is now perfectly good.
 func restore(s *Subject, stored map[string]storage.State, now time.Time) {
 	s.Since = now
 	key, err := s.Key()
 	if err != nil {
-		slog.Error("identify a subject", "node", s.Node, "rule", s.Rule, "error", err)
+		slog.Error("identify a subject", "node", s.Node, "metric", s.Metric, "error", err)
 		return
 	}
 	state, known := stored[key]
@@ -183,76 +193,32 @@ func restore(s *Subject, stored map[string]storage.State, now time.Time) {
 	level, readable := ParseLevel(state.Level)
 	if !readable {
 		slog.Warn("a stored level this build does not know",
-			"node", s.Node, "rule", s.Rule, "level", state.Level)
+			"node", s.Node, "metric", s.Metric, "level", state.Level)
+		return
+	}
+	if storage.Direction(state.Direction) != s.Direction {
+		slog.Info("a level was earned under another direction and is dropped",
+			"node", s.Node, "metric", s.Metric, "stored", state.Direction, "now", string(s.Direction))
 		return
 	}
 	s.Previous, s.Since, s.Restored = level, state.Since, true
 }
 
-// reading is the two series of one volume, joined on byte-identical labels.
-type reading struct {
-	labels    map[string]string
-	free, pct float64
-	// oldest is the collection time of the older half: a join is only as fresh as that.
-	oldest          time.Time
-	gotFree, gotPct bool
-}
-
-// join pairs the two series a rule reads. An incomplete join is not a level, so a volume
-// that has reported only one of them yields no subject at all.
-func join(definition Definition, values []storage.Value) []reading {
-	pairs := map[string]*reading{}
-	var order []string
-	for _, value := range values {
-		if value.Metric != definition.Free && value.Metric != definition.Pct {
-			continue
-		}
-		// Both series belong to one node and one rule here, so the labels alone
-		// identify the volume; Subject.Key encodes them the way the database keys on
-		// them, which is what "byte-identical labels" means.
-		key, err := storage.Subject{Labels: value.Labels}.Key()
-		if err != nil {
-			slog.Error("join a series", "metric", value.Metric, "error", err)
-			continue
-		}
-		pair, seen := pairs[key]
-		if !seen {
-			pair = &reading{labels: value.Labels, oldest: value.TS}
-			pairs[key] = pair
-			order = append(order, key)
-		}
-		if value.TS.Before(pair.oldest) {
-			pair.oldest = value.TS
-		}
-		if value.Metric == definition.Free {
-			pair.free, pair.gotFree = value.Value, true
-		} else {
-			pair.pct, pair.gotPct = value.Value, true
-		}
-	}
-
-	out := make([]reading, 0, len(order))
-	for _, key := range order {
-		if pair := pairs[key]; pair.gotFree && pair.gotPct {
-			out = append(out, *pair)
-		}
-	}
-	return out
-}
-
 // sortSubjects puts messages and digest entries in the order the spec names, and breaks
-// the remaining ties on the encoded subject so that two volumes sharing a mount point
-// still come out the same way on every tick.
+// the remaining ties on the encoded subject so that two series sharing node, metric and
+// mount still come out the same way on every tick.
 func sortSubjects(subjects []Subject) {
 	sort.Slice(subjects, func(i, j int) bool {
 		a, b := subjects[i], subjects[j]
 		switch {
 		case a.Node != b.Node:
 			return a.Node < b.Node
-		case a.Mount() != b.Mount():
-			return a.Mount() < b.Mount()
-		case a.Rule != b.Rule:
-			return a.Rule < b.Rule
+		// A node's silence is the statement about the node itself, so it leads its
+		// series whatever the metric ids sort like (docs/specs/state.md#ordering).
+		case (a.Metric == SilenceMetric) != (b.Metric == SilenceMetric):
+			return a.Metric == SilenceMetric
+		case a.Metric != b.Metric:
+			return a.Metric < b.Metric
 		}
 		first, _ := a.Key()
 		second, _ := b.Key()

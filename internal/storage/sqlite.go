@@ -96,6 +96,79 @@ var migrations = []string{
 	SELECT metric, node, labels, MAX(ts) FROM measurements GROUP BY metric, node, labels
 	ON CONFLICT (metric, node, labels) DO UPDATE SET
 		last_ts = MAX(last_ts, excluded.last_ts);`,
+
+	// A threshold is what one series is judged by, and it is stored beside the
+	// measurements rather than written in the file (ADR 0032). The sensor comes with the
+	// measurements that wrote the series (ADR 0033): staleness is three times that
+	// sensor's interval, and nothing else says which sensor a metric comes from. A series
+	// stored before this migration has none, which reads as "no freshness rule applies"
+	// until its agent reports again.
+	//
+	// The series table is rebuilt rather than altered: it is derived from the
+	// measurements, so rebuilding costs nothing, and unlike ADD COLUMN it can be applied
+	// twice — which a database whose schema version was rewound is entitled to. A replay
+	// does cost the sensor names, since the measurements do not carry them; the series
+	// that lose one stop aging until their agent reports again, which is one collection
+	// interval away (docs/specs/evaluation.md#freezing).
+	`DROP TABLE IF EXISTS series;
+
+	CREATE TABLE series (
+		metric  TEXT NOT NULL,
+		node    TEXT NOT NULL,
+		labels  TEXT NOT NULL,
+		last_ts TEXT NOT NULL,
+		sensor  TEXT NOT NULL DEFAULT '',
+		PRIMARY KEY (metric, node, labels)
+	) WITHOUT ROWID;
+
+	INSERT INTO series (metric, node, labels, last_ts)
+	SELECT metric, node, labels, MAX(ts) FROM measurements GROUP BY metric, node, labels;
+
+	CREATE TABLE IF NOT EXISTS thresholds (
+		metric    TEXT NOT NULL,
+		node      TEXT NOT NULL,
+		labels    TEXT NOT NULL,
+		direction TEXT NOT NULL,
+		warning   REAL,
+		critical  REAL,
+		PRIMARY KEY (metric, node, labels)
+	) WITHOUT ROWID;`,
+
+	// A subject is a series now, not a rule over two of them (ADR 0033), so what a level
+	// belongs to changes shape. The stored levels and the event log named a rule and
+	// cannot be translated into the new key, and nothing is judged until a threshold is
+	// set anyway, so both tables are rebuilt empty rather than migrated. A level also
+	// records the direction it was judged under, so that flipping the direction drops it
+	// instead of holding it in the mirrored band.
+	`DROP TABLE IF EXISTS states;
+	DROP TABLE IF EXISTS events;
+
+	CREATE TABLE states (
+		node             TEXT NOT NULL,
+		metric           TEXT NOT NULL,
+		labels           TEXT NOT NULL,
+		level            TEXT NOT NULL,
+		direction        TEXT NOT NULL DEFAULT '',
+		since            TEXT NOT NULL,
+		last_notified_at TEXT NOT NULL DEFAULT '',
+		PRIMARY KEY (node, metric, labels)
+	) WITHOUT ROWID;
+
+	CREATE TABLE events (
+		id         INTEGER PRIMARY KEY,
+		at         TEXT NOT NULL,
+		node       TEXT NOT NULL,
+		metric     TEXT NOT NULL,
+		labels     TEXT NOT NULL,
+		from_level TEXT NOT NULL,
+		to_level   TEXT NOT NULL,
+		from_since TEXT NOT NULL,
+		readings   TEXT NOT NULL,
+		UNIQUE (node, metric, labels, at)
+	);
+
+	CREATE INDEX events_at ON events (at);
+	CREATE INDEX events_subject ON events (node, metric, labels, at DESC);`,
 }
 
 // querier is what a database handle and a transaction both offer, so one read runs either
@@ -233,12 +306,15 @@ func (s *SQLite) SaveIngest(ctx context.Context, in Ingest) (err error) {
 		// The series carries the newest timestamp it holds, and only ever forwards: a
 		// measurement arriving late is stored, but it is not what the series last
 		// reported (ADR 0031).
+		// The sensor follows the newest value, not the latest request: a measurement
+		// arriving late does not rename the series (docs/specs/ingest.md#storage).
 		_, err = tx.ExecContext(ctx, `
-			INSERT INTO series (metric, node, labels, last_ts)
-			VALUES (?, ?, ?, ?)
+			INSERT INTO series (metric, node, labels, last_ts, sensor)
+			VALUES (?, ?, ?, ?, ?)
 			ON CONFLICT (metric, node, labels) DO UPDATE SET
+				sensor  = CASE WHEN excluded.last_ts > last_ts THEN excluded.sensor ELSE sensor END,
 				last_ts = MAX(last_ts, excluded.last_ts)`,
-			m.Metric, in.Node, labels, formatTime(m.TS))
+			m.Metric, in.Node, labels, formatTime(m.TS), m.Sensor)
 		if err != nil {
 			return fmt.Errorf("save series %s of %s: %w", m.Metric, in.Node, err)
 		}
@@ -294,7 +370,8 @@ func nodeStates(ctx context.Context, from querier) (map[string]*NodeState, []str
 }
 
 const latestValuesQuery = `
-	SELECT series.node, series.metric, series.labels, series.last_ts, measurements.value
+	SELECT series.node, series.metric, series.labels, series.last_ts, series.sensor,
+	       measurements.value
 	FROM series
 	-- CROSS fixes the order: the series are the small side and must drive the join, or
 	-- SQLite is free to scan every measurement instead (ADR 0031).
@@ -318,7 +395,7 @@ func attachLatestValues(ctx context.Context, from querier, states map[string]*No
 	for rows.Next() {
 		var node, metric, labels, ts string
 		var value Value
-		if err := rows.Scan(&node, &metric, &labels, &ts, &value.Value); err != nil {
+		if err := rows.Scan(&node, &metric, &labels, &ts, &value.Sensor, &value.Value); err != nil {
 			return fmt.Errorf("read measurements: %w", err)
 		}
 		state, known := states[node]

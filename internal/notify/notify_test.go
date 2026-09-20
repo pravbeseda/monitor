@@ -21,17 +21,14 @@ var at = time.Date(2026, time.August, 30, 9, 0, 0, 0, time.UTC)
 
 func entering() evaluate.Message {
 	return evaluate.Message{
-		Node:   "server-b",
-		Rule:   "disk",
-		Labels: map[string]string{"mount": "/data", "fs": "ext4", "removable": "false"},
-		From:   evaluate.Warning,
-		To:     evaluate.Critical,
-		Readings: map[string]float64{
-			"disk.free_bytes": 3e9,
-			"disk.free_pct":   2.34,
-		},
-		Since: at.Add(-2 * time.Hour),
-		At:    at,
+		Node:     "server-b",
+		Metric:   "disk.free_bytes",
+		Labels:   map[string]string{"mount": "/data", "fs": "ext4", "removable": "false"},
+		From:     evaluate.Warning,
+		To:       evaluate.Critical,
+		Readings: map[string]float64{"disk.free_bytes": 3e9},
+		Since:    at.Add(-2 * time.Hour),
+		At:       at,
 	}
 }
 
@@ -93,14 +90,44 @@ func TestARussianMessageComesFromTheRussianCatalogue(t *testing.T) {
 	}
 }
 
-// spec: evaluation.md#messages — every message carries the node, the subject, both levels,
-// the values that produced it and how long the subject had been where it was.
+// spec: evaluation.md#messages — every message carries the node, the metric id, the
+// subject's labels, both levels, the value that produced it and how long the subject had
+// been where it was.
 func TestAMessageCarriesEveryField(t *testing.T) {
 	got := notify.Render(i18n.For(i18n.English), entering())
-	for _, want := range []string{"server-b", "/data", "critical", "warning", "3.0 GB", "2.3%", "2026-08-30 07:00"} {
+	for _, want := range []string{
+		"server-b", "/data", "disk.free_bytes", "critical", "warning", "3.0 GB", "2026-08-30 07:00",
+	} {
 		if !strings.Contains(got, want) {
 			t.Fatalf("the message is missing %q: %s", want, got)
 		}
+	}
+}
+
+// spec: evaluation.md#messages — a value is rendered in the unit its metric id declares,
+// and a metric id that declares none is rendered as a plain number.
+func TestAValueIsRenderedInTheUnitItsMetricIDDeclares(t *testing.T) {
+	tests := []struct {
+		metric string
+		value  float64
+		want   string
+	}{
+		{"disk.free_bytes", 3e9, "3.0 GB"},
+		{"disk.free_pct", 2.34, "2.3%"},
+		{"battery.age_seconds", 90, "1.5 min"},
+		{"queue.depth", 42, "42.00"},
+	}
+	for _, tc := range tests {
+		t.Run(tc.metric, func(t *testing.T) {
+			message := entering()
+			message.Metric = tc.metric
+			message.Readings = map[string]float64{tc.metric: tc.value}
+
+			got := notify.Render(i18n.For(i18n.English), message)
+			if want := tc.metric + " is " + tc.want; !strings.Contains(got, want) {
+				t.Fatalf("the message reads %q, want it to carry %q", got, want)
+			}
+		})
 	}
 }
 
@@ -108,12 +135,12 @@ func TestAMessageCarriesEveryField(t *testing.T) {
 // says what it is instead of pretending to values.
 func TestTheSilenceMessageNamesTheNodeAlone(t *testing.T) {
 	message := entering()
-	message.Rule = evaluate.SilenceRule
+	message.Metric = evaluate.SilenceMetric
 	message.Labels = nil
 	message.Readings = nil
 
 	got := notify.Render(i18n.For(i18n.English), message)
-	if !strings.Contains(got, "server-b") || strings.Contains(got, "GB") {
+	if !strings.Contains(got, "server-b") || !strings.Contains(got, "no report") || strings.Contains(got, "GB") {
 		t.Fatalf("the silence message reads %q", got)
 	}
 }
@@ -138,7 +165,7 @@ func TestTheLogChannelWritesOneDigest(t *testing.T) {
 	first, second := entering(), entering()
 	second.Labels = map[string]string{"mount": "/srv"}
 
-	if err := channel.Digest(context.Background(), at, []evaluate.Message{first, second}); err != nil {
+	if err := channel.Digest(context.Background(), at, []evaluate.Message{first, second}, 0); err != nil {
 		t.Fatalf("Digest: %v", err)
 	}
 	line := out.String()
@@ -257,5 +284,97 @@ func TestAnUnusableTokenNeverReachesTheError(t *testing.T) {
 	}
 	if strings.Contains(err.Error(), "AAsecretTOKENvalue") {
 		t.Fatalf("the error carries the bot token: %v", err)
+	}
+}
+
+// spec: evaluation.md#digest — a digest with nothing to list says that nothing is being
+// judged, and one that lists something still names the series nobody watches.
+func TestTheDigestSaysWhatIsNotWatched(t *testing.T) {
+	printer := i18n.For(i18n.English)
+
+	empty := notify.RenderDigest(printer, nil, 3)
+	if !strings.Contains(empty, "Nothing on this hub is being judged") {
+		t.Fatalf("a digest of an unwatched hub reads:\n%s", empty)
+	}
+
+	listed := notify.RenderDigest(printer, []evaluate.Message{entering()}, 2)
+	if !strings.Contains(listed, "2 series have no threshold") {
+		t.Fatalf("a digest with entries did not name the unwatched series:\n%s", listed)
+	}
+}
+
+// spec: evaluation.md#messages — a message names the series it is about: two subjects of
+// one metric on one node must not read alike.
+func TestAMessageNamesTheSeriesItIsAbout(t *testing.T) {
+	printer := i18n.For(i18n.English)
+	one, other := entering(), entering()
+	one.Metric, other.Metric = "queue.depth", "queue.depth"
+	one.Labels = map[string]string{"queue": "payments"}
+	other.Labels = map[string]string{"queue": "email"}
+	one.Readings = map[string]float64{"queue.depth": 42}
+	other.Readings = map[string]float64{"queue.depth": 42}
+
+	first, second := notify.Render(printer, one), notify.Render(printer, other)
+	if first == second {
+		t.Fatalf("two series of one metric render alike:\n%s", first)
+	}
+	if !strings.Contains(first, "queue=payments") {
+		t.Errorf("message = %q, want it to name the series", first)
+	}
+
+	// An empty value is part of the identity too: it is a different series from one that
+	// carries no such label at all.
+	bare, empty := entering(), entering()
+	bare.Metric, empty.Metric = "queue.depth", "queue.depth"
+	bare.Labels, empty.Labels = map[string]string{}, map[string]string{"queue": ""}
+	bare.Readings = map[string]float64{"queue.depth": 42}
+	empty.Readings = map[string]float64{"queue.depth": 42}
+	if notify.Render(printer, bare) == notify.Render(printer, empty) {
+		t.Errorf("a label with an empty value reads like no label at all:\n%s", notify.Render(printer, bare))
+	}
+
+	// A volume still reads as its mount point, without the labels that decorate it.
+	volume := entering()
+	volume.Labels = map[string]string{"mount": "/data", "fs": "ext4", "removable": "false"}
+	if got := notify.Render(printer, volume); !strings.Contains(got, "server-b /data:") {
+		t.Errorf("message = %q, want the volume named by its mount point alone", got)
+	}
+}
+
+// spec: evaluation.md#messages — an empty mount is a label like any other: the series
+// that carries it is not the series that carries none.
+func TestAnEmptyMountStillNamesItsSeries(t *testing.T) {
+	printer := i18n.For(i18n.English)
+	bare, empty := entering(), entering()
+	bare.Metric, empty.Metric = "queue.depth", "queue.depth"
+	bare.Labels, empty.Labels = map[string]string{}, map[string]string{"mount": ""}
+	bare.Readings = map[string]float64{"queue.depth": 42}
+	empty.Readings = map[string]float64{"queue.depth": 42}
+
+	if notify.Render(printer, bare) == notify.Render(printer, empty) {
+		t.Fatalf("an empty mount reads like no labels at all:\n%s", notify.Render(printer, bare))
+	}
+}
+
+// spec: evaluation.md#messages — a label whose value carries a space or an `=` is quoted:
+// two different label maps must not read as one.
+func TestLabelsThatWouldReadAlikeAreQuoted(t *testing.T) {
+	printer := i18n.For(i18n.English)
+	one, split := entering(), entering()
+	one.Metric, split.Metric = "queue.depth", "queue.depth"
+	one.Labels = map[string]string{"queue": "payments region=eu"}
+	split.Labels = map[string]string{"queue": "payments", "region": "eu"}
+	one.Readings = map[string]float64{"queue.depth": 42}
+	split.Readings = map[string]float64{"queue.depth": 42}
+
+	first, second := notify.Render(printer, one), notify.Render(printer, split)
+	if first == second {
+		t.Fatalf("two label maps read as one:\n%s", first)
+	}
+	if !strings.Contains(first, `queue="payments region=eu"`) {
+		t.Errorf("message = %q, want the value quoted", first)
+	}
+	if !strings.Contains(second, "queue=payments region=eu") {
+		t.Errorf("message = %q, want two plain pairs", second)
 	}
 }

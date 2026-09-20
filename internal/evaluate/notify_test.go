@@ -18,6 +18,7 @@ type recorder struct {
 	messages   []evaluate.Message
 	digests    [][]evaluate.Message
 	digestedAt []time.Time
+	unwatched  []int
 	failing    map[string]bool
 	// digestFails makes the daily summary refuse, which is what leaves the window open.
 	digestFails bool
@@ -33,7 +34,7 @@ func (r *recorder) Notify(_ context.Context, m evaluate.Message) error {
 	return nil
 }
 
-func (r *recorder) Digest(_ context.Context, at time.Time, entries []evaluate.Message) error {
+func (r *recorder) Digest(_ context.Context, at time.Time, entries []evaluate.Message, unwatched int) error {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	if r.digestFails {
@@ -41,7 +42,15 @@ func (r *recorder) Digest(_ context.Context, at time.Time, entries []evaluate.Me
 	}
 	r.digestedAt = append(r.digestedAt, at)
 	r.digests = append(r.digests, entries)
+	r.unwatched = append(r.unwatched, unwatched)
 	return nil
+}
+
+// unwatchedCounts is what each digest said about the series nobody has configured.
+func (r *recorder) unwatchedCounts() []int {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	return append([]int(nil), r.unwatched...)
 }
 
 func (r *recorder) summaries() [][]evaluate.Message {
@@ -68,7 +77,7 @@ func delivered(t *testing.T, db *storage.SQLite, at time.Time, target evaluate.T
 // came from.
 func TestEnteringCriticalFromOKIsInstant(t *testing.T) {
 	db := open(t)
-	collect(t, db, tick, volume("/"), 3e9, 2.34)
+	collect(t, db, tick, volume("/"), gb(3))
 	got := delivered(t, db, tick, watching(t))
 	if len(got) != 1 || got[0].From != evaluate.OK || got[0].To != evaluate.Critical {
 		t.Fatalf("entering critical delivered %+v", got)
@@ -78,11 +87,11 @@ func TestEnteringCriticalFromOKIsInstant(t *testing.T) {
 // spec: evaluation.md#notifications — warning → critical is instant too.
 func TestWarningToCriticalIsInstant(t *testing.T) {
 	db := open(t)
-	collect(t, db, tick, volume("/"), 19e9, 14.84)
+	collect(t, db, tick, volume("/"), gb(9))
 	pass(t, evaluator(db, tick, watching(t)))
 
 	later := tick.Add(time.Minute)
-	collect(t, db, later, volume("/"), 3e9, 2.34)
+	collect(t, db, later, volume("/"), gb(3))
 	got := delivered(t, db, later, watching(t))
 	if len(got) != 1 || got[0].From != evaluate.Warning || got[0].To != evaluate.Critical {
 		t.Fatalf("warning to critical delivered %+v", got)
@@ -93,20 +102,20 @@ func TestWarningToCriticalIsInstant(t *testing.T) {
 // ok (ADR 0016).
 func TestLeavingCriticalIsInstant(t *testing.T) {
 	for _, leaving := range []struct {
-		name      string
-		free, pct float64
-		want      evaluate.Level
+		name string
+		free float64
+		want evaluate.Level
 	}{
-		{"to warning", 6e9, 30.00, evaluate.Warning},
-		{"to ok", 24e9, 18.75, evaluate.OK},
+		{"to warning", gb(6), evaluate.Warning},
+		{"to ok", gb(24), evaluate.OK},
 	} {
 		t.Run(leaving.name, func(t *testing.T) {
 			db := open(t)
-			collect(t, db, tick, volume("/"), 3e9, 2.34)
+			collect(t, db, tick, volume("/"), gb(3))
 			pass(t, evaluator(db, tick, watching(t)))
 
 			later := tick.Add(time.Minute)
-			collect(t, db, later, volume("/"), leaving.free, leaving.pct)
+			collect(t, db, later, volume("/"), leaving.free)
 			got := delivered(t, db, later, watching(t))
 			if len(got) != 1 || got[0].From != evaluate.Critical || got[0].To != leaving.want {
 				t.Fatalf("leaving critical delivered %+v, want a message reaching %v", got, leaving.want)
@@ -119,25 +128,25 @@ func TestLeavingCriticalIsInstant(t *testing.T) {
 // the digest.
 func TestTransitionsAwayFromCriticalWaitForTheDigest(t *testing.T) {
 	for _, quiet := range []struct {
-		name      string
-		free, pct float64
-		want      string
+		name string
+		free float64
+		want string
 	}{
-		{"ok to warning", 19e9, 14.84, "warning"},
-		{"warning to ok", 40e9, 31.25, "ok"},
+		{"ok to warning", gb(9), "warning"},
+		{"warning to ok", gb(40), "ok"},
 	} {
 		t.Run(quiet.name, func(t *testing.T) {
 			db := open(t)
-			collect(t, db, tick, volume("/"), 19e9, 14.84)
+			collect(t, db, tick, volume("/"), gb(9))
 			if quiet.want == "ok" {
 				pass(t, evaluator(db, tick, watching(t)))
 			}
 			later := tick.Add(time.Minute)
-			collect(t, db, later, volume("/"), quiet.free, quiet.pct)
+			collect(t, db, later, volume("/"), quiet.free)
 			if got := delivered(t, db, later, watching(t)); len(got) != 0 {
 				t.Fatalf("a transition outside critical delivered %+v", got)
 			}
-			if got := levelOf(t, db, "disk", "/").Level; got != quiet.want {
+			if got := levelOf(t, db, "disk.free_bytes", "/").Level; got != quiet.want {
 				t.Fatalf("the subject is %q, want %q: the change is recorded, only the message waits", got, quiet.want)
 			}
 		})
@@ -148,14 +157,14 @@ func TestTransitionsAwayFromCriticalWaitForTheDigest(t *testing.T) {
 // last_notified_at is delivered now, whatever the level has become since.
 func TestAnUndeliveredEventIsSentOnALaterTick(t *testing.T) {
 	db := open(t)
-	collect(t, db, tick, volume("/"), 3e9, 2.34)
+	collect(t, db, tick, volume("/"), gb(3))
 	down := &recorder{failing: map[string]bool{"/": true}}
 	pass(t, evaluatorWith(db, down, tick, watching(t)))
 
 	// The volume recovers before the channel does: the message still names the change
 	// that was recorded, not the level the subject has reached since.
 	later := tick.Add(time.Minute)
-	collect(t, db, later, volume("/"), 5e9, 3.91)
+	collect(t, db, later, volume("/"), gb(3))
 	got := delivered(t, db, later, watching(t))
 	if len(got) != 1 || got[0].From != evaluate.OK || got[0].To != evaluate.Critical {
 		t.Fatalf("the retry delivered %+v, want the recorded change", got)
@@ -167,15 +176,18 @@ func TestAnUndeliveredEventIsSentOnALaterTick(t *testing.T) {
 func TestASubjectNeverNotifiedIsDue(t *testing.T) {
 	db := open(t)
 	ctx := context.Background()
-	subject := storage.Subject{Node: "server-b", Rule: "disk", Labels: volume("/")}
+	// A transition writes the level and the event together, which is the history this
+	// row is about: the change is recorded, nothing has been told about it yet.
+	subject := storage.Subject{Node: "server-b", Metric: "disk.free_bytes", Labels: volume("/")}
 	if err := db.ApplyTransition(ctx, storage.Transition{
 		Subject: subject, At: tick.Add(-time.Hour), From: "ok", To: "critical",
+		Direction: string(storage.Below),
 		FromSince: tick.Add(-2 * time.Hour),
-		Readings:  map[string]float64{"disk.free_bytes": 3e9, "disk.free_pct": 2.34},
+		Readings:  map[string]float64{"disk.free_bytes": 3e9},
 	}); err != nil {
 		t.Fatalf("seed an undelivered event: %v", err)
 	}
-	collect(t, db, tick, volume("/"), 3e9, 2.34)
+	collect(t, db, tick, volume("/"), gb(3))
 
 	got := delivered(t, db, tick, watching(t))
 	if len(got) != 1 || got[0].To != evaluate.Critical {
@@ -186,17 +198,17 @@ func TestASubjectNeverNotifiedIsDue(t *testing.T) {
 // spec: evaluation.md#notifications — an unresolved critical repeats at most once a day.
 func TestAnUnresolvedCriticalRepeatsDaily(t *testing.T) {
 	db := open(t)
-	collect(t, db, tick, volume("/"), 3e9, 2.34)
+	collect(t, db, tick, volume("/"), gb(3))
 	pass(t, evaluator(db, tick, watching(t)))
 
 	soon := tick.Add(23 * time.Hour)
-	collect(t, db, soon, volume("/"), 3e9, 2.34)
+	collect(t, db, soon, volume("/"), gb(3))
 	if got := delivered(t, db, soon, watching(t)); len(got) != 0 {
 		t.Fatalf("a critical under a day old repeated: %+v", got)
 	}
 
 	due := tick.Add(24 * time.Hour)
-	collect(t, db, due, volume("/"), 3e9, 2.34)
+	collect(t, db, due, volume("/"), gb(3))
 	got := delivered(t, db, due, watching(t))
 	if len(got) != 1 || got[0].From != evaluate.Critical || got[0].To != evaluate.Critical {
 		t.Fatalf("a day-old critical delivered %+v, want one repeat", got)
@@ -207,11 +219,11 @@ func TestAnUnresolvedCriticalRepeatsDaily(t *testing.T) {
 // nothing.
 func TestAnUnchangedSubjectBelowCriticalSaysNothing(t *testing.T) {
 	db := open(t)
-	collect(t, db, tick, volume("/"), 19e9, 14.84)
+	collect(t, db, tick, volume("/"), gb(9))
 	pass(t, evaluator(db, tick, watching(t)))
 
 	later := tick.Add(25 * time.Hour)
-	collect(t, db, later, volume("/"), 19e9, 14.84)
+	collect(t, db, later, volume("/"), gb(9))
 	if got := delivered(t, db, later, watching(t)); len(got) != 0 {
 		t.Fatalf("a subject holding warning delivered %+v", got)
 	}
@@ -221,11 +233,11 @@ func TestAnUnchangedSubjectBelowCriticalSaysNothing(t *testing.T) {
 // last_notified_at where it was, so the next tick delivers it again.
 func TestAFailedSendIsRetried(t *testing.T) {
 	db := open(t)
-	collect(t, db, tick, volume("/"), 3e9, 2.34)
+	collect(t, db, tick, volume("/"), gb(3))
 	down := &recorder{failing: map[string]bool{"/": true}}
 	pass(t, evaluatorWith(db, down, tick, watching(t)))
 
-	if got := levelOf(t, db, "disk", "/"); got.Level != "critical" || !got.LastNotifiedAt.IsZero() {
+	if got := levelOf(t, db, "disk.free_bytes", "/"); got.Level != "critical" || !got.LastNotifiedAt.IsZero() {
 		t.Fatalf("a failed send left level %q notified at %v", got.Level, got.LastNotifiedAt)
 	}
 	if got := delivered(t, db, tick.Add(time.Minute), watching(t)); len(got) != 1 {
@@ -237,8 +249,8 @@ func TestAFailedSendIsRetried(t *testing.T) {
 // never costs the others theirs.
 func TestOneFailedSendDoesNotStopTheRest(t *testing.T) {
 	db := open(t)
-	collect(t, db, tick, volume("/"), 3e9, 2.34)
-	collect(t, db, tick, volume("/data"), 3e9, 2.34)
+	collect(t, db, tick, volume("/"), gb(3))
+	collect(t, db, tick, volume("/data"), gb(3))
 
 	channel := &recorder{failing: map[string]bool{"/": true}}
 	pass(t, evaluatorWith(db, channel, tick, watching(t)))
@@ -253,7 +265,7 @@ func TestOneFailedSendDoesNotStopTheRest(t *testing.T) {
 // goes out, so a hub that dies in between delivers on a later tick.
 func TestTheEventIsRecordedBeforeTheMessage(t *testing.T) {
 	db := open(t)
-	collect(t, db, tick, volume("/"), 3e9, 2.34)
+	collect(t, db, tick, volume("/"), gb(3))
 
 	seen := &beforeSending{db: db}
 	pass(t, evaluatorWith(db, seen, tick, watching(t)))
@@ -266,11 +278,11 @@ func TestTheEventIsRecordedBeforeTheMessage(t *testing.T) {
 // delivered is on the record.
 func TestARestartReNotifiesNothing(t *testing.T) {
 	db := open(t)
-	collect(t, db, tick, volume("/"), 3e9, 2.34)
+	collect(t, db, tick, volume("/"), gb(3))
 	pass(t, evaluator(db, tick, watching(t)))
 
 	later := tick.Add(time.Minute)
-	collect(t, db, later, volume("/"), 3e9, 2.34)
+	collect(t, db, later, volume("/"), gb(3))
 	if got := delivered(t, db, later, watching(t)); len(got) != 0 {
 		t.Fatalf("a fresh evaluator re-delivered %+v", got)
 	}
@@ -280,7 +292,7 @@ func TestARestartReNotifiesNothing(t *testing.T) {
 // unchanged data: the second sends no message.
 func TestASecondTickAtTheSameInstantSendsNothing(t *testing.T) {
 	db := open(t)
-	collect(t, db, tick, volume("/"), 3e9, 2.34)
+	collect(t, db, tick, volume("/"), gb(3))
 	channel := &recorder{}
 	e := evaluatorWith(db, channel, tick, watching(t))
 	pass(t, e)
@@ -297,14 +309,14 @@ func TestSilenceIsReportedAndSoIsItsRecovery(t *testing.T) {
 	beat(t, db, tick)
 	silent := tick.Add(silenceAfter + time.Minute)
 	got := delivered(t, db, silent, watching(t))
-	if len(got) != 1 || got[0].Rule != evaluate.SilenceRule || got[0].To != evaluate.Critical {
+	if len(got) != 1 || got[0].Metric != evaluate.SilenceMetric || got[0].To != evaluate.Critical {
 		t.Fatalf("a silent node delivered %+v", got)
 	}
 
 	back := silent.Add(time.Minute)
 	beat(t, db, back)
 	got = delivered(t, db, back, watching(t))
-	if len(got) != 1 || got[0].Rule != evaluate.SilenceRule || got[0].To != evaluate.OK {
+	if len(got) != 1 || got[0].Metric != evaluate.SilenceMetric || got[0].To != evaluate.OK {
 		t.Fatalf("a returning node delivered %+v", got)
 	}
 }
@@ -321,14 +333,14 @@ func (b *beforeSending) Notify(ctx context.Context, m evaluate.Message) error {
 		return err
 	}
 	for _, state := range snapshot.States {
-		if state.Rule == m.Rule && state.Labels["mount"] == m.Labels["mount"] {
+		if state.Metric == m.Metric && state.Labels["mount"] == m.Labels["mount"] {
 			b.level = state.Level
 		}
 	}
 	return nil
 }
 
-func (b *beforeSending) Digest(context.Context, time.Time, []evaluate.Message) error { return nil }
+func (b *beforeSending) Digest(context.Context, time.Time, []evaluate.Message, int) error { return nil }
 
 // spec: evaluation.md#node-silence — a node still silent says nothing again until a day has
 // passed, and then says it once more.
@@ -347,7 +359,7 @@ func TestSilenceRepeatsOnceADay(t *testing.T) {
 
 	due := silent.Add(24 * time.Hour)
 	got := delivered(t, db, due, watching(t))
-	if len(got) != 1 || got[0].Rule != evaluate.SilenceRule || got[0].From != evaluate.Critical {
+	if len(got) != 1 || got[0].Metric != evaluate.SilenceMetric || got[0].From != evaluate.Critical {
 		t.Fatalf("a day-old silence delivered %+v, want one repeat", got)
 	}
 }
@@ -356,7 +368,7 @@ func TestSilenceRepeatsOnceADay(t *testing.T) {
 // last notified.
 func TestAFrozenCriticalSendsNoRepeat(t *testing.T) {
 	db := open(t)
-	collect(t, db, tick, volume("/"), 3e9, 2.34)
+	collect(t, db, tick, volume("/"), gb(3))
 	pass(t, evaluator(db, tick, watching(t)))
 
 	// A day later the volume is long stale, and the node has kept reporting, so only
@@ -373,18 +385,18 @@ func TestAFrozenCriticalSendsNoRepeat(t *testing.T) {
 // must not bury it.
 func TestAFailedInstantEventSurvivesAQuieterChange(t *testing.T) {
 	db := open(t)
-	collect(t, db, tick, volume("/"), 3e9, 2.34)
+	collect(t, db, tick, volume("/"), gb(3))
 	pass(t, evaluator(db, tick, watching(t)))
 
 	// The recovery out of critical is instant, and its send fails.
 	leaving := tick.Add(time.Minute)
-	collect(t, db, leaving, volume("/"), 6e9, 30.00)
+	collect(t, db, leaving, volume("/"), gb(6))
 	down := &recorder{failing: map[string]bool{"/": true}}
 	pass(t, evaluatorWith(db, down, leaving, watching(t)))
 
 	// The volume then leaves warning too, which nothing delivers at once.
 	quiet := leaving.Add(time.Minute)
-	collect(t, db, quiet, volume("/"), 40e9, 31.25)
+	collect(t, db, quiet, volume("/"), gb(40))
 	got := delivered(t, db, quiet, watching(t))
 
 	if len(got) != 1 || got[0].From != evaluate.Critical || got[0].To != evaluate.Warning {
@@ -397,7 +409,7 @@ func TestAFailedInstantEventSurvivesAQuieterChange(t *testing.T) {
 // still tried again.
 func TestAFrozenSubjectStillDeliversWhatItAlreadyRecorded(t *testing.T) {
 	db := open(t)
-	collect(t, db, tick, volume("/"), 3e9, 2.34)
+	collect(t, db, tick, volume("/"), gb(3))
 	down := &recorder{failing: map[string]bool{"/": true}}
 	pass(t, evaluatorWith(db, down, tick, watching(t)))
 

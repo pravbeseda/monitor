@@ -29,9 +29,14 @@ Each principle below is recorded in full, with its alternatives, in the linked A
 1. **The semantic core is the single source of truth.** It computes meaning — health
    (0–100), status, trend, anomaly rank, freshness, forecasts — once; skins render it and
    never judge values themselves. → [ADR 0001](decisions/0001-semantic-core-and-skins.md)
-2. **Metrics are declared, not coded.** Id, domain, source, unit, direction of good,
-   thresholds and expected update interval live in configuration. Health scoring, anomaly
-   detection and *silence* detection all follow from that schema.
+2. **A metric costs no code.** A measurement declares itself: its id carries its unit, its
+   labels make it a series, and what that series is judged by — a direction and up to two
+   values — is set on its own page and stored with the data, never compiled in and never a
+   file to edit. What the agent collects and how often stays configuration; health scoring,
+   anomaly detection and *silence* detection follow from the series and its thresholds.
+   → [ADR 0032](decisions/0032-thresholds-are-set-in-the-interface.md),
+   [ADR 0033](decisions/0033-a-subject-is-a-series.md),
+   [ADR 0010](decisions/0010-agent-configuration.md)
 3. **Skins are interchangeable consumers of one State API.** Adding a skin touches no core
    code. → [ADR 0001](decisions/0001-semantic-core-and-skins.md)
 4. **Cross-cutting services live outside skins**: drill-down (`openMetric(id)`), time

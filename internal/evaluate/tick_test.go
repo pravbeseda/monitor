@@ -21,18 +21,43 @@ func open(t *testing.T) *storage.SQLite {
 	return db
 }
 
-// collect stores one push of one volume's two series, the way an agent's request would.
-func collect(t *testing.T, db *storage.SQLite, at time.Time, labels map[string]string, free, pct float64) {
+// collect stores one push of one volume's free space, the way an agent's request would,
+// and makes it a subject by storing the threshold of docs/specs/evaluation.md#levels:
+// warning at 10 GB, critical at 4 GB.
+func collect(t *testing.T, db *storage.SQLite, at time.Time, labels map[string]string, free float64) {
 	t.Helper()
 	in := storage.Ingest{
 		Node: "server-b", AgentVersion: "test", ConfigVersion: "test", ReceivedAt: at,
 		Measurements: []storage.Measurement{
-			{Metric: "disk.free_bytes", Labels: labels, Value: free, TS: at},
-			{Metric: "disk.free_pct", Labels: labels, Value: pct, TS: at},
+			{Metric: "disk.free_bytes", Sensor: "disk", Labels: labels, Value: free, TS: at},
 		},
 	}
 	if err := db.SaveIngest(context.Background(), in); err != nil {
 		t.Fatalf("SaveIngest: %v", err)
+	}
+	retune(t, db, labels, num(gb(10)), num(gb(4)))
+}
+
+// unwatch clears what one volume is judged by, which is what saving an empty form does.
+func unwatch(t *testing.T, db *storage.SQLite, labels map[string]string) {
+	t.Helper()
+	ref := storage.SeriesRef{Node: "server-b", Metric: "disk.free_bytes", Labels: labels}
+	if err := db.DeleteThreshold(context.Background(), ref); err != nil {
+		t.Fatalf("DeleteThreshold: %v", err)
+	}
+}
+
+// retune stores what one volume is judged by, which is what editing the form does.
+func retune(t *testing.T, db *storage.SQLite, labels map[string]string, warning, critical *float64) {
+	t.Helper()
+	th := storage.Threshold{
+		Series:    storage.SeriesRef{Node: "server-b", Metric: "disk.free_bytes", Labels: labels},
+		Direction: storage.Below,
+		Warning:   warning,
+		Critical:  critical,
+	}
+	if err := db.SaveThreshold(context.Background(), th); err != nil {
+		t.Fatalf("SaveThreshold: %v", err)
 	}
 }
 
@@ -70,7 +95,7 @@ func pass(t *testing.T, e *evaluate.Evaluator) {
 }
 
 // levelOf returns the stored level of one subject, or "" when it has none.
-func levelOf(t *testing.T, db *storage.SQLite, rule, mount string) storage.State {
+func levelOf(t *testing.T, db *storage.SQLite, metric, mount string) storage.State {
 	t.Helper()
 	snapshot, err := db.Snapshot(context.Background(), []string{"critical"})
 	if err != nil {
@@ -78,7 +103,7 @@ func levelOf(t *testing.T, db *storage.SQLite, rule, mount string) storage.State
 	}
 	states := snapshot.States
 	for _, state := range states {
-		if state.Rule == rule && state.Labels["mount"] == mount {
+		if state.Metric == metric && state.Labels["mount"] == mount {
 			return state
 		}
 	}
@@ -98,10 +123,10 @@ func logged(t *testing.T, db *storage.SQLite) []storage.Transition {
 // with `since` set to that instant and writes no event: nothing changed.
 func TestFirstEvaluationAtOKWritesNoEvent(t *testing.T) {
 	db := open(t)
-	collect(t, db, tick, volume("/"), 40e9, 31.25)
+	collect(t, db, tick, volume("/"), gb(40))
 	pass(t, evaluator(db, tick, watching(t)))
 
-	state := levelOf(t, db, "disk", "/")
+	state := levelOf(t, db, "disk.free_bytes", "/")
 	if state.Level != "ok" || !state.Since.Equal(tick) {
 		t.Fatalf("the first evaluation left level %q since %v", state.Level, state.Since)
 	}
@@ -114,10 +139,10 @@ func TestFirstEvaluationAtOKWritesNoEvent(t *testing.T) {
 // with one event whose previous level is ok.
 func TestFirstEvaluationInWarningWritesOneEvent(t *testing.T) {
 	db := open(t)
-	collect(t, db, tick, volume("/"), 19e9, 14.84)
+	collect(t, db, tick, volume("/"), gb(9))
 	pass(t, evaluator(db, tick, watching(t)))
 
-	if state := levelOf(t, db, "disk", "/"); state.Level != "warning" {
+	if state := levelOf(t, db, "disk.free_bytes", "/"); state.Level != "warning" {
 		t.Fatalf("the first evaluation left level %q, want warning", state.Level)
 	}
 	events := logged(t, db)
@@ -130,16 +155,16 @@ func TestFirstEvaluationInWarningWritesOneEvent(t *testing.T) {
 // unchanged data: the second writes no event.
 func TestASecondTickOverUnchangedDataWritesNothing(t *testing.T) {
 	db := open(t)
-	collect(t, db, tick, volume("/"), 19e9, 14.84)
+	collect(t, db, tick, volume("/"), gb(9))
 	e := evaluator(db, tick, watching(t))
 	pass(t, e)
-	before := levelOf(t, db, "disk", "/")
+	before := levelOf(t, db, "disk.free_bytes", "/")
 	pass(t, e)
 
 	if got := logged(t, db); len(got) != 1 {
 		t.Fatalf("two ticks over unchanged data wrote %d events, want one", len(got))
 	}
-	if after := levelOf(t, db, "disk", "/"); after.Level != before.Level || !after.Since.Equal(before.Since) {
+	if after := levelOf(t, db, "disk.free_bytes", "/"); after.Level != before.Level || !after.Since.Equal(before.Since) {
 		t.Fatalf("the second tick moved the subject to %q since %v", after.Level, after.Since)
 	}
 }
@@ -148,9 +173,10 @@ func TestASecondTickOverUnchangedDataWritesNothing(t *testing.T) {
 // newer hub might have written it.
 func seedUnreadable(t *testing.T, db *storage.SQLite) {
 	t.Helper()
-	subject := storage.Subject{Node: "server-b", Rule: "disk", Labels: volume("/")}
+	subject := storage.Subject{Node: "server-b", Metric: "disk.free_bytes", Labels: volume("/")}
 	if err := db.ApplyTransition(context.Background(), storage.Transition{
 		Subject: subject, At: tick.Add(-time.Hour), From: "ok", To: "puce",
+		Direction: string(storage.Below),
 		FromSince: tick.Add(-2 * time.Hour), Readings: map[string]float64{},
 	}); err != nil {
 		t.Fatalf("seed an unreadable level: %v", err)
@@ -163,7 +189,7 @@ func TestAnUnreadableStoredLevelIsEvaluatedAsNew(t *testing.T) {
 	db := open(t)
 	seedUnreadable(t, db)
 
-	collect(t, db, tick, volume("/"), 19e9, 14.84)
+	collect(t, db, tick, volume("/"), gb(9))
 	pass(t, evaluator(db, tick, watching(t)))
 
 	events := logged(t, db)
@@ -179,10 +205,10 @@ func TestAnUnreadableStoredLevelThatStaysOKIsReplaced(t *testing.T) {
 	db := open(t)
 	seedUnreadable(t, db)
 
-	collect(t, db, tick, volume("/"), 40e9, 31.25)
+	collect(t, db, tick, volume("/"), gb(40))
 	pass(t, evaluator(db, tick, watching(t)))
 
-	if state := levelOf(t, db, "disk", "/"); state.Level != "ok" || !state.Since.Equal(tick) {
+	if state := levelOf(t, db, "disk.free_bytes", "/"); state.Level != "ok" || !state.Since.Equal(tick) {
 		t.Fatalf("the tick left level %q since %v, want ok since %v", state.Level, state.Since, tick)
 	}
 	if events := logged(t, db); len(events) != 1 {
@@ -194,14 +220,14 @@ func TestAnUnreadableStoredLevelThatStaysOKIsReplaced(t *testing.T) {
 // untouched by a later tick.
 func TestALaterTickAtTheSameLevelKeepsSince(t *testing.T) {
 	db := open(t)
-	collect(t, db, tick, volume("/"), 40e9, 31.25)
+	collect(t, db, tick, volume("/"), gb(40))
 	pass(t, evaluator(db, tick, watching(t)))
 
 	later := tick.Add(time.Minute)
-	collect(t, db, later, volume("/"), 40e9, 31.25)
+	collect(t, db, later, volume("/"), gb(40))
 	pass(t, evaluator(db, later, watching(t)))
 
-	if state := levelOf(t, db, "disk", "/"); state.Level != "ok" || !state.Since.Equal(tick) {
+	if state := levelOf(t, db, "disk.free_bytes", "/"); state.Level != "ok" || !state.Since.Equal(tick) {
 		t.Fatalf("the later tick left level %q since %v, want ok since %v", state.Level, state.Since, tick)
 	}
 }
@@ -210,7 +236,7 @@ func TestALaterTickAtTheSameLevelKeepsSince(t *testing.T) {
 // one is still running is skipped.
 func TestOverlappingTicksAreSkipped(t *testing.T) {
 	db := open(t)
-	collect(t, db, tick, volume("/"), 19e9, 14.84)
+	collect(t, db, tick, volume("/"), gb(9))
 	held := &blocking{Store: db, entered: make(chan struct{}), release: make(chan struct{})}
 	e := evaluator(held, tick, watching(t))
 
@@ -233,8 +259,8 @@ func TestOverlappingTicksAreSkipped(t *testing.T) {
 // further subject, and what it already recorded stays recorded.
 func TestAStoppedTickEvaluatesNoFurtherSubject(t *testing.T) {
 	db := open(t)
-	collect(t, db, tick, volume("/"), 19e9, 14.84)
-	collect(t, db, tick, volume("/data"), 19e9, 14.84)
+	collect(t, db, tick, volume("/"), gb(9))
+	collect(t, db, tick, volume("/data"), gb(9))
 
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
@@ -242,10 +268,10 @@ func TestAStoppedTickEvaluatesNoFurtherSubject(t *testing.T) {
 	if err := evaluator(stopping, tick, watching(t)).Tick(ctx); err == nil {
 		t.Fatal("a stopped tick reported success")
 	}
-	if levelOf(t, db, "disk", "/").Level != "warning" {
+	if levelOf(t, db, "disk.free_bytes", "/").Level != "warning" {
 		t.Fatal("the change recorded before the stop was lost")
 	}
-	if got := levelOf(t, db, "disk", "/data").Level; got != "" {
+	if got := levelOf(t, db, "disk.free_bytes", "/data").Level; got != "" {
 		t.Fatalf("the subject after the stop was evaluated to %q", got)
 	}
 }
@@ -254,28 +280,28 @@ func TestAStoppedTickEvaluatesNoFurtherSubject(t *testing.T) {
 // tick and a changed level writes one event.
 func TestASilentNodeResumesWhenItReports(t *testing.T) {
 	db := open(t)
-	collect(t, db, tick, volume("/"), 5e9, 3.91)
+	collect(t, db, tick, volume("/"), gb(3))
 
 	silent := tick.Add(silenceAfter + time.Minute)
 	pass(t, evaluator(db, silent, watching(t)))
-	if got := levelOf(t, db, "disk", "/").Level; got != "" {
+	if got := levelOf(t, db, "disk.free_bytes", "/").Level; got != "" {
 		t.Fatalf("a silent node's volume was evaluated to %q", got)
 	}
 
 	back := silent.Add(time.Minute)
-	collect(t, db, back, volume("/"), 5e9, 3.91)
+	collect(t, db, back, volume("/"), gb(3))
 	pass(t, evaluator(db, back, watching(t)))
 
 	var changes []storage.Transition
 	for _, event := range logged(t, db) {
-		if event.Rule == "disk" {
+		if event.Metric == "disk.free_bytes" {
 			changes = append(changes, event)
 		}
 	}
 	if len(changes) != 1 || changes[0].From != "ok" || changes[0].To != "critical" {
 		t.Fatalf("resuming wrote %+v for the volume, want one change out of ok", changes)
 	}
-	if got := levelOf(t, db, "disk", "/").Level; got != "critical" {
+	if got := levelOf(t, db, "disk.free_bytes", "/").Level; got != "critical" {
 		t.Fatalf("the volume resumed at %q, want critical", got)
 	}
 }
@@ -284,14 +310,11 @@ func TestASilentNodeResumesWhenItReports(t *testing.T) {
 // warning: the next tick evaluates with the new numbers, as an ordinary transition.
 func TestAnEditedThresholdIsAnOrdinaryTransition(t *testing.T) {
 	db := open(t)
-	collect(t, db, tick, volume("/"), 19e9, 14.84)
+	collect(t, db, tick, volume("/"), gb(9))
 	pass(t, evaluator(db, tick, watching(t)))
 
-	stricter := watching(t)
-	rule := stricter.Rules["disk"]
-	rule.Critical.Floor = 20e9
-	stricter.Rules = map[string]evaluate.Rule{"disk": rule}
-	pass(t, evaluator(db, tick.Add(time.Minute), stricter))
+	retune(t, db, volume("/"), num(gb(10)), num(gb(20)))
+	pass(t, evaluator(db, tick.Add(time.Minute), watching(t)))
 
 	events := logged(t, db)
 	if len(events) != 2 || events[1].From != "warning" || events[1].To != "critical" {
@@ -323,12 +346,12 @@ func TestAWidenedSilenceWindowRecoversTheNode(t *testing.T) {
 // its stored states are left untouched, and no recovery is notified.
 func TestANodeRemovedFromTheFileIsLeftAlone(t *testing.T) {
 	db := open(t)
-	collect(t, db, tick, volume("/"), 19e9, 14.84)
+	collect(t, db, tick, volume("/"), gb(9))
 	pass(t, evaluator(db, tick, watching(t)))
 
 	pass(t, evaluator(db, tick.Add(time.Minute)))
 
-	if got := levelOf(t, db, "disk", "/"); got.Level != "warning" || !got.Since.Equal(tick) {
+	if got := levelOf(t, db, "disk.free_bytes", "/"); got.Level != "warning" || !got.Since.Equal(tick) {
 		t.Fatalf("a removed node's state became %q since %v", got.Level, got.Since)
 	}
 	if got := logged(t, db); len(got) != 1 {
@@ -336,22 +359,40 @@ func TestANodeRemovedFromTheFileIsLeftAlone(t *testing.T) {
 	}
 }
 
-// spec: evaluation.md#configuration-changes — a rule the configuration no longer resolves
-// leaves its subjects untouched and unevaluated.
-func TestARuleTheConfigurationNoLongerCarriesIsLeftAlone(t *testing.T) {
+// spec: evaluation.md#configuration-changes — every threshold removed while the subject
+// stands in warning: it stops being a subject, its level is forgotten, and nothing is
+// written or announced — the question was withdrawn, not answered.
+func TestClearingAThresholdForgetsTheLevel(t *testing.T) {
 	db := open(t)
-	collect(t, db, tick, volume("/"), 19e9, 14.84)
+	collect(t, db, tick, volume("/"), gb(9))
 	pass(t, evaluator(db, tick, watching(t)))
 
-	ruleless := watching(t)
-	ruleless.Rules = map[string]evaluate.Rule{}
-	pass(t, evaluator(db, tick.Add(time.Minute), ruleless))
+	unwatch(t, db, volume("/"))
+	pass(t, evaluator(db, tick.Add(time.Minute), watching(t)))
 
-	if got := levelOf(t, db, "disk", "/"); got.Level != "warning" || !got.Since.Equal(tick) {
-		t.Fatalf("a rule nobody resolves left the state at %q since %v", got.Level, got.Since)
+	if got := levelOf(t, db, "disk.free_bytes", "/"); got.Level != "" {
+		t.Fatalf("the level outlived the threshold it answered: %q", got.Level)
 	}
 	if got := logged(t, db); len(got) != 1 {
-		t.Fatalf("dropping a rule wrote %d events, want none beyond the first", len(got))
+		t.Fatalf("clearing a threshold wrote %d events, want only the first one", len(got))
+	}
+}
+
+// spec: evaluation.md#configuration-changes — a threshold set again on a subject whose
+// configuration was removed is judged as a new one: previous level ok.
+func TestAThresholdSetAgainStartsFromOK(t *testing.T) {
+	db := open(t)
+	collect(t, db, tick, volume("/"), gb(3))
+	pass(t, evaluator(db, tick, watching(t)))
+	unwatch(t, db, volume("/"))
+	pass(t, evaluator(db, tick.Add(time.Minute), watching(t)))
+
+	retune(t, db, volume("/"), num(gb(10)), num(gb(4)))
+	pass(t, evaluator(db, tick.Add(2*time.Minute), watching(t)))
+
+	events := logged(t, db)
+	if len(events) != 2 || events[1].From != "ok" || events[1].To != "critical" {
+		t.Fatalf("re-setting a threshold produced %+v, want a fresh ok → critical", events)
 	}
 }
 
@@ -359,13 +400,13 @@ func TestARuleTheConfigurationNoLongerCarriesIsLeftAlone(t *testing.T) {
 // still holds the old one shrinks `stale_after` first, so a healthy subject may freeze.
 func TestALoweredIntervalFreezesAHealthySubject(t *testing.T) {
 	db := open(t)
-	collect(t, db, tick, volume("/"), 19e9, 14.84)
+	collect(t, db, tick, volume("/"), gb(9))
 
 	hasty := watching(t)
 	hasty.Intervals = map[string]time.Duration{"disk": time.Minute}
 	pass(t, evaluator(db, tick.Add(4*time.Minute), hasty))
 
-	if got := levelOf(t, db, "disk", "/").Level; got != "" {
+	if got := levelOf(t, db, "disk.free_bytes", "/").Level; got != "" {
 		t.Fatalf("a subject older than the shrunk window was evaluated to %q", got)
 	}
 }
@@ -396,4 +437,133 @@ func (c *cancelling) ApplyTransition(ctx context.Context, change storage.Transit
 	err := c.Store.ApplyTransition(ctx, change)
 	c.cancel()
 	return err
+}
+
+// spec: evaluation.md#configuration-changes — a threshold set again is judged as a new
+// subject, so news the log still holds about the old one is not delivered a second time.
+func TestAThresholdSetAgainDeliversNoOldNews(t *testing.T) {
+	db := open(t)
+	channel := &recorder{}
+	collect(t, db, tick, volume("/"), gb(3))
+	pass(t, evaluatorWith(db, channel, tick, watching(t)))
+	if len(channel.sent()) != 1 {
+		t.Fatalf("the first critical sent %d messages, want one", len(channel.sent()))
+	}
+
+	unwatch(t, db, volume("/"))
+	pass(t, evaluatorWith(db, channel, tick.Add(time.Minute), watching(t)))
+
+	// The volume is emptied and reports healthy before anyone watches it again.
+	back := tick.Add(2 * time.Minute)
+	collect(t, db, back, volume("/"), gb(40))
+	pass(t, evaluatorWith(db, channel, back, watching(t)))
+
+	if got := channel.sent(); len(got) != 1 {
+		t.Fatalf("a re-set threshold delivered %+v, want nothing beyond the first critical", got[1:])
+	}
+	if got := levelOf(t, db, "disk.free_bytes", "/").Level; got != "ok" {
+		t.Fatalf("the re-set subject is %q, want ok: it is judged by what it reports now", got)
+	}
+}
+
+// spec: evaluation.md#configuration-changes — a frozen subject that is watched again says
+// nothing at all: its values are stale, and the log is not news.
+func TestAThresholdSetAgainOnAFrozenSubjectIsSilent(t *testing.T) {
+	db := open(t)
+	channel := &recorder{}
+	collect(t, db, tick, volume("/"), gb(3))
+	pass(t, evaluatorWith(db, channel, tick, watching(t)))
+	unwatch(t, db, volume("/"))
+
+	stale := tick.Add(staleAfter + time.Minute)
+	beat(t, db, stale)
+	retune(t, db, volume("/"), num(gb(10)), num(gb(4)))
+	for _, at := range []time.Time{stale, stale.Add(time.Minute), stale.Add(2 * time.Minute)} {
+		pass(t, evaluatorWith(db, channel, at, watching(t)))
+	}
+
+	if got := channel.sent(); len(got) != 1 {
+		t.Fatalf("a frozen re-set subject delivered %d messages, want only the original critical", len(got))
+	}
+}
+
+// spec: evaluation.md#configuration-changes — `critical` removed while a subject stands
+// in critical: the fall is an ordinary transition, and leaving critical is announced.
+func TestRemovingCriticalAnnouncesTheFall(t *testing.T) {
+	db := open(t)
+	channel := &recorder{}
+	collect(t, db, tick, volume("/"), gb(3))
+	pass(t, evaluatorWith(db, channel, tick, watching(t)))
+
+	retune(t, db, volume("/"), num(gb(10)), nil)
+	later := tick.Add(time.Minute)
+	pass(t, evaluatorWith(db, channel, later, watching(t)))
+
+	if got := levelOf(t, db, "disk.free_bytes", "/").Level; got != "warning" {
+		t.Fatalf("the subject is %q, want warning: critical has no value to hold it", got)
+	}
+	events := logged(t, db)
+	if len(events) != 2 || events[1].From != "critical" || events[1].To != "warning" {
+		t.Fatalf("removing critical produced %+v, want an ordinary transition", events)
+	}
+	sent := channel.sent()
+	if len(sent) != 2 || sent[1].From != evaluate.Critical || sent[1].To != evaluate.Warning {
+		t.Fatalf("leaving critical delivered %+v, want it announced at once", sent)
+	}
+}
+
+// spec: evaluation.md#configuration-changes — a threshold configured for a frozen subject
+// is stored, and judged on the first tick that finds the values fresh again.
+func TestAThresholdOnAFrozenSubjectWaitsForFreshValues(t *testing.T) {
+	db := open(t)
+	collect(t, db, tick, volume("/"), gb(3))
+	unwatch(t, db, volume("/"))
+
+	stale := tick.Add(staleAfter + time.Minute)
+	beat(t, db, stale)
+	retune(t, db, volume("/"), num(gb(10)), num(gb(4)))
+	pass(t, evaluator(db, stale, watching(t)))
+	if got := levelOf(t, db, "disk.free_bytes", "/").Level; got != "" {
+		t.Fatalf("a frozen subject was judged to %q", got)
+	}
+
+	back := stale.Add(time.Minute)
+	collect(t, db, back, volume("/"), gb(3))
+	pass(t, evaluator(db, back, watching(t)))
+	if got := levelOf(t, db, "disk.free_bytes", "/").Level; got != "critical" {
+		t.Fatalf("the subject is %q once its values are fresh, want critical", got)
+	}
+}
+
+// spec: evaluation.md#configuration-changes — every threshold removed while the subject
+// is frozen: it stops being a subject at once.
+func TestClearingAThresholdOnAFrozenSubjectForgetsItAtOnce(t *testing.T) {
+	db := open(t)
+	collect(t, db, tick, volume("/"), gb(3))
+	pass(t, evaluator(db, tick, watching(t)))
+
+	stale := tick.Add(staleAfter + time.Minute)
+	beat(t, db, stale)
+	unwatch(t, db, volume("/"))
+	pass(t, evaluator(db, stale, watching(t)))
+
+	if got := levelOf(t, db, "disk.free_bytes", "/").Level; got != "" {
+		t.Fatalf("the frozen subject kept level %q after its threshold was cleared", got)
+	}
+}
+
+// spec: thresholds.md#effects — a threshold cleared for a subject standing in critical
+// announces no recovery: the question was withdrawn, not answered.
+func TestClearingAThresholdAnnouncesNoRecovery(t *testing.T) {
+	db := open(t)
+	channel := &recorder{}
+	collect(t, db, tick, volume("/"), gb(3))
+	pass(t, evaluatorWith(db, channel, tick, watching(t)))
+
+	unwatch(t, db, volume("/"))
+	pass(t, evaluatorWith(db, channel, tick.Add(time.Minute), watching(t)))
+
+	if got := channel.sent(); len(got) != 1 {
+		t.Fatalf("clearing a critical threshold delivered %+v, want only the original alert", got[1:])
+	}
 }

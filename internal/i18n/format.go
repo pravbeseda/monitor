@@ -2,6 +2,7 @@ package i18n
 
 import (
 	"fmt"
+	"math"
 	"strings"
 	"time"
 )
@@ -45,6 +46,22 @@ func (p *Printer) Percent(value float64) string {
 		return p.number(value, 1) + " %"
 	}
 	return p.number(value, 1) + "%"
+}
+
+// Duration renders a number of seconds in the largest whole unit that keeps it above
+// one, which is how an age reads to a person: 3 d, 5 h, 90 s.
+func (p *Printer) Duration(seconds float64) string {
+	value, unit := seconds, "unit.seconds"
+	for _, step := range []struct {
+		factor float64
+		key    string
+	}{{60, "unit.minutes"}, {60, "unit.hours"}, {24, "unit.days"}} {
+		if math.Abs(value) < step.factor {
+			break
+		}
+		value, unit = value/step.factor, step.key
+	}
+	return p.number(value, 1) + " " + p.T(unit)
 }
 
 // Time renders an instant in the printer's zone, marked with it: the hub stores UTC, so a

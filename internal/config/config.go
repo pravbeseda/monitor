@@ -7,6 +7,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"log/slog"
 	"os"
 	"sort"
 	"time"
@@ -98,6 +99,7 @@ func Load(path string) (*Config, error) {
 	if len(f.Nodes) == 0 {
 		return nil, fmt.Errorf("%s: nodes is missing or empty, so the hub would serve nobody", path)
 	}
+	announceLegacyKeys(path, f)
 	if err := validate(f); err != nil {
 		return nil, fmt.Errorf("%s: %w", path, err)
 	}
@@ -198,4 +200,32 @@ func sorted[V any](m map[string]V) []string {
 	}
 	sort.Strings(names)
 	return names
+}
+
+// announceLegacyKeys says once per key that a threshold in the file does nothing. The
+// keys are tolerated for one release so that a hub upgrading itself unattended starts on
+// the file already on its disk (ADR 0032); silence would leave an operator believing the
+// numbers still judge something.
+func announceLegacyKeys(path string, f file) {
+	say := func(where string) {
+		slog.Warn("a threshold in the configuration file is ignored",
+			"file", path, "key", where,
+			"how", "thresholds are set per series on the hub's /thresholds page")
+	}
+	if len(f.Rules) > 0 {
+		say("rules")
+	}
+	for _, name := range sorted(f.Classes) {
+		if len(f.Classes[name].Rules) > 0 {
+			say("classes." + name + ".rules")
+		}
+	}
+	for _, name := range sorted(f.Nodes) {
+		if len(f.Nodes[name].Rules) > 0 {
+			say("nodes." + name + ".rules")
+		}
+		if len(f.Nodes[name].Volumes) > 0 {
+			say("nodes." + name + ".volumes")
+		}
+	}
 }

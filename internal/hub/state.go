@@ -15,11 +15,12 @@ import (
 
 // The wire form of docs/specs/state.md#wire-format. A pointer is a field that can be null.
 type stateJSON struct {
-	At       string        `json:"at"`
-	Level    *string       `json:"level"`
-	Nodes    []nodeJSON    `json:"nodes"`
-	Subjects []subjectJSON `json:"subjects"`
-	Readings []readingJSON `json:"readings"`
+	At        string        `json:"at"`
+	Level     *string       `json:"level"`
+	Watched   int           `json:"watched"`
+	Unwatched int           `json:"unwatched"`
+	Nodes     []nodeJSON    `json:"nodes"`
+	Subjects  []subjectJSON `json:"subjects"`
 }
 
 type nodeJSON struct {
@@ -28,33 +29,21 @@ type nodeJSON struct {
 	AgentVersion *string `json:"agent_version"`
 	LastSeen     string  `json:"last_seen"`
 	Level        *string `json:"level"`
+	Watched      int     `json:"watched"`
+	Unwatched    int     `json:"unwatched"`
 }
 
 type subjectJSON struct {
-	Node   string            `json:"node"`
-	Rule   string            `json:"rule"`
-	Labels map[string]string `json:"labels"`
-	Level  *string           `json:"level"`
-	Since  *string           `json:"since"`
-	Stale  bool              `json:"stale"`
-	Values []valueJSON       `json:"values"`
-}
-
-type valueJSON struct {
-	Metric string       `json:"metric"`
-	Unit   history.Unit `json:"unit"`
-	Value  float64      `json:"value"`
-	TS     string       `json:"ts"`
-}
-
-type readingJSON struct {
-	Node   string            `json:"node"`
-	Metric string            `json:"metric"`
-	Labels map[string]string `json:"labels"`
-	Unit   history.Unit      `json:"unit"`
-	Value  float64           `json:"value"`
-	TS     string            `json:"ts"`
-	Stale  *bool             `json:"stale"`
+	Node    string            `json:"node"`
+	Metric  string            `json:"metric"`
+	Labels  map[string]string `json:"labels"`
+	Watched bool              `json:"watched"`
+	Level   *string           `json:"level"`
+	Since   *string           `json:"since"`
+	Stale   *bool             `json:"stale"`
+	Unit    *history.Unit     `json:"unit"`
+	Value   *float64          `json:"value"`
+	TS      *string           `json:"ts"`
 }
 
 // Snapshots is what the state needs of persistence, declared where it is consumed. The
@@ -99,11 +88,12 @@ func StateAPI(read StateReader) http.Handler {
 
 func encodeState(current state.State) stateJSON {
 	out := stateJSON{
-		At:       stamp(current.At),
-		Level:    levelJSON(current.Level),
-		Nodes:    make([]nodeJSON, 0, len(current.Nodes)),
-		Subjects: make([]subjectJSON, 0, len(current.Subjects)),
-		Readings: make([]readingJSON, 0, len(current.Readings)),
+		At:        stamp(current.At),
+		Level:     levelJSON(current.Level),
+		Watched:   current.Watched,
+		Unwatched: current.Unwatched,
+		Nodes:     make([]nodeJSON, 0, len(current.Nodes)),
+		Subjects:  make([]subjectJSON, 0, len(current.Subjects)),
 	}
 	for _, node := range current.Nodes {
 		one := nodeJSON{
@@ -111,6 +101,8 @@ func encodeState(current state.State) stateJSON {
 			Configured: node.Configured,
 			LastSeen:   stamp(node.LastSeen),
 			Level:      levelJSON(node.Level),
+			Watched:    node.Watched,
+			Unwatched:  node.Unwatched,
 		}
 		if node.AgentVersion != "" {
 			one.AgentVersion = &node.AgentVersion
@@ -119,32 +111,24 @@ func encodeState(current state.State) stateJSON {
 	}
 	for _, subject := range current.Subjects {
 		one := subjectJSON{
-			Node:   subject.Node,
-			Rule:   subject.Rule,
-			Labels: labelsJSON(subject.Labels),
-			Level:  levelJSON(subject.Level),
-			Stale:  subject.Stale,
-			Values: make([]valueJSON, 0, len(subject.Values)),
+			Node:    subject.Node,
+			Metric:  subject.Metric,
+			Labels:  labelsJSON(subject.Labels),
+			Watched: subject.Watched,
+			Level:   levelJSON(subject.Level),
+			Stale:   subject.Stale,
 		}
 		if subject.Level != nil {
 			since := stamp(subject.Since)
 			one.Since = &since
 		}
-		for _, value := range subject.Values {
-			one.Values = append(one.Values, valueJSON{Metric: value.Metric, Unit: value.Unit, Value: value.Value, TS: stamp(value.TS)})
+		// The silence subject carries no value of its own: its input is the node's
+		// last-seen time, which `nodes` already states (docs/specs/state.md#wire-format).
+		if subject.Value != nil {
+			unit, at := subject.Unit, stamp(subject.TS)
+			one.Unit, one.Value, one.TS = &unit, subject.Value, &at
 		}
 		out.Subjects = append(out.Subjects, one)
-	}
-	for _, reading := range current.Readings {
-		out.Readings = append(out.Readings, readingJSON{
-			Node:   reading.Node,
-			Metric: reading.Metric,
-			Labels: labelsJSON(reading.Labels),
-			Unit:   reading.Unit,
-			Value:  reading.Value.Value,
-			TS:     stamp(reading.TS),
-			Stale:  reading.Stale,
-		})
 	}
 	return out
 }

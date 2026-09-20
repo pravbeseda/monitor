@@ -3,7 +3,9 @@
 - **Status:** accepted; the recovery margin is superseded by
   [0013](0013-relative-hysteresis.md), the delivery of `critical → warning` is amended by
   [0016](0016-leaving-critical-is-instant.md), and where thresholds live is clarified by
-  [0007](0007-public-repository.md)
+  [0007](0007-public-repository.md) and then superseded by
+  [0032](0032-thresholds-are-set-in-the-interface.md), which takes thresholds out of the
+  hub's YAML and into the interface; the transition rules and the digest stand
 - **Date:** 2026-08-28
 - **Source:** [concept](../concept.md), [POC](../poc.md)
 

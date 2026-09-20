@@ -22,7 +22,7 @@
     body { background: var(--bg); color: var(--fg); }
     a { color: var(--link); }
   </style>
-  <meta name="monitor-live" content="{{ .StalledNotice }}" data-rendering="{{ .Rendering }}">
+  {{ if .Live }}<meta name="monitor-live" content="{{ .StalledNotice }}" data-rendering="{{ .Rendering }}">{{ end }}
   <script>
     (function () {
       // The reader's time zone is the one thing the server cannot know (ADR 0026): state it,

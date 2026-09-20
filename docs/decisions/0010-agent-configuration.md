@@ -2,7 +2,10 @@
 
 - **Status:** accepted; the "no second endpoint" clause is amended by
   [0022](0022-updates-are-pulled.md), which has the updater ask the hub for the target
-  version over an endpoint of its own, because only a running agent makes an ingest request
+  version over an endpoint of its own, because only a running agent makes an ingest request;
+  amended by [0032](0032-thresholds-are-set-in-the-interface.md) and
+  [0033](0033-a-subject-is-a-series.md), which take thresholds out of the layering and out of
+  the ingest response — which sensors run, how often and with which settings is unchanged
 - **Date:** 2026-08-28
 - **Source:** [POC](../poc.md) questions 3 and 5
 

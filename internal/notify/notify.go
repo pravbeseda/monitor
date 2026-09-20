@@ -4,9 +4,13 @@ package notify
 
 import (
 	"fmt"
+	"maps"
+	"slices"
+	"strconv"
 	"strings"
 
 	"github.com/pravbeseda/monitor/internal/evaluate"
+	"github.com/pravbeseda/monitor/internal/history"
 	"github.com/pravbeseda/monitor/internal/i18n"
 )
 
@@ -23,8 +27,8 @@ var levelKeys = map[evaluate.Level]string{
 // than as a change.
 func Render(p *i18n.Printer, m evaluate.Message) string {
 	subject := m.Node
-	if mount := m.Labels["mount"]; mount != "" {
-		subject += " " + mount
+	if named := naming(m.Labels); named != "" {
+		subject += " " + named
 	}
 
 	var line string
@@ -41,31 +45,82 @@ func Render(p *i18n.Printer, m evaluate.Message) string {
 	return line
 }
 
-// RenderDigest is the day's summary as one message: a title and one line per subject.
-func RenderDigest(p *i18n.Printer, entries []evaluate.Message) string {
-	lines := make([]string, 0, len(entries)+1)
+// decoration are the labels that say nothing to a reader of an alert: the filesystem a
+// volume is formatted with, and whether it can be unplugged. Everything else names the
+// series, and a message that cannot be told from another one about the same metric is a
+// message about nothing (ADR 0033).
+var decoration = map[string]bool{"fs": true, "removable": true}
+
+// naming is what identifies the series inside its node: a mount point reads as itself,
+// and any other label as the pair it is. A value carrying a space or an `=` is quoted, or
+// it would read as two labels — `{queue: "payments region=eu"}` is one series and
+// `{queue: payments, region: eu}` is another.
+func naming(labels map[string]string) string {
+	named := make([]string, 0, len(labels))
+	for _, key := range slices.Sorted(maps.Keys(labels)) {
+		switch {
+		case decoration[key]:
+		case key == "mount" && labels[key] != "":
+			named = append(named, plain(labels[key]))
+		default:
+			named = append(named, plain(key)+"="+plain(labels[key]))
+		}
+	}
+	return strings.Join(named, " ")
+}
+
+// plain is a label's key or value as it reads in a message, quoted when reading it back
+// would otherwise be ambiguous.
+func plain(text string) string {
+	if strings.ContainsAny(text, " =\"") {
+		return strconv.Quote(text)
+	}
+	return text
+}
+
+// RenderDigest is the day's summary as one message: a title, one line per subject, and
+// what is not being watched at all — a hub judging nothing must not read like a quiet one
+// (docs/specs/evaluation.md#digest).
+func RenderDigest(p *i18n.Printer, entries []evaluate.Message, unwatched int) string {
+	lines := make([]string, 0, len(entries)+2)
 	lines = append(lines, p.T("digest.title"))
 	for _, entry := range entries {
 		lines = append(lines, Render(p, entry))
 	}
+	if len(entries) == 0 {
+		lines = append(lines, p.T("digest.nothing_watched"))
+	}
+	if unwatched > 0 {
+		lines = append(lines, fmt.Sprintf(p.T("digest.unwatched"), unwatched))
+	}
 	return strings.Join(lines, "\n")
 }
 
-// detail renders the values that produced a message. A rule reads two series, so what is
-// shown comes from its definition rather than from the metric ids written out here; the
-// silence subject has no values at all and says so.
+// detail renders the value that produced a message, in the unit its metric id declares
+// (ADR 0033). The silence subject has no value at all and says so.
 func detail(p *i18n.Printer, m evaluate.Message) string {
-	if m.Rule == evaluate.SilenceRule {
+	if m.Metric == evaluate.SilenceMetric {
 		return p.T("notify.silent")
 	}
-	definition, known := evaluate.Lookup(m.Rule)
-	if !known {
+	value, measured := m.Readings[m.Metric]
+	if !measured {
 		return ""
 	}
-	free, gotFree := m.Readings[definition.Free]
-	pct, gotPct := m.Readings[definition.Pct]
-	if !gotFree || !gotPct {
-		return ""
+	return fmt.Sprintf(p.T("notify.reading"), m.Metric, Value(p, m.Metric, value))
+}
+
+// Value renders one reading the way its metric id says to. It is exported because every
+// surface that shows a value — a page, a message, a digest — must render it the same way
+// (docs/specs/history.md#wire-format).
+func Value(p *i18n.Printer, metric string, value float64) string {
+	switch history.UnitOf(metric) {
+	case history.Bytes:
+		return p.Bytes(value)
+	case history.Percent:
+		return p.Percent(value)
+	case history.Duration:
+		return p.Duration(value)
+	default:
+		return p.Number(value)
 	}
-	return fmt.Sprintf(p.T("notify.readings"), p.Bytes(free), p.Percent(pct))
 }

@@ -22,16 +22,16 @@ var _ evaluate.Notifier = Log{}
 // Notify writes one line naming the subject, the level it reached and the values behind it.
 func (l Log) Notify(_ context.Context, m evaluate.Message) error {
 	l.logger().Warn("notification",
-		"node", m.Node, "rule", m.Rule, "level", m.To.String(),
+		"node", m.Node, "metric", m.Metric, "level", m.To.String(),
 		"message", Render(i18n.For(i18n.English), m))
 	return nil
 }
 
 // Digest writes the day's summary as one record, however many subjects it lists.
-func (l Log) Digest(_ context.Context, at time.Time, entries []evaluate.Message) error {
+func (l Log) Digest(_ context.Context, at time.Time, entries []evaluate.Message, unwatched int) error {
 	l.logger().Info("digest",
-		"at", at, "subjects", len(entries),
-		"message", RenderDigest(i18n.For(i18n.English), entries))
+		"at", at, "subjects", len(entries), "unwatched", unwatched,
+		"message", RenderDigest(i18n.For(i18n.English), entries, unwatched))
 	return nil
 }
 

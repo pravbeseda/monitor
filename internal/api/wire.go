@@ -42,6 +42,11 @@ type Measurement struct {
 	Labels map[string]string `json:"labels"`
 	Value  *float64          `json:"value"`
 	TS     string            `json:"ts"`
+	// Sensor names what produced this reading, and is what staleness is measured
+	// against (docs/specs/evaluation.md#freezing). It is absent from an agent too old to
+	// send it, which costs that series its freshness rule and nothing else; a pointer
+	// tells that silence apart from an empty name, which is refused.
+	Sensor *string `json:"sensor,omitempty"`
 }
 
 // Response carries the configuration only when the agent's version differs from the

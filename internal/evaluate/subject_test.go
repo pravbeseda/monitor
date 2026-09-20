@@ -19,14 +19,13 @@ const (
 	staleAfter   = 3 * interval
 )
 
-// watching is a node the file lists, judging its volumes by the product defaults.
+// watching is a node the file lists, running the disk sensor.
 func watching(t *testing.T) evaluate.Target {
 	t.Helper()
 	return evaluate.Target{
 		Node:         "server-b",
 		SilenceAfter: silenceAfter,
 		Intervals:    map[string]time.Duration{"disk": interval},
-		Rules:        map[string]evaluate.Rule{"disk": disk(t).Default},
 	}
 }
 
@@ -35,11 +34,10 @@ func volume(mount string) map[string]string {
 	return map[string]string{"mount": mount, "fs": "ext4", "removable": "false"}
 }
 
-// reported is the pair of series of one volume, both collected age ago.
-func reported(labels map[string]string, free, pct float64, age time.Duration) []storage.Value {
+// reported is one volume's free-space series, collected age ago and naming its sensor.
+func reported(labels map[string]string, free float64, age time.Duration) []storage.Value {
 	return []storage.Value{
-		{Metric: "disk.free_bytes", Labels: labels, Value: free, TS: tick.Add(-age)},
-		{Metric: "disk.free_pct", Labels: labels, Value: pct, TS: tick.Add(-age)},
+		{Metric: "disk.free_bytes", Sensor: "disk", Labels: labels, Value: free, TS: tick.Add(-age)},
 	}
 }
 
@@ -48,11 +46,23 @@ func heard(age time.Duration, values ...storage.Value) storage.NodeState {
 	return storage.NodeState{Node: "server-b", LastSeen: tick.Add(-age), Values: values}
 }
 
-func stored(rule string, labels map[string]string, level evaluate.Level, since time.Time) storage.State {
+// watched is the threshold that makes a series a subject: warning at 10 GB, critical at
+// 4 GB, low is bad.
+func watched(labels map[string]string) storage.Threshold {
+	return storage.Threshold{
+		Series:    storage.SeriesRef{Node: "server-b", Metric: "disk.free_bytes", Labels: labels},
+		Direction: storage.Below,
+		Warning:   num(gb(10)),
+		Critical:  num(gb(4)),
+	}
+}
+
+func stored(metric string, labels map[string]string, level evaluate.Level, since time.Time) storage.State {
 	return storage.State{
-		Subject: storage.Subject{Node: "server-b", Rule: rule, Labels: labels},
-		Level:   level.String(),
-		Since:   since,
+		Subject:   storage.Subject{Node: "server-b", Metric: metric, Labels: labels},
+		Level:     level.String(),
+		Direction: string(storage.Below),
+		Since:     since,
 	}
 }
 
@@ -62,24 +72,24 @@ func subjectsOf(t *testing.T, target evaluate.Target, snap storage.Snapshot) []e
 	return evaluate.Subjects([]evaluate.Target{target}, snap, tick)
 }
 
-// find returns the subject of one rule and one mount, or fails: an absent subject is a
+// find returns the subject of one metric and one mount, or fails: an absent subject is a
 // different assertion, made with count.
-func find(t *testing.T, subjects []evaluate.Subject, rule, mount string) evaluate.Subject {
+func find(t *testing.T, subjects []evaluate.Subject, metric, mount string) evaluate.Subject {
 	t.Helper()
 	for _, subject := range subjects {
-		if subject.Rule == rule && subject.Mount() == mount {
+		if subject.Metric == metric && subject.Labels["mount"] == mount {
 			return subject
 		}
 	}
-	t.Fatalf("no %s subject for mount %q among %d subjects", rule, mount, len(subjects))
+	t.Fatalf("no %s subject for mount %q among %d subjects", metric, mount, len(subjects))
 	return evaluate.Subject{}
 }
 
-func count(t *testing.T, subjects []evaluate.Subject, rule string) int {
+func count(t *testing.T, subjects []evaluate.Subject, metric string) int {
 	t.Helper()
 	n := 0
 	for _, subject := range subjects {
-		if subject.Rule == rule {
+		if subject.Metric == metric {
 			n++
 		}
 	}
@@ -90,90 +100,123 @@ func count(t *testing.T, subjects []evaluate.Subject, rule string) int {
 // keeps the level and the `since` it had.
 func TestFreezing(t *testing.T) {
 	t.Run("the node is silent", func(t *testing.T) {
-		snap := storage.Snapshot{Nodes: []storage.NodeState{
-			heard(silenceAfter+time.Minute, reported(volume("/"), 40e9, 31.25, time.Minute)...),
-		}}
-		subjects := subjectsOf(t, watching(t), snap)
-		if got := find(t, subjects, "disk", "/"); !got.Frozen {
-			t.Fatal("a silent node's volume was evaluated, so stale values decided its level")
+		snap := storage.Snapshot{
+			Nodes:      []storage.NodeState{heard(silenceAfter+time.Minute, reported(volume("/"), gb(40), time.Minute)...)},
+			Thresholds: []storage.Threshold{watched(volume("/"))},
 		}
-		if got := find(t, subjects, "silence", ""); got.Frozen {
+		subjects := subjectsOf(t, watching(t), snap)
+		if got := find(t, subjects, "disk.free_bytes", "/"); !got.Frozen {
+			t.Fatal("a silent node's series was evaluated, so stale values decided its level")
+		}
+		if got := find(t, subjects, evaluate.SilenceMetric, ""); got.Frozen {
 			t.Fatal("the silence subject froze itself, so the node could never recover")
 		}
 	})
 
-	t.Run("the older series is older than stale_after", func(t *testing.T) {
-		values := append(reported(volume("/data"), 5e9, 3.91, staleAfter+time.Minute),
-			reported(volume("/"), 40e9, 31.25, time.Minute)...)
-		subjects := subjectsOf(t, watching(t), storage.Snapshot{Nodes: []storage.NodeState{heard(0, values...)}})
-		if got := find(t, subjects, "disk", "/data"); !got.Frozen {
-			t.Fatal("a stale volume was evaluated")
+	t.Run("the newest value is older than stale_after", func(t *testing.T) {
+		values := append(reported(volume("/data"), gb(5), staleAfter+time.Minute),
+			reported(volume("/"), gb(40), time.Minute)...)
+		snap := storage.Snapshot{
+			Nodes:      []storage.NodeState{heard(0, values...)},
+			Thresholds: []storage.Threshold{watched(volume("/data")), watched(volume("/"))},
 		}
-		if got := find(t, subjects, "disk", "/"); got.Frozen || got.Level != evaluate.OK {
-			t.Fatalf("the fresh volume of the same node came out frozen=%v level=%v", got.Frozen, got.Level)
+		subjects := subjectsOf(t, watching(t), snap)
+		if got := find(t, subjects, "disk.free_bytes", "/data"); !got.Frozen {
+			t.Fatal("a stale series was evaluated")
+		}
+		if got := find(t, subjects, "disk.free_bytes", "/"); got.Frozen || got.Level != evaluate.OK {
+			t.Fatalf("the fresh series of the same node came out frozen=%v level=%v", got.Frozen, got.Level)
 		}
 	})
 
-	t.Run("one series stale and the other fresh", func(t *testing.T) {
+	t.Run("exactly stale_after old", func(t *testing.T) {
+		snap := storage.Snapshot{
+			Nodes:      []storage.NodeState{heard(0, reported(volume("/"), gb(40), staleAfter)...)},
+			Thresholds: []storage.Threshold{watched(volume("/"))},
+		}
+		if got := find(t, subjectsOf(t, watching(t), snap), "disk.free_bytes", "/"); got.Frozen {
+			t.Fatal("a value exactly three intervals old froze: the bound is inclusive")
+		}
+	})
+
+	t.Run("the series names no sensor", func(t *testing.T) {
 		labels := volume("/")
 		values := []storage.Value{
-			{Metric: "disk.free_bytes", Labels: labels, Value: 5e9, TS: tick.Add(-staleAfter - time.Minute)},
-			{Metric: "disk.free_pct", Labels: labels, Value: 3.91, TS: tick.Add(-time.Minute)},
+			{Metric: "disk.free_bytes", Labels: labels, Value: gb(5), TS: tick.Add(-staleAfter - time.Hour)},
 		}
-		subjects := subjectsOf(t, watching(t), storage.Snapshot{Nodes: []storage.NodeState{heard(0, values...)}})
-		if got := find(t, subjects, "disk", "/"); !got.Frozen {
-			t.Fatal("the join was judged as fresh as its younger half")
+		snap := storage.Snapshot{
+			Nodes:      []storage.NodeState{heard(0, values...)},
+			Thresholds: []storage.Threshold{watched(labels)},
+		}
+		got := find(t, subjectsOf(t, watching(t), snap), "disk.free_bytes", "/")
+		if got.Frozen {
+			t.Fatal("a series with no sensor froze on age, though no interval says when it is late")
+		}
+		if got.Level != evaluate.Warning {
+			t.Fatalf("level = %v, want the stale-looking value judged as it stands", got.Level)
 		}
 	})
 
-	t.Run("the second series has never arrived", func(t *testing.T) {
-		values := []storage.Value{{Metric: "disk.free_bytes", Labels: volume("/"), Value: 5e9, TS: tick}}
-		subjects := subjectsOf(t, watching(t), storage.Snapshot{Nodes: []storage.NodeState{heard(0, values...)}})
-		if got := count(t, subjects, "disk"); got != 0 {
-			t.Fatalf("an incomplete join produced %d subjects, want none", got)
+	t.Run("a series nothing watches", func(t *testing.T) {
+		snap := storage.Snapshot{Nodes: []storage.NodeState{heard(0, reported(volume("/"), gb(1), time.Minute)...)}}
+		if got := count(t, subjectsOf(t, watching(t), snap), "disk.free_bytes"); got != 0 {
+			t.Fatalf("an unwatched series produced %d subjects, want none", got)
+		}
+	})
+
+	t.Run("a threshold whose series has never reported", func(t *testing.T) {
+		snap := storage.Snapshot{
+			Nodes:      []storage.NodeState{heard(0)},
+			Thresholds: []storage.Threshold{watched(volume("/"))},
+		}
+		if got := count(t, subjectsOf(t, watching(t), snap), "disk.free_bytes"); got != 0 {
+			t.Fatalf("a threshold with no value produced %d subjects, want none", got)
 		}
 	})
 
 	t.Run("a removable volume is unplugged", func(t *testing.T) {
 		labels := volume("/mnt/usb")
 		labels["removable"] = "true"
-		values := reported(labels, 5e9, 3.91, staleAfter+time.Minute)
 		snap := storage.Snapshot{
-			Nodes:  []storage.NodeState{heard(0, values...)},
-			States: []storage.State{stored("disk", labels, evaluate.Critical, tick.Add(-time.Hour))},
+			Nodes:      []storage.NodeState{heard(0, reported(labels, gb(5), staleAfter+time.Minute)...)},
+			Thresholds: []storage.Threshold{watched(labels)},
+			States:     []storage.State{stored("disk.free_bytes", labels, evaluate.Critical, tick.Add(-time.Hour))},
 		}
-		got := find(t, subjectsOf(t, watching(t), snap), "disk", "/mnt/usb")
+		got := find(t, subjectsOf(t, watching(t), snap), "disk.free_bytes", "/mnt/usb")
 		if !got.Frozen || got.Level != evaluate.Critical || !got.Since.Equal(tick.Add(-time.Hour)) {
 			t.Fatalf("an unplugged volume came out frozen=%v level=%v since=%v", got.Frozen, got.Level, got.Since)
 		}
 	})
 
-	t.Run("the sensor of the rule does not run on this node", func(t *testing.T) {
+	t.Run("the node does not run the sensor", func(t *testing.T) {
 		target := watching(t)
 		target.Intervals = map[string]time.Duration{}
-		values := reported(volume("/"), 5e9, 3.91, time.Minute)
-		subjects := subjectsOf(t, target, storage.Snapshot{Nodes: []storage.NodeState{heard(0, values...)}})
-		if got := count(t, subjects, "disk"); got != 0 {
-			t.Fatalf("a rule whose sensor nothing collects produced %d subjects", got)
+		snap := storage.Snapshot{
+			Nodes:      []storage.NodeState{heard(0, reported(volume("/"), gb(5), time.Minute)...)},
+			Thresholds: []storage.Threshold{watched(volume("/"))},
 		}
-		find(t, subjects, "silence", "")
+		subjects := subjectsOf(t, target, snap)
+		if got := find(t, subjects, "disk.free_bytes", "/"); !got.Frozen {
+			t.Fatal("a series whose sensor the node does not run was judged, though nothing will refresh it")
+		}
+		find(t, subjects, evaluate.SilenceMetric, "")
 	})
 
 	t.Run("a volume reappears under different labels", func(t *testing.T) {
 		was, now := volume("/data"), volume("/data")
 		now["fs"] = "xfs"
-		values := append(reported(was, 5e9, 3.91, staleAfter+time.Minute),
-			reported(now, 5e9, 3.91, time.Minute)...)
+		values := append(reported(was, gb(5), staleAfter+time.Minute), reported(now, gb(5), time.Minute)...)
 		snap := storage.Snapshot{
-			Nodes:  []storage.NodeState{heard(0, values...)},
-			States: []storage.State{stored("disk", was, evaluate.Critical, tick.Add(-time.Hour))},
+			Nodes:      []storage.NodeState{heard(0, values...)},
+			Thresholds: []storage.Threshold{watched(was), watched(now)},
+			States:     []storage.State{stored("disk.free_bytes", was, evaluate.Critical, tick.Add(-time.Hour))},
 		}
 		subjects := subjectsOf(t, watching(t), snap)
-		if got := count(t, subjects, "disk"); got != 2 {
+		if got := count(t, subjects, "disk.free_bytes"); got != 2 {
 			t.Fatalf("relabelling gave %d subjects, want the old one and the new", got)
 		}
 		for _, subject := range subjects {
-			if subject.Rule != "disk" {
+			if subject.Metric != "disk.free_bytes" {
 				continue
 			}
 			if subject.Labels["fs"] == "ext4" && (!subject.Frozen || subject.Level != evaluate.Critical) {
@@ -191,17 +234,27 @@ func TestFreezing(t *testing.T) {
 func TestNodeSilence(t *testing.T) {
 	t.Run("silent past the window", func(t *testing.T) {
 		snap := storage.Snapshot{Nodes: []storage.NodeState{heard(silenceAfter + time.Second)}}
-		if got := find(t, subjectsOf(t, watching(t), snap), "silence", ""); got.Level != evaluate.Critical {
+		if got := find(t, subjectsOf(t, watching(t), snap), evaluate.SilenceMetric, ""); got.Level != evaluate.Critical {
 			t.Fatalf("a node past its silence window is %v, want critical", got.Level)
+		}
+	})
+
+	t.Run("exactly at the window", func(t *testing.T) {
+		snap := storage.Snapshot{Nodes: []storage.NodeState{heard(silenceAfter)}}
+		if got := find(t, subjectsOf(t, watching(t), snap), evaluate.SilenceMetric, ""); got.Level != evaluate.OK {
+			t.Fatalf("a node exactly at its window is %v, want ok: only past it is silence", got.Level)
 		}
 	})
 
 	t.Run("heard from inside the window", func(t *testing.T) {
 		snap := storage.Snapshot{
-			Nodes:  []storage.NodeState{heard(silenceAfter - time.Second)},
-			States: []storage.State{stored("silence", nil, evaluate.Critical, tick.Add(-time.Hour))},
+			Nodes: []storage.NodeState{heard(silenceAfter - time.Second)},
+			States: []storage.State{{
+				Subject: storage.Subject{Node: "server-b", Metric: evaluate.SilenceMetric},
+				Level:   evaluate.Critical.String(), Since: tick.Add(-time.Hour),
+			}},
 		}
-		got := find(t, subjectsOf(t, watching(t), snap), "silence", "")
+		got := find(t, subjectsOf(t, watching(t), snap), evaluate.SilenceMetric, "")
 		if got.Level != evaluate.OK || got.Previous != evaluate.Critical {
 			t.Fatalf("a node heard from again is %v from %v, want ok from critical", got.Level, got.Previous)
 		}
@@ -209,7 +262,7 @@ func TestNodeSilence(t *testing.T) {
 
 	t.Run("still inside the window", func(t *testing.T) {
 		snap := storage.Snapshot{Nodes: []storage.NodeState{heard(time.Minute)}}
-		if got := find(t, subjectsOf(t, watching(t), snap), "silence", ""); got.Level != evaluate.OK || got.Changed() {
+		if got := find(t, subjectsOf(t, watching(t), snap), evaluate.SilenceMetric, ""); got.Level != evaluate.OK || got.Changed() {
 			t.Fatalf("a healthy node changed to %v", got.Level)
 		}
 	})
@@ -221,26 +274,101 @@ func TestNodeSilence(t *testing.T) {
 	})
 }
 
-// spec: evaluation.md#the-tick — messages and digest entries come out by node name, then by
-// the subject's mount label.
+// spec: evaluation.md#the-tick — messages and digest entries come out by node name, then
+// metric, then labels, a node's silence first.
 func TestSubjectsComeOutInAStableOrder(t *testing.T) {
-	values := append(reported(volume("/data"), 40e9, 31.25, time.Minute),
-		reported(volume("/"), 40e9, 31.25, time.Minute)...)
+	values := append(reported(volume("/data"), gb(40), time.Minute), reported(volume("/"), gb(40), time.Minute)...)
 	first, second := watching(t), watching(t)
 	second.Node = "laptop-a"
-	snap := storage.Snapshot{Nodes: []storage.NodeState{
-		heard(0, values...),
-		{Node: "laptop-a", LastSeen: tick},
-	}}
+	snap := storage.Snapshot{
+		Nodes: []storage.NodeState{
+			heard(0, values...),
+			{Node: "laptop-a", LastSeen: tick},
+		},
+		Thresholds: []storage.Threshold{watched(volume("/data")), watched(volume("/"))},
+	}
 
 	got := evaluate.Subjects([]evaluate.Target{first, second}, snap, tick)
-	want := []string{"laptop-a/silence/", "server-b/silence/", "server-b/disk//", "server-b/disk//data"}
+	want := []string{
+		"laptop-a/silence/",
+		"server-b/silence/",
+		"server-b/disk.free_bytes//",
+		"server-b/disk.free_bytes//data",
+	}
 	if len(got) != len(want) {
 		t.Fatalf("got %d subjects, want %d", len(got), len(want))
 	}
 	for i, subject := range got {
-		if key := subject.Node + "/" + subject.Rule + "/" + subject.Mount(); key != want[i] {
+		if key := subject.Node + "/" + subject.Metric + "/" + subject.Labels["mount"]; key != want[i] {
 			t.Fatalf("subject %d is %s, want %s", i, key, want[i])
 		}
+	}
+}
+
+// spec: evaluation.md#freezing — a series reported again under a different sensor name
+// ages by the newest value's sensor from that tick on, and keeps its level.
+func TestASeriesAgesByTheSensorOfItsNewestValue(t *testing.T) {
+	labels := volume("/")
+	// Collected half an hour ago: stale for a sensor collecting every 5 minutes, fresh
+	// for the one collecting every 15.
+	value := storage.Value{
+		Metric: "disk.free_bytes", Sensor: "fast", Labels: labels, Value: gb(40), TS: tick.Add(-30 * time.Minute),
+	}
+	target := watching(t)
+	target.Intervals = map[string]time.Duration{"disk": interval, "fast": 5 * time.Minute}
+	snap := storage.Snapshot{
+		Nodes:      []storage.NodeState{heard(0, value)},
+		Thresholds: []storage.Threshold{watched(labels)},
+		States:     []storage.State{stored("disk.free_bytes", labels, evaluate.Warning, tick.Add(-time.Hour))},
+	}
+
+	frozen := find(t, subjectsOf(t, target, snap), "disk.free_bytes", "/")
+	if !frozen.Frozen || frozen.Level != evaluate.Warning {
+		t.Fatalf("under the fast sensor the subject is frozen=%v level=%v, want frozen at warning",
+			frozen.Frozen, frozen.Level)
+	}
+
+	value.Sensor = "disk"
+	snap.Nodes = []storage.NodeState{heard(0, value)}
+	fresh := find(t, subjectsOf(t, target, snap), "disk.free_bytes", "/")
+	if fresh.Frozen {
+		t.Fatal("the same value under the slower sensor still froze: the newest value names what ages it")
+	}
+}
+
+// spec: evaluation.md#freezing — a series that reported with a sensor and now reports
+// without one is never frozen on age from then on.
+func TestASeriesThatLosesItsSensorStopsAging(t *testing.T) {
+	labels := volume("/")
+	value := storage.Value{
+		Metric: "disk.free_bytes", Labels: labels, Value: gb(40), TS: tick.Add(-staleAfter - time.Hour),
+	}
+	snap := storage.Snapshot{
+		Nodes:      []storage.NodeState{heard(0, value)},
+		Thresholds: []storage.Threshold{watched(labels)},
+	}
+
+	if got := find(t, subjectsOf(t, watching(t), snap), "disk.free_bytes", "/"); got.Frozen {
+		t.Fatal("a series whose newest value names no sensor froze on age")
+	}
+}
+
+// spec: evaluation.md#configuration-changes — a stored threshold this build cannot read
+// leaves its series unjudged, and the rest of the tick runs.
+func TestAnUnreadableThresholdIsNotJudged(t *testing.T) {
+	sideways := watched(volume("/"))
+	sideways.Direction = storage.Direction("sideways")
+	snap := storage.Snapshot{
+		Nodes: []storage.NodeState{heard(0,
+			append(reported(volume("/"), gb(1), time.Minute), reported(volume("/data"), gb(1), time.Minute)...)...)},
+		Thresholds: []storage.Threshold{sideways, watched(volume("/data"))},
+	}
+
+	subjects := subjectsOf(t, watching(t), snap)
+	if got := count(t, subjects, "disk.free_bytes"); got != 1 {
+		t.Fatalf("%d subjects, want only the readable one", got)
+	}
+	if got := find(t, subjects, "disk.free_bytes", "/data"); got.Level != evaluate.Critical {
+		t.Fatalf("the readable subject is %v, want the rest of the tick to run", got.Level)
 	}
 }

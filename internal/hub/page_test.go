@@ -20,19 +20,20 @@ var lastSeen = time.Date(2026, 8, 28, 10, 5, 0, 0, time.UTC)
 
 // stored is a storage that answers with whatever the test put in it.
 type stored struct {
-	states []storage.NodeState
-	levels []storage.State
-	err    error
+	states     []storage.NodeState
+	levels     []storage.State
+	thresholds []storage.Threshold
+	err        error
 }
 
 func (s stored) SaveIngest(context.Context, storage.Ingest) error { return nil }
 func (s stored) Close() error                                     { return nil }
 
 func (s stored) Snapshot(context.Context, []string) (storage.Snapshot, error) {
-	return storage.Snapshot{Nodes: s.states, States: s.levels}, s.err
+	return storage.Snapshot{Nodes: s.states, States: s.levels, Thresholds: s.thresholds}, s.err
 }
 
-func (s stored) Series(context.Context, storage.Selection) ([]storage.SeriesRef, error) {
+func (s stored) Series(context.Context, storage.Selection) ([]storage.SeriesNewest, error) {
 	return nil, s.err
 }
 
@@ -44,18 +45,29 @@ func (s stored) Points(context.Context, storage.SeriesRef, time.Time, time.Time)
 	return func(func(storage.Point, error) bool) {}
 }
 
+// The threshold store: nothing is stored unless a test says otherwise. A store that keeps
+// what it is given lives in thresholds_test.go.
+func (s stored) ThresholdOf(context.Context, storage.SeriesRef) (storage.Threshold, bool, error) {
+	return storage.Threshold{}, false, s.err
+}
+
+func (s stored) SaveThreshold(context.Context, storage.Threshold) error   { return s.err }
+func (s stored) DeleteThreshold(context.Context, storage.SeriesRef) error { return s.err }
+
 var laptop = storage.NodeState{
 	Node:     "laptop-a",
 	LastSeen: lastSeen,
 	Values: []storage.Value{
 		{
 			Metric: "disk.free_bytes",
+			Sensor: "disk",
 			Labels: map[string]string{"mount": "/", "fs": "apfs", "removable": "false"},
 			Value:  1.5e9,
 			TS:     lastSeen,
 		},
 		{
 			Metric: "disk.free_pct",
+			Sensor: "disk",
 			Labels: map[string]string{"mount": "/", "fs": "apfs", "removable": "false"},
 			Value:  34.24,
 			TS:     lastSeen,
@@ -195,12 +207,22 @@ func TestRootIsMountedOnTheRoutes(t *testing.T) {
 }
 
 // spec: history.md#page — a series that stopped arriving is hidden when removable and marked
-// otherwise.
+// otherwise; one that names no sensor has no age at all.
 func TestPageLeavesOutOrMarksSeriesThatStoppedArriving(t *testing.T) {
 	const marker = "no fresh data"
-	bound := 3 * time.Minute
+	bound := evaluate.StaleFactor * time.Minute
 	series := func(metric, mount, removable string, age time.Duration) storage.Value {
 		return diskValue(metric, mount, removable, 1, age)
+	}
+	loose := func(mount string, age time.Duration) storage.Value {
+		value := diskValue("coffee.level", mount, "true", 1, age)
+		value.Sensor = ""
+		return value
+	}
+	unrun := func(mount, removable string) storage.Value {
+		value := diskValue("coffee.level", mount, removable, 1, 0)
+		value.Sensor = "coffee"
+		return value
 	}
 	tests := []struct {
 		name       string
@@ -212,7 +234,9 @@ func TestPageLeavesOutOrMarksSeriesThatStoppedArriving(t *testing.T) {
 		{"a series exactly at the bound", series("disk.free_pct", "/Volumes/stick-a", "true", bound), true, false},
 		{"a removable series past the bound", series("disk.free_pct", "/Volumes/stick-a", "true", bound+time.Second), false, false},
 		{"a fixed series past the bound", series("disk.free_pct", "/Volumes/data-a", "false", bound+time.Second), true, true},
-		{"a series whose node resolves no interval", series("coffee.level", "/Volumes/stick-a", "true", 24*time.Hour), true, false},
+		{"a series naming no sensor", loose("/Volumes/stick-a", 24*time.Hour), true, false},
+		{"a removable series whose node runs no such sensor", unrun("/Volumes/stick-a", "true"), false, false},
+		{"a fixed series whose node runs no such sensor", unrun("/Volumes/data-a", "false"), true, true},
 	}
 
 	for _, tc := range tests {
@@ -236,18 +260,8 @@ func TestPageLeavesOutOrMarksSeriesThatStoppedArriving(t *testing.T) {
 func TestPageAgesSeriesByTheHubsClock(t *testing.T) {
 	anHourAgo := lastSeen.Add(-time.Hour)
 	values := []storage.Value{
-		{
-			Metric: "disk.free_pct",
-			Labels: map[string]string{"mount": "/Volumes/stick-a", "fs": "apfs", "removable": "true"},
-			Value:  1,
-			TS:     anHourAgo,
-		},
-		{
-			Metric: "disk.free_pct",
-			Labels: map[string]string{"mount": "/Volumes/data-a", "fs": "apfs", "removable": "false"},
-			Value:  1,
-			TS:     anHourAgo,
-		},
+		diskValue("disk.free_pct", "/Volumes/stick-a", "true", 1, time.Hour),
+		diskValue("disk.free_pct", "/Volumes/data-a", "false", 1, time.Hour),
 	}
 	silent := storage.NodeState{Node: "laptop-a", LastSeen: anHourAgo, Values: values}
 	heartbeatOnly := storage.NodeState{Node: "server-b", LastSeen: lastSeen, Values: values}
@@ -264,12 +278,7 @@ func TestPageAgesSeriesByTheHubsClock(t *testing.T) {
 
 // spec: history.md#page — the mark is in the reader's language.
 func TestPageMarksAStaleSeriesInTheReadersLanguage(t *testing.T) {
-	fixed := storage.Value{
-		Metric: "disk.free_pct",
-		Labels: map[string]string{"mount": "/Volumes/data-a", "fs": "apfs", "removable": "false"},
-		Value:  1,
-		TS:     lastSeen.Add(-time.Hour),
-	}
+	fixed := diskValue("disk.free_pct", "/Volumes/data-a", "false", 1, time.Hour)
 	state := storage.NodeState{Node: "laptop-a", LastSeen: lastSeen, Values: []storage.Value{fixed}}
 
 	body := show(t, stored{states: []storage.NodeState{state}}, "/?lang=ru", "").Body.String()
@@ -279,28 +288,28 @@ func TestPageMarksAStaleSeriesInTheReadersLanguage(t *testing.T) {
 	}
 }
 
-// spec: history.md#page — the hub ages a series by the interval its node's configuration
-// resolves, and a node the configuration no longer names resolves none.
+// spec: state.md#staleness — the hub ages a series by the interval its node's configuration
+// resolves, and a node the file no longer names resolves none, so nothing will refresh it.
 func TestRootAgesSeriesByTheConfiguredInterval(t *testing.T) {
-	old := storage.Value{
-		Metric: "disk.free_pct",
-		Labels: map[string]string{"mount": "/Volumes/data-a", "fs": "apfs", "removable": "false"},
-		Value:  1,
-		TS:     lastSeen.Add(-30 * 24 * time.Hour),
-	}
-	configured := storage.NodeState{Node: "laptop-a", LastSeen: lastSeen, Values: []storage.Value{old}}
-	forgotten := storage.NodeState{Node: "server-c", LastSeen: lastSeen, Values: []storage.Value{old}}
-
+	// laptop-a is in the test configuration, in the class whose disk interval is an hour;
+	// server-c is not named there at all.
 	for _, tc := range []struct {
-		state      storage.NodeState
+		node       string
+		age        time.Duration
 		wantMarked bool
-	}{{configured, true}, {forgotten, false}} {
-		req := httptest.NewRequest(http.MethodGet, "/", nil)
+	}{
+		{"laptop-a", time.Minute, false},
+		{"laptop-a", 30 * 24 * time.Hour, true},
+		{"server-c", time.Minute, true},
+	} {
+		value := diskValue("disk.free_pct", "/Volumes/data-a", "false", 1, tc.age)
+		state := storage.NodeState{Node: tc.node, LastSeen: lastSeen, Values: []storage.Value{value}}
 		rec := httptest.NewRecorder()
-		routesWith(t, stored{states: []storage.NodeState{tc.state}}, time.Now).ServeHTTP(rec, req)
+		routesWith(t, stored{states: []storage.NodeState{state}}, func() time.Time { return lastSeen }).
+			ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/", nil))
 
 		if marked := strings.Contains(rec.Body.String(), "no fresh data"); marked != tc.wantMarked {
-			t.Errorf("%s: marked = %v, want %v", tc.state.Node, marked, tc.wantMarked)
+			t.Errorf("%s at %v: marked = %v, want %v", tc.node, tc.age, marked, tc.wantMarked)
 		}
 	}
 }
@@ -308,12 +317,7 @@ func TestRootAgesSeriesByTheConfiguredInterval(t *testing.T) {
 // spec: history.md#page — a node whose every series was left out says it has nothing
 // current, not that it never measured anything.
 func TestPageSaysANodeWhoseSeriesAllVanishedHasNothingCurrent(t *testing.T) {
-	stick := storage.Value{
-		Metric: "disk.free_pct",
-		Labels: map[string]string{"mount": "/Volumes/stick-a", "fs": "apfs", "removable": "true"},
-		Value:  1,
-		TS:     lastSeen.Add(-time.Hour),
-	}
+	stick := diskValue("disk.free_pct", "/Volumes/stick-a", "true", 1, time.Hour)
 	state := storage.NodeState{Node: "laptop-a", LastSeen: lastSeen, Values: []storage.Value{stick}}
 
 	body := show(t, stored{states: []storage.NodeState{state}}, "/", "").Body.String()
@@ -326,22 +330,11 @@ func TestPageSaysANodeWhoseSeriesAllVanishedHasNothingCurrent(t *testing.T) {
 // spec: history.md#page — a node silent past its silence_after has its rows left out or
 // marked in that same moment evaluation freezes them, before they are three intervals old.
 func TestPageFreezesTheRowsOfASilentNode(t *testing.T) {
-	aMinuteAgo := lastSeen.Add(-time.Minute)
 	values := []storage.Value{
-		{
-			Metric: "disk.free_pct",
-			Labels: map[string]string{"mount": "/Volumes/stick-a", "fs": "apfs", "removable": "true"},
-			Value:  1,
-			TS:     aMinuteAgo,
-		},
-		{
-			Metric: "disk.free_pct",
-			Labels: map[string]string{"mount": "/Volumes/data-a", "fs": "apfs", "removable": "false"},
-			Value:  1,
-			TS:     aMinuteAgo,
-		},
+		diskValue("disk.free_pct", "/Volumes/stick-a", "true", 1, time.Minute),
+		diskValue("disk.free_pct", "/Volumes/data-a", "false", 1, time.Minute),
 	}
-	state := storage.NodeState{Node: "server-b", LastSeen: aMinuteAgo, Values: values}
+	state := storage.NodeState{Node: "server-b", LastSeen: lastSeen.Add(-time.Minute), Values: values}
 	req := httptest.NewRequest(http.MethodGet, "/", nil)
 	rec := httptest.NewRecorder()
 
@@ -368,89 +361,88 @@ func rows(body string) []string {
 func diskValue(metric, mount, removable string, value float64, age time.Duration) storage.Value {
 	return storage.Value{
 		Metric: metric,
+		Sensor: "disk",
 		Labels: map[string]string{"mount": mount, "fs": "apfs", "removable": removable},
 		Value:  value,
 		TS:     lastSeen.Add(-age),
 	}
 }
 
-// spec: history.md#page — a volume is one row: the sensor, the volume, and its free space in
-// bytes then in percent, each value its own link, whatever order storage returns them in.
-func TestPageShowsAVolumeAsOneRow(t *testing.T) {
+// spec: history.md#page — a volume is two rows, one per series, since each is judged on its
+// own, and each row links to its history and to what judges it.
+func TestPageShowsAVolumeAsTwoRows(t *testing.T) {
 	reversed := laptop
 	reversed.Values = []storage.Value{laptop.Values[1], laptop.Values[0]}
 
 	body := show(t, stored{states: []storage.NodeState{reversed}}, "/", "").Body.String()
 
 	got := rows(body)
-	if len(got) != 1 {
-		t.Fatalf("%d rows, want one for the volume; page = %q", len(got), body)
+	if len(got) != 2 {
+		t.Fatalf("%d rows, want one per series of the volume; page = %q", len(got), body)
 	}
-	row := got[0]
-	if !strings.Contains(row, "<td>disk</td>") {
-		t.Errorf("row = %q, want it named by its sensor", row)
+	for i, want := range [][]string{
+		{"<td>disk.free_bytes</td>", "<td>/ · apfs</td>", "1.5 GB"},
+		{"<td>disk.free_pct</td>", "<td>/ · apfs</td>", "34.2%"},
+	} {
+		for _, one := range want {
+			if !strings.Contains(got[i], one) {
+				t.Errorf("row %d = %q, want %q in it", i, got[i], one)
+			}
+		}
 	}
-	if cells := strings.Count(row, "<td>"); cells != 5 {
-		t.Errorf("row = %q, %d cells, want both values in one", row, cells)
-	}
-	bytes, pct := strings.Index(row, "1.5 GB"), strings.Index(row, "34.2%")
-	if bytes < 0 || pct < 0 || bytes > pct {
-		t.Errorf("row = %q, want the bytes then the percent", row)
-	}
-	for _, metric := range []string{"disk.free_bytes", "disk.free_pct"} {
-		if !strings.Contains(row, "metric="+metric) {
-			t.Errorf("row = %q, want a link to the history of %s", row, metric)
+	for i, metric := range []string{"disk.free_bytes", "disk.free_pct"} {
+		if !strings.Contains(got[i], "/history?") || !strings.Contains(got[i], "metric="+metric) {
+			t.Errorf("row %d = %q, want a link to the history of %s", i, got[i], metric)
+		}
+		if !strings.Contains(got[i], "/thresholds?") {
+			t.Errorf("row %d = %q, want a link to what judges the series", i, got[i])
 		}
 	}
 }
 
-// spec: history.md#page — a metric no rule declares keeps a row of its own, named by its id;
-// a volume with one stored series shows that value alone; rows follow metric, then volume,
-// even when the volume that sorts first stored only its second series.
-func TestPageRowsFollowMetricThenVolume(t *testing.T) {
+// spec: history.md#page — a node's rows are grouped so that the series of one volume sit
+// together, and ordered by metric inside the group.
+func TestPageGroupsAVolumesRowsAndOrdersThemByMetric(t *testing.T) {
 	state := storage.NodeState{
 		Node:     "laptop-a",
 		LastSeen: lastSeen,
 		Values: []storage.Value{
-			{Metric: "coffee.level", Labels: map[string]string{}, Value: 7.5, TS: lastSeen},
-			diskValue("disk.free_bytes", "/Volumes/data-a", "false", 2e9, 0),
-			diskValue("disk.free_pct", "/", "false", 34.24, 0),
 			diskValue("disk.free_pct", "/Volumes/data-a", "false", 50, 0),
+			diskValue("disk.free_pct", "/", "false", 34.24, 0),
+			diskValue("disk.free_bytes", "/Volumes/data-a", "false", 2e9, 0),
+			diskValue("disk.free_bytes", "/", "false", 1.5e9, 0),
 		},
 	}
 
 	got := rows(show(t, stored{states: []storage.NodeState{state}}, "/", "").Body.String())
 
-	if len(got) != 3 {
-		t.Fatalf("%d rows, want coffee, / and /Volumes/data-a; rows = %q", len(got), got)
+	if len(got) != 4 {
+		t.Fatalf("%d rows, want one per series; rows = %q", len(got), got)
 	}
 	for i, want := range [][]string{
-		{"<td>coffee.level</td>", "7.50"},
-		{"<td>disk</td>", "<td>/ · apfs</td>", "34.2%"},
-		{"<td>disk</td>", "/Volumes/data-a", "2.0 GB", "50.0%"},
+		{"<td>disk.free_bytes</td>", "<td>/ · apfs</td>"},
+		{"<td>disk.free_pct</td>", "<td>/ · apfs</td>"},
+		{"<td>disk.free_bytes</td>", "/Volumes/data-a"},
+		{"<td>disk.free_pct</td>", "/Volumes/data-a"},
 	} {
-		for _, w := range want {
-			if !strings.Contains(got[i], w) {
-				t.Errorf("row %d = %q, want %q in it", i, got[i], w)
+		for _, one := range want {
+			if !strings.Contains(got[i], one) {
+				t.Errorf("row %d = %q, want %q in it", i, got[i], one)
 			}
 		}
 	}
-	if strings.Count(got[1], "<a ") != 1 {
-		t.Errorf("row = %q, want the one stored value alone", got[1])
-	}
 }
 
-// spec: history.md#page — a row is dated and aged by its older series, as evaluation freezes
-// the volume.
-func TestPageAgesAVolumeByItsOlderSeries(t *testing.T) {
+// spec: history.md#page — each series of a volume is left out or marked by its own age, and
+// dated by its own collection: nothing ages a series by another one.
+func TestPageAgesEachSeriesOfAVolumeOnItsOwn(t *testing.T) {
 	tests := []struct {
-		name       string
-		removable  string
-		wantShown  bool
-		wantMarked bool
+		name      string
+		removable string
+		wantRows  int
 	}{
-		{"a removable volume with one series stale", "true", false, false},
-		{"a fixed volume with one series stale", "false", true, true},
+		{"a removable volume with one series stale", "true", 1},
+		{"a fixed volume with one series stale", "false", 2},
 	}
 
 	for _, tc := range tests {
@@ -462,28 +454,57 @@ func TestPageAgesAVolumeByItsOlderSeries(t *testing.T) {
 
 			body := show(t, stored{states: []storage.NodeState{state}}, "/", "").Body.String()
 
-			if shown := strings.Contains(body, "/Volumes/drive-a"); shown != tc.wantShown {
-				t.Errorf("shown = %v, want %v; page = %q", shown, tc.wantShown, body)
+			if got := len(rows(body)); got != tc.wantRows {
+				t.Fatalf("%d rows, want %d; page = %q", got, tc.wantRows, body)
 			}
-			if marked := strings.Contains(body, "no fresh data"); marked != tc.wantMarked {
-				t.Errorf("marked = %v, want %v; page = %q", marked, tc.wantMarked, body)
+			if got := strings.Count(body, "no fresh data"); got != tc.wantRows-1 {
+				t.Errorf("%d rows marked, want only the stale series; page = %q", got, body)
 			}
-			if tc.wantShown && !strings.Contains(body, "2026-08-28 09:05 UTC") {
-				t.Errorf("page = %q, want the row dated by its older series", body)
+			if !strings.Contains(body, "2026-08-28 10:05 UTC") {
+				t.Errorf("page = %q, want the fresh series dated by its own collection", body)
 			}
 		})
 	}
 }
 
-// spec: history.md#page — a metric no rule declares keeps a row of its own even when its id
-// is a sensor's name and its labels a volume's.
-func TestPageKeepsAnUndeclaredMetricOutOfASensorsRow(t *testing.T) {
-	namesake := diskValue("disk", "/", "false", 7.5, 0)
-	state := storage.NodeState{Node: "laptop-a", LastSeen: lastSeen, Values: append([]storage.Value{namesake}, laptop.Values...)}
+// spec: state.md#page — a hub where nothing is watched says so above the tables, in the
+// reader's language.
+func TestPageSaysWhenNothingIsWatched(t *testing.T) {
+	const notice = "Nothing here is being judged yet"
+	store := stored{states: []storage.NodeState{laptop}}
 
-	got := rows(show(t, stored{states: []storage.NodeState{state}}, "/", "").Body.String())
+	if body := show(t, store, "/", "").Body.String(); !strings.Contains(body, notice) {
+		t.Errorf("page = %q, want %q above the tables", body, notice)
+	}
+	if body := show(t, store, "/?lang=ru", "").Body.String(); !strings.Contains(body, "Здесь пока ничего не оценивается") {
+		t.Errorf("page = %q, want the notice in Russian", body)
+	}
 
-	if len(got) != 2 {
-		t.Errorf("%d rows, want the volume and the undeclared metric apart; rows = %q", len(got), got)
+	watched := store
+	watched.thresholds = []storage.Threshold{{Series: storage.SeriesRef{
+		Node: "laptop-a", Metric: "disk.free_bytes", Labels: laptop.Values[0].Labels,
+	}, Direction: storage.Below}}
+	if body := show(t, watched, "/", "").Body.String(); strings.Contains(body, notice) {
+		t.Errorf("page = %q, want no such line once a series is watched", body)
+	}
+}
+
+// spec: state.md#page — a node some of whose series are unwatched says how many, beside its
+// name.
+func TestPageCountsANodesUnwatchedSeries(t *testing.T) {
+	store := stored{
+		states: []storage.NodeState{laptop},
+		thresholds: []storage.Threshold{{Series: storage.SeriesRef{
+			Node: "laptop-a", Metric: "disk.free_bytes", Labels: laptop.Values[0].Labels,
+		}, Direction: storage.Below}},
+	}
+
+	body := show(t, store, "/", "").Body.String()
+
+	if !strings.Contains(body, "1 series without a threshold") {
+		t.Errorf("page = %q, want the count of unwatched series beside the node", body)
+	}
+	if strings.Contains(body, "2 series without a threshold") {
+		t.Errorf("page = %q, want the watched series left out of the count", body)
 	}
 }

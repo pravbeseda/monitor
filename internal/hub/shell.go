@@ -74,9 +74,20 @@ type shell struct {
 	Title         string
 	Rendering     string
 	StalledNotice string
+	// Live says the page keeps itself current. A page whose content is a form does not:
+	// nothing on it changes on its own, and a refresh would replace what the reader is
+	// typing, or the refusal they are reading (spec: web.md#live, thresholds.md#form).
+	Live bool
 }
 
 func shellOf(printer *i18n.Printer, titleKey string) shell {
+	out := still(printer, titleKey)
+	out.Live = true
+	return out
+}
+
+// still is the shell of a page that is not refreshed.
+func still(printer *i18n.Printer, titleKey string) shell {
 	return shell{
 		Locale:        printer.Locale(),
 		Title:         printer.T(titleKey),

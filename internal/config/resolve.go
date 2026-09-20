@@ -5,9 +5,6 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
-	"math"
-	"strconv"
-	"strings"
 	"time"
 
 	"github.com/pravbeseda/monitor/internal/evaluate"
@@ -53,19 +50,14 @@ func resolve(f file, name string, entry fileNode) (Node, error) {
 		return Node{}, fmt.Errorf("node %s: %w", name, err)
 	}
 
-	rules, volumes, err := resolveRules(f, custom, entry)
-	if err != nil {
-		return Node{}, fmt.Errorf("node %s: %w", name, err)
-	}
-
 	agent := Agent{BaseTick: baseTick, Filesystems: filesystems, SkipMounts: skipMounts, Sensors: sensors}
 	version, err := version(agent)
 	if err != nil {
 		return Node{}, fmt.Errorf("node %s: %w", name, err)
 	}
 
-	// A sensor delivered as disabled collects nothing, so the rules that read it have no
-	// subjects: an interval the agent never honours would only freeze them later.
+	// A sensor delivered as disabled collects nothing, so its series freeze: an interval
+	// the agent never honours would only say they are fresh when they are not.
 	intervals := make(map[string]time.Duration, len(sensors))
 	for sensor, settings := range sensors {
 		if settings.Enabled {
@@ -85,8 +77,6 @@ func resolve(f file, name string, entry fileNode) (Node, error) {
 			Node:         name,
 			SilenceAfter: silenceAfter,
 			Intervals:    intervals,
-			Rules:        rules,
-			Volumes:      volumes,
 		},
 	}, nil
 }
@@ -181,56 +171,6 @@ func version(a Agent) (string, error) {
 	}
 	sum := sha256.Sum256(canonical)
 	return hex.EncodeToString(sum[:])[:versionLength], nil
-}
-
-// Sizes are decimal — 10GB is ten thousand million bytes — as ADR 0012 writes its
-// thresholds and as disks are sold. "b" comes last so that "10gb" matches "gb" first.
-var sizeUnits = []struct {
-	suffix string
-	scale  float64
-}{
-	{"kb", 1e3},
-	{"mb", 1e6},
-	{"gb", 1e9},
-	{"tb", 1e12},
-	{"pb", 1e15},
-	{"b", 1},
-}
-
-// sizeValue reads one size, naming its key the way duration does. A unit is required, Go's
-// own literal spellings are not this file's grammar, and a value that is not finite and
-// positive is refused: a threshold of NaN is never entered and never left, so a subject
-// would latch at its level for good.
-func sizeValue(key string, value size) (float64, error) {
-	text := strings.ToLower(strings.TrimSpace(string(value)))
-	for _, unit := range sizeUnits {
-		if !strings.HasSuffix(text, unit.suffix) {
-			continue
-		}
-		number := strings.TrimSpace(strings.TrimSuffix(text, unit.suffix))
-		if strings.ContainsAny(number, "xXpP_ ") {
-			break
-		}
-		parsed, err := strconv.ParseFloat(number, 64)
-		if err != nil {
-			break
-		}
-		scaled := parsed * unit.scale
-		if math.IsNaN(scaled) || math.IsInf(scaled, 0) || math.Signbit(scaled) {
-			break
-		}
-		return scaled, nil
-	}
-	return 0, fmt.Errorf("%s: %q is not a size, which is a number with a unit such as 10GB", key, value)
-}
-
-// checkRatio guards the same way for a percentage, NaN included: it passes both ends of a
-// range test while meaning nothing.
-func checkRatio(key string, value float64) error {
-	if math.IsNaN(value) || value < 0 || value > 100 {
-		return fmt.Errorf("%s: %g is not a percentage between 0 and 100", key, value)
-	}
-	return nil
 }
 
 func duration(key, value string) (time.Duration, error) {

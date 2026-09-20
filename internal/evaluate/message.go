@@ -17,7 +17,7 @@ const repeatAfter = 24 * time.Hour
 // (docs/specs/evaluation.md#messages).
 type Message struct {
 	Node   string
-	Rule   string
+	Metric string
 	Labels map[string]string
 	// From is the level the subject left and To the level it reached. A repeat and a
 	// digest entry for a subject that has not moved carry the same level in both.
@@ -37,8 +37,11 @@ type Message struct {
 type Notifier interface {
 	// Notify delivers one message.
 	Notify(ctx context.Context, m Message) error
-	// Digest delivers the day's summary. It is called only when there is something to say.
-	Digest(ctx context.Context, at time.Time, entries []Message) error
+	// Digest delivers the day's summary, and how many series nobody has given a
+	// threshold — a hub watching nothing has to say so on the channel its operator
+	// reads, or it looks exactly like a hub where nothing is wrong (ADR 0032). It is
+	// called when there is something to say, which includes that.
+	Digest(ctx context.Context, at time.Time, entries []Message, unwatched int) error
 }
 
 // instantLevels are the levels whose transitions ADR 0016 delivers at once: entering
@@ -59,11 +62,11 @@ func instant(change storage.Transition) bool {
 // storedLevel reads a level out of the event log, which outlives any one build. A name
 // this build cannot read comes back as `ok` — the message has to say something — and the
 // fact is logged, so a reader who was told the wrong thing can find out why.
-func storedLevel(text, node, rule string) Level {
+func storedLevel(text, node, metric string) Level {
 	found, readable := ParseLevel(text)
 	if !readable {
 		slog.Warn("a recorded level this build does not know",
-			"node", node, "rule", rule, "level", text)
+			"node", node, "metric", metric, "level", text)
 	}
 	return found
 }
@@ -72,7 +75,7 @@ func storedLevel(text, node, rule string) Level {
 // three fields; what a message is about is the rest.
 func message(s Subject, from, to Level, readings map[string]float64, since, at time.Time) Message {
 	return Message{
-		Node: s.Node, Rule: s.Rule, Labels: s.Labels,
+		Node: s.Node, Metric: s.Metric, Labels: s.Labels,
 		From: from, To: to, Readings: readings, Since: since, At: at,
 	}
 }
@@ -85,9 +88,13 @@ func message(s Subject, from, to Level, readings map[string]float64, since, at t
 // fresh values and is still undelivered, while a repeat would be a statement about values
 // nobody may judge any more.
 func due(s Subject, newest storage.Transition, recorded bool, now time.Time) (Message, bool) {
-	if recorded && instant(newest) && newest.At.After(s.LastNotifiedAt) {
-		from := storedLevel(newest.From, s.Node, s.Rule)
-		to := storedLevel(newest.To, s.Node, s.Rule)
+	// An event recorded before the level this subject holds began is not owed: clearing a
+	// threshold forgets the level but keeps the log, and setting one again starts a new
+	// subject rather than inheriting somebody else's undelivered news
+	// (docs/specs/evaluation.md#configuration-changes).
+	if recorded && instant(newest) && newest.At.After(s.LastNotifiedAt) && !newest.At.Before(s.Since) {
+		from := storedLevel(newest.From, s.Node, s.Metric)
+		to := storedLevel(newest.To, s.Node, s.Metric)
 		return message(s, from, to, newest.Readings, newest.FromSince, newest.At), true
 	}
 	if s.Frozen {

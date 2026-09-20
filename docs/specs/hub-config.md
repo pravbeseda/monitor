@@ -6,7 +6,8 @@
 - **Decisions:** [0007](../decisions/0007-public-repository.md),
   [0010](../decisions/0010-agent-configuration.md),
   [0011](../decisions/0011-quality-gates.md),
-  [0028](../decisions/0028-agents-follow-a-target-the-hub-serves.md)
+  [0028](../decisions/0028-agents-follow-a-target-the-hub-serves.md),
+  [0032](../decisions/0032-thresholds-are-set-in-the-interface.md)
 
 ## Purpose
 
@@ -16,11 +17,10 @@ authenticates with, and a flat per-node configuration with a version, which
 [0010](../decisions/0010-agent-configuration.md) — sensor default → node class → node —
 so that nothing downstream merges anything.
 
-It does not evaluate: the `rules` and `volumes` keys, volume roles and the meaning of
-`silence_after` belong to [evaluation](evaluation.md), which owns their validation too.
-It parses `digest` and `notify` too, but what they mean and what refuses them belongs to
-that spec. This one owns the tokens, what reaches an agent, and the version each node's agent
-is told to follow.
+It does not evaluate: the meaning of `silence_after` belongs to
+[evaluation](evaluation.md), which owns its validation too. It parses `digest` and `notify`
+too, but what they mean and what refuses them belongs to that spec. This one owns the
+tokens, what reaches an agent, and the version each node's agent is told to follow.
 
 ## The file
 
@@ -81,8 +81,12 @@ response: [ingest](ingest.md#the-agents-target) serves it to a node that asks.
 
 **What reaches the agent** is only the flat result — base tick, filesystem allow-list,
 skip list, and the enabled sensors with their intervals, in the shape [ingest](ingest.md)
-documents.
-`silence_after` and thresholds stay on the hub.
+documents. `silence_after` stays on the hub.
+
+**Thresholds are not in the file at all.** What a series is judged by is entered on the
+page and stored beside the measurements ([thresholds.md](thresholds.md),
+[0032](../decisions/0032-thresholds-are-set-in-the-interface.md)), so no key here carries a
+number, a direction or a level.
 
 ## Behaviour
 
@@ -103,6 +107,7 @@ One row = one test. Anchors: `spec: hub-config.md#<heading>`.
 | file missing or unreadable | startup error naming the path |
 | not valid YAML | startup error naming the path and the position |
 | a key the hub does not know, at any level | startup error naming the key |
+| `rules` at any level, or a node's `volumes` — the two keys thresholds used to live in | the hub starts; one warning per key names it and says thresholds are now set on the page, and no number inside it is used ([thresholds.md](thresholds.md)) |
 | `nodes` missing or empty | startup error: a hub with no nodes serves nobody |
 | a node without `token_env` | startup error naming the node |
 | `token_env` names a variable that is unset or empty | startup error naming the variable |
@@ -117,6 +122,14 @@ One row = one test. Anchors: `spec: hub-config.md#<heading>`.
 | a sensor in a profile with no interval at any layer | startup error naming the sensor, whether or not a node uses that class |
 | `agent_target` at the top level, in `classes.<name>` or in `nodes.<name>`, that is neither `latest` nor one `MAJOR.MINOR.PATCH` — `1.4`, `v1.4.0`, `01.4.0`, a component of ten digits or more, `""`, or present with no value | startup error naming the key and the class or node it is in |
 | a valid file | the hub starts and every listed node resolves |
+
+**The `rules` and `volumes` exception is transitional.** It exists because a hub that
+upgrades itself hourly
+([0025](../decisions/0025-the-hub-checks-hourly-and-downloads-a-binary-to-install-it.md))
+meets the file it already has, and a startup error there is a crash loop rather than a
+message anyone reads. A later release removes the exception and both keys are unknown keys
+again, so the two are deleted from the file at the upgrade
+([install.md](../install.md#upgrading-past-the-threshold-change)), not left to rot in it.
 
 ### Resolution
 
@@ -150,7 +163,8 @@ logs both versions when it delivers a new one.
 | the same file and environment, hub restarted | unchanged: the version is derived, never stored |
 | a value that reaches this node changes | a different version |
 | another node's settings change | unchanged for this node |
-| a hub-only value changes (`silence_after`, thresholds, `agent_target`) | unchanged: the agent is never sent it |
+| a hub-only value changes (`silence_after`, `agent_target`) | unchanged: the agent is never sent it |
+| a threshold is edited on the page | unchanged: no threshold is in the file, and none reaches an agent ([thresholds.md](thresholds.md)) |
 | two nodes resolve to an identical configuration | the same version — it identifies the configuration, not the node |
 
 ### Tokens
@@ -200,8 +214,9 @@ logs both versions when it delivers a new one.
 
 ## Out of scope
 
-- Thresholds, volume roles and `silence_after` semantics → [evaluation](evaluation.md),
-  [0012](../decisions/0012-threshold-model.md).
+- `silence_after` semantics → [evaluation](evaluation.md).
+- What a series is judged by, and where it is set → [thresholds.md](thresholds.md),
+  [0032](../decisions/0032-thresholds-are-set-in-the-interface.md).
 - How the resolved configuration is encoded and when it is sent → [ingest](ingest.md).
 - Applying the configuration on the agent → agent spec.
 - Editing the configuration from the web page → stage 3.

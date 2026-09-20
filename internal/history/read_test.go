@@ -14,9 +14,11 @@ import (
 
 var now = time.Date(2026, 8, 31, 12, 0, 0, 0, time.UTC)
 
-// seriesPoints is one stored series as a test writes it down.
+// seriesPoints is one stored series as a test writes it down. Sensor is what the newest
+// stored value named, which is what the interval is resolved for.
 type seriesPoints struct {
 	storage.SeriesRef
+	Sensor string
 	Points []storage.Point
 }
 
@@ -29,11 +31,11 @@ type source struct {
 	sel       storage.Selection
 }
 
-func (s *source) Series(_ context.Context, sel storage.Selection) ([]storage.SeriesRef, error) {
+func (s *source) Series(_ context.Context, sel storage.Selection) ([]storage.SeriesNewest, error) {
 	s.sel = sel
-	refs := make([]storage.SeriesRef, 0, len(s.series))
+	refs := make([]storage.SeriesNewest, 0, len(s.series))
 	for _, series := range s.series {
-		refs = append(refs, series.SeriesRef)
+		refs = append(refs, storage.SeriesNewest{SeriesRef: series.SeriesRef, Sensor: series.Sensor})
 	}
 	return refs, s.err
 }
@@ -54,7 +56,7 @@ func (s *source) Newest(_ context.Context, sel storage.Selection, from time.Time
 		if newest.IsZero() {
 			continue
 		}
-		out = append(out, storage.SeriesNewest{SeriesRef: series.SeriesRef, Newest: newest})
+		out = append(out, storage.SeriesNewest{SeriesRef: series.SeriesRef, Newest: newest, Sensor: series.Sensor})
 	}
 	return out, s.err
 }
@@ -87,8 +89,16 @@ func series(node, mount string, points ...storage.Point) seriesPoints {
 			Metric: "disk.free_pct",
 			Labels: map[string]string{"mount": mount, "fs": "ext4"},
 		},
+		Sensor: "disk",
 		Points: points,
 	}
+}
+
+// namedBy is the same series, with the sensor its newest value named — empty for a value
+// that named none.
+func namedBy(sensor string, s seriesPoints) seriesPoints {
+	s.Sensor = sensor
+	return s
 }
 
 func at(offset time.Duration, value float64) storage.Point {
@@ -249,8 +259,8 @@ func TestReadRefusesTooManySeries(t *testing.T) {
 	}
 }
 
-// spec: history.md — a series carries the unit its metric id declares and the interval its
-// node resolves; a metric no rule declares has neither.
+// spec: history.md#wire-format — a series carries the unit its metric id declares and the
+// interval its node resolves for the sensor it names.
 func TestReadCarriesUnitAndInterval(t *testing.T) {
 	src := &source{series: []seriesPoints{series("server-b", "/", at(-time.Hour, 42))}}
 
@@ -366,23 +376,62 @@ func TestReadReducesEachBucketToItsExtremes(t *testing.T) {
 	}
 }
 
-// spec: history.md#gaps — a metric no rule declares has no interval, so nothing breaks its
+// spec: history.md#gaps — a series' interval is the one its node resolves for the sensor
+// its newest value named. A series that names none has no interval, so nothing breaks its
 // line; its unit still comes from its id.
-func TestReadLeavesAnUndeclaredMetricWithoutAnInterval(t *testing.T) {
-	src := &source{series: []seriesPoints{series("server-b", "/", at(-20*time.Hour, 1), at(-time.Hour, 2))}}
-	silent := reader(src)
-	silent.Interval = func(string, string) time.Duration { return 0 }
+func TestReadTakesTheIntervalOfTheSensorTheSeriesNames(t *testing.T) {
+	src := &source{series: []seriesPoints{
+		series("server-b", "/", at(-20*time.Hour, 1), at(-time.Hour, 2)),
+		namedBy("", series("server-b", "/data", at(-20*time.Hour, 1), at(-time.Hour, 2))),
+	}}
+	r := reader(src)
+	r.Interval = func(node, sensor string) time.Duration {
+		if node == "server-b" && sensor == "disk" {
+			return 15 * time.Minute
+		}
+		return 0
+	}
 
-	got, err := silent.Read(context.Background(), query())
+	got, err := r.Read(context.Background(), query())
 	if err != nil {
 		t.Fatalf("Read: %v", err)
 	}
-	series := got.Series[0]
-	if series.Interval != 0 || series.Unit != history.Percent {
-		t.Fatalf("series interval=%v unit=%q, want no interval and the unit of its id", series.Interval, series.Unit)
+	byMount := map[string]history.Series{}
+	for _, s := range got.Series {
+		byMount[s.Labels["mount"]] = s
 	}
-	if history.Gap(series.Interval, series.Points[0].TS, series.Points[1].TS) {
+
+	named := byMount["/"]
+	if named.Interval != 15*time.Minute {
+		t.Errorf("the series naming the disk sensor resolved %v, want 15m", named.Interval)
+	}
+	if !history.Gap(named.Interval, named.Points[0].TS, named.Points[1].TS) {
+		t.Error("nineteen hours apart at a 15m interval did not break the line")
+	}
+
+	unnamed := byMount["/data"]
+	if unnamed.Interval != 0 || unnamed.Unit != history.Percent {
+		t.Errorf("the series naming no sensor resolved interval=%v unit=%q, want none and the unit of its id",
+			unnamed.Interval, unnamed.Unit)
+	}
+	if history.Gap(unnamed.Interval, unnamed.Points[0].TS, unnamed.Points[1].TS) {
 		t.Error("a series with no interval was broken by a gap")
+	}
+}
+
+// spec: history.md#wire-format — the unit is read from the metric id: `_bytes` is bytes,
+// `_pct` is percent, `_seconds` is a duration, and any other id declares no unit.
+func TestUnitOfReadsTheMetricID(t *testing.T) {
+	tests := map[string]history.Unit{
+		"disk.free_bytes":     history.Bytes,
+		"disk.free_pct":       history.Percent,
+		"battery.age_seconds": history.Duration,
+		"queue.depth":         history.Number,
+	}
+	for metric, want := range tests {
+		if got := history.UnitOf(metric); got != want {
+			t.Errorf("UnitOf(%q) = %q, want %q", metric, got, want)
+		}
 	}
 }
 
@@ -559,12 +608,12 @@ func (g generated) at(i int) time.Time {
 	return now.Add(-24*time.Hour + time.Duration(i)*g.step)
 }
 
-func (g generated) Series(context.Context, storage.Selection) ([]storage.SeriesRef, error) {
-	return []storage.SeriesRef{g.ref()}, nil
+func (g generated) Series(context.Context, storage.Selection) ([]storage.SeriesNewest, error) {
+	return []storage.SeriesNewest{{SeriesRef: g.ref(), Newest: g.at(g.count - 1), Sensor: "disk"}}, nil
 }
 
 func (g generated) Newest(context.Context, storage.Selection, time.Time) ([]storage.SeriesNewest, error) {
-	return []storage.SeriesNewest{{SeriesRef: g.ref(), Newest: g.at(g.count - 1)}}, nil
+	return []storage.SeriesNewest{{SeriesRef: g.ref(), Newest: g.at(g.count - 1), Sensor: "disk"}}, nil
 }
 
 func (g generated) Points(context.Context, storage.SeriesRef, time.Time, time.Time) iter.Seq2[storage.Point, error] {

@@ -7,7 +7,8 @@
   [0007](../decisions/0007-public-repository.md),
   [0010](../decisions/0010-agent-configuration.md),
   [0022](../decisions/0022-updates-are-pulled.md),
-  [0028](../decisions/0028-agents-follow-a-target-the-hub-serves.md)
+  [0028](../decisions/0028-agents-follow-a-target-the-hub-serves.md),
+  [0033](../decisions/0033-a-subject-is-a-series.md)
 
 ## Purpose
 
@@ -42,9 +43,9 @@ Authorization: Bearer <per-node token>
   ],
   "measurements": [
     { "metric": "disk.free_bytes", "labels": {"mount": "/", "fs": "apfs", "removable": "false"},
-      "value": 123456789 },
+      "sensor": "disk", "value": 123456789 },
     { "metric": "disk.free_pct",   "labels": {"mount": "/", "fs": "apfs", "removable": "false"},
-      "value": 34.2, "ts": "2026-08-28T09:55:00Z" }
+      "sensor": "disk", "value": 34.2, "ts": "2026-08-28T09:55:00Z" }
   ]
 }
 ```
@@ -61,8 +62,13 @@ Authorization: Bearer <per-node token>
 - `measurements` — may be empty: the base tick is a valid request even when no sensor
   had anything new. A measurement's optional `ts` is its collection time, for sensors
   that collect above the base tick; absent, the request `ts` applies.
-- `metric` ids match `[a-z0-9_.]+`; `value` is a finite JSON number; `labels` is a flat
-  string-to-string map.
+- a measurement's `sensor` — optional — names the sensor that produced it. The hub keeps
+  that name on the series, and it is what staleness is measured against: three times the
+  interval the node resolves for that sensor ([evaluation](evaluation.md#freezing)). A
+  measurement that carries none is stored and charted like any other; its series simply
+  has no staleness ([0033](../decisions/0033-a-subject-is-a-series.md)).
+- `metric` ids match `[a-z0-9_.]+`, and a `sensor` name matches the same pattern; `value`
+  is a finite JSON number; `labels` is a flat string-to-string map.
 - Unknown JSON fields are ignored, so an older hub accepts a newer agent's request.
 
 ### Response
@@ -88,8 +94,10 @@ Authorization: Bearer <per-node token>
   (sensor default → node class → node → sensor): the hub resolves layers, the agent
   applies what it receives and never merges anything.
 - The config carries only what the agent acts on: tick, sensor selection, intervals,
-  filesystem allow-list, and the mount prefixes to skip. Thresholds stay on the hub — evaluation is hub-side
-  ([0012](../decisions/0012-threshold-model.md)) and the agent has no use for them.
+  filesystem allow-list, and the mount prefixes to skip. Thresholds are not in it — they
+  are stored on the hub, entered on its page
+  ([0032](../decisions/0032-thresholds-are-set-in-the-interface.md)), and the agent has no
+  use for them.
 - Errors: `{ "error": "<english message>" }` with the status codes below.
 
 ## Behaviour
@@ -114,6 +122,7 @@ One row = one test. Anchors: `spec: ingest.md#<heading>`.
 | `ts` or a measurement `ts` not RFC 3339 | 400 | nothing stored |
 | a measurement missing `metric` or `value`, or `value` not a finite number | 400 | nothing stored |
 | `metric` id not matching `[a-z0-9_.]+` | 400 | nothing stored |
+| a measurement `sensor` that is not a string, or a string not matching `[a-z0-9_.]+` | 400 | nothing stored |
 | body larger than 1 MiB | 413 | nothing stored |
 | one invalid measurement in a batch | 400 | **whole request** rejected, nothing stored |
 
@@ -123,7 +132,11 @@ One row = one test. Anchors: `spec: ingest.md#<heading>`.
 |---|---|---|
 | valid request | 200 | all measurements stored; node's last-seen set to hub receipt time; node's agent version replaced by the request's |
 | valid request, `measurements` empty | 200 | no measurements stored; the node updated as for any valid request |
-| measurement with a metric id the hub's config does not declare | 200 | stored; evaluation ignores it (out of scope here) |
+| measurement with a metric id the hub has never seen | 200 | stored; it is listed and charted like any other series, and has no level until a threshold is set for it ([evaluation](evaluation.md#model)) |
+| measurement carrying `sensor` | 200 | stored, and its series keeps that sensor name, which is what staleness is measured against ([evaluation](evaluation.md#freezing)) |
+| a series reported again with a different `sensor` | 200 | stored; the series keeps the newest value's sensor |
+| measurement with no `sensor` | 200 | stored and charted as any other; its series has no staleness |
+| `sensor` naming a sensor the node does not run, or one its `manifest` does not list | 200 | stored: ingest checks the name's shape, never its meaning |
 | measurement identical to a stored one (same node, metric, labels, ts to the millisecond) | 200 | duplicate silently skipped |
 | `manifest` differs from the stored one | 200 | stored manifest replaced |
 
