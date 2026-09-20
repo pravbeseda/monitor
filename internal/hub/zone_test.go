@@ -87,7 +87,7 @@ func TestPageReadsUTCForABrowserInUTC(t *testing.T) {
 
 // spec: web.md#zone — the API answers the same browser in UTC, whatever it reports.
 func TestAPIStaysInUTCForAReaderWithAZone(t *testing.T) {
-	store := served{series: []storage.SeriesPoints{volume()}}
+	store := served{series: []seriesPoints{volume()}}
 
 	body := getFrom(t, store, "/api/v1/history?metric=disk.free_pct&node=server-b", "Europe/Moscow").Body.String()
 
@@ -99,7 +99,7 @@ func TestAPIStaysInUTCForAReaderWithAZone(t *testing.T) {
 // spec: web.md#shell — every page carries the same shell and the same cache headers; a page
 // carrying its own would be the one that is silently UTC, or the one a cache keeps.
 func TestEveryPageCarriesTheShell(t *testing.T) {
-	store := served{series: []storage.SeriesPoints{volume()}}
+	store := served{series: []seriesPoints{volume()}}
 	pages := map[string]hub.Store{"/": stored{states: []storage.NodeState{laptop}}, oneVolume: store}
 
 	for target, page := range pages {
@@ -132,7 +132,7 @@ func TestEveryPageCarriesTheShell(t *testing.T) {
 func TestEveryPageCarriesItsIcon(t *testing.T) {
 	pages := map[string]hub.Store{
 		"/":       stored{states: []storage.NodeState{laptop}},
-		oneVolume: served{series: []storage.SeriesPoints{volume()}},
+		oneVolume: served{series: []seriesPoints{volume()}},
 		"/history?metric=disk.free_pct&nonsense=1": served{},
 	}
 
@@ -159,7 +159,7 @@ func TestARefusedPageCarriesTheShell(t *testing.T) {
 // spec: web.md#zone, history.md#page — a chart names the zone its axis is read in, once:
 // the per-tick labels have no room for a marker.
 func TestChartNamesItsZone(t *testing.T) {
-	store := served{series: []storage.SeriesPoints{volume()}}
+	store := served{series: []seriesPoints{volume()}}
 
 	body := getFrom(t, store, oneVolume, "Europe/Moscow").Body.String()
 

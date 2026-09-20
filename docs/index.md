@@ -51,6 +51,7 @@ One decision per file, each stating what was rejected and why. New records start
 | [0028](decisions/0028-agents-follow-a-target-the-hub-serves.md) | Agents follow a target the hub serves under `/api/v1/agent/` | accepted |
 | [0029](decisions/0029-pages-refresh-by-fetching-their-own-address.md) | Pages refresh themselves by fetching their own address | accepted |
 | [0030](decisions/0030-the-state-api-reports-the-stored-verdict.md) | The State API reports the verdict evaluation stored | accepted |
+| [0031](decisions/0031-a-table-of-series.md) | A table of series beside the measurements | accepted |
 
 ## Behaviour specs
 
@@ -90,6 +91,7 @@ Reasoning from working sessions, including options that were rejected.
 | [2026-09-17](log/2026-09-17-agent-updater.md) | Agents follow the hub's target: what three spec reviews changed before the code |
 | [2026-09-18](log/2026-09-18-vanished-volumes.md) | Vanished volumes: why `/` hides by `removable`, ages by the hub's clock, and groups snapshots |
 | [2026-09-19](log/2026-09-19-state-api.md) | State API: why it comes before the MVP, and what the spec reviews changed |
+| [2026-09-20](log/2026-09-20-history-streaming.md) | History holds its answer: reducing points as they stream, and why the series became a table |
 
 ## Not written yet
 

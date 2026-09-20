@@ -3,6 +3,7 @@ package hub_test
 import (
 	"context"
 	"errors"
+	"iter"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -35,8 +36,12 @@ func (s stored) Series(context.Context, storage.Selection) ([]storage.SeriesRef,
 	return nil, s.err
 }
 
-func (s stored) Points(context.Context, storage.Selection, time.Time) ([]storage.SeriesPoints, error) {
+func (s stored) Newest(context.Context, storage.Selection, time.Time) ([]storage.SeriesNewest, error) {
 	return nil, s.err
+}
+
+func (s stored) Points(context.Context, storage.SeriesRef, time.Time, time.Time) iter.Seq2[storage.Point, error] {
+	return func(func(storage.Point, error) bool) {}
 }
 
 var laptop = storage.NodeState{

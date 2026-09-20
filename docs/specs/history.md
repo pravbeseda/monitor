@@ -232,6 +232,8 @@ unit reads naturally.
 - Each series says whether its own points were reduced; a reduced series is never presented
   as raw, and `stored` always states how many points the window held.
 - Two identical queries a moment apart differ only by the window sliding.
+- A read holds what it answers, not what its window holds: each series returns at most 1001
+  points, and a window holding millions of them is answered in the memory those take.
 - The page shows nothing the endpoint would not return for the same query, and breaks a line
   only where the interval the endpoint reports says there is a gap.
 

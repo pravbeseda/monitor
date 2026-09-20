@@ -5,6 +5,7 @@ package storage
 
 import (
 	"context"
+	"iter"
 	"time"
 )
 
@@ -60,7 +61,12 @@ type Storage interface {
 	SaveIngest(ctx context.Context, in Ingest) error
 	// Series lists every stored series of a metric, ordered by node then by labels.
 	Series(ctx context.Context, sel Selection) ([]SeriesRef, error)
-	// Points reads those series with the points stored from `from` onwards, oldest first.
-	Points(ctx context.Context, sel Selection, from time.Time) ([]SeriesPoints, error)
+	// Newest lists the selected series holding a point from `from` onwards, in the same
+	// order, each with the timestamp of its newest stored point.
+	Newest(ctx context.Context, sel Selection, from time.Time) ([]SeriesNewest, error)
+	// Points streams one series' points inside [from, to], oldest first. Both bounds are
+	// honoured to the stored millisecond, so a caller that means an exact instant
+	// between two of them applies it itself.
+	Points(ctx context.Context, ref SeriesRef, from, to time.Time) iter.Seq2[Point, error]
 	Close() error
 }

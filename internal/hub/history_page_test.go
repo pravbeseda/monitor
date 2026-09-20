@@ -24,7 +24,7 @@ const oneVolume = "/history?metric=disk.free_pct&node=server-b&label.mount=%2F&l
 
 // spec: history.md#page — a chart of the selected series, with both axes.
 func TestHistoryPageDrawsTheSeries(t *testing.T) {
-	status, body := page(t, served{series: []storage.SeriesPoints{volume()}}, oneVolume)
+	status, body := page(t, served{series: []seriesPoints{volume()}}, oneVolume)
 
 	if status != http.StatusOK {
 		t.Fatalf("status = %d, want 200", status)
@@ -44,7 +44,7 @@ func TestHistoryPageDrawsTheSeries(t *testing.T) {
 
 // spec: history.md#page — window links keep node, metric, labels and language.
 func TestHistoryPageOffersTheWindows(t *testing.T) {
-	_, body := page(t, served{series: []storage.SeriesPoints{volume()}}, oneVolume+"&window=7d&lang=ru")
+	_, body := page(t, served{series: []seriesPoints{volume()}}, oneVolume+"&window=7d&lang=ru")
 
 	for _, want := range []string{"window=24h", "window=30d", "label.mount=%2F", "label.fs=ext4", "lang=ru"} {
 		if !strings.Contains(body, want) {
@@ -60,7 +60,7 @@ func TestHistoryPageOffersTheWindows(t *testing.T) {
 func TestHistoryPageLinksWhenTheQueryIsAmbiguous(t *testing.T) {
 	second := volume()
 	second.Labels = map[string]string{"mount": "/data", "fs": "ext4"}
-	store := served{series: []storage.SeriesPoints{volume(), second}}
+	store := served{series: []seriesPoints{volume(), second}}
 
 	_, body := page(t, store, "/history?metric=disk.free_pct")
 
@@ -91,7 +91,7 @@ func TestHistoryPageDrawsASinglePointWithoutALine(t *testing.T) {
 	one := volume()
 	one.Points = one.Points[:1]
 
-	_, body := page(t, served{series: []storage.SeriesPoints{one}}, oneVolume)
+	_, body := page(t, served{series: []seriesPoints{one}}, oneVolume)
 
 	if strings.Contains(body, "<polyline") || !strings.Contains(body, "<circle") {
 		t.Errorf("page = %q, want a lone point and no line", body)
@@ -108,7 +108,7 @@ func TestHistoryPageBreaksTheLineOverASilence(t *testing.T) {
 		{TS: collected.Add(-45 * time.Minute), Value: 37},
 	}
 
-	_, body := page(t, served{series: []storage.SeriesPoints{silent}}, oneVolume)
+	_, body := page(t, served{series: []seriesPoints{silent}}, oneVolume)
 
 	if lines := strings.Count(body, "<polyline"); lines != 2 {
 		t.Errorf("page drew %d polylines, want the line broken in two", lines)
@@ -148,7 +148,7 @@ func TestIndexPageLinksEachValueToItsHistory(t *testing.T) {
 
 // spec: history.md#page — the chart speaks the reader's language.
 func TestHistoryPageSpeaksTheReadersLanguage(t *testing.T) {
-	_, body := page(t, served{series: []storage.SeriesPoints{volume()}}, oneVolume+"&lang=ru")
+	_, body := page(t, served{series: []seriesPoints{volume()}}, oneVolume+"&lang=ru")
 
 	if !strings.Contains(body, "34,1 %") {
 		t.Errorf("page = %q, want Russian formatting", body)
@@ -157,7 +157,7 @@ func TestHistoryPageSpeaksTheReadersLanguage(t *testing.T) {
 
 // spec: history.md#page — the window being shown is marked, including the default one.
 func TestHistoryPageMarksTheWindowItShows(t *testing.T) {
-	store := served{series: []storage.SeriesPoints{volume()}}
+	store := served{series: []seriesPoints{volume()}}
 
 	_, body := page(t, store, oneVolume)
 	if !strings.Contains(body, "<strong>24h</strong>") {
@@ -167,7 +167,7 @@ func TestHistoryPageMarksTheWindowItShows(t *testing.T) {
 
 // spec: history.md#page — a window of days is read by date, one of hours by time of day.
 func TestHistoryPageLabelsTheTimeAxisForItsWindow(t *testing.T) {
-	store := served{series: []storage.SeriesPoints{volume()}}
+	store := served{series: []seriesPoints{volume()}}
 
 	if _, body := page(t, store, oneVolume); !strings.Contains(body, ">12:00<") {
 		t.Errorf("a 24-hour window does not label its axis by time of day: %q", body)
@@ -179,7 +179,7 @@ func TestHistoryPageLabelsTheTimeAxisForItsWindow(t *testing.T) {
 
 // spec: history.md#page — the axes carry at most six labelled ticks each.
 func TestHistoryPageKeepsTheAxesReadable(t *testing.T) {
-	_, body := page(t, served{series: []storage.SeriesPoints{volume()}}, oneVolume)
+	_, body := page(t, served{series: []seriesPoints{volume()}}, oneVolume)
 
 	// The zone the axis is read in is a caption, not a tick (spec: web.md#zone).
 	ticks := strings.Count(body, "<text") - strings.Count(body, `class="zone"`)
@@ -190,7 +190,7 @@ func TestHistoryPageKeepsTheAxesReadable(t *testing.T) {
 
 // spec: history.md#page — the axis speaks the reader's language too, not only the heading.
 func TestHistoryPageTranslatesTheAxis(t *testing.T) {
-	_, body := page(t, served{series: []storage.SeriesPoints{volume()}}, oneVolume+"&window=7d&lang=ru")
+	_, body := page(t, served{series: []seriesPoints{volume()}}, oneVolume+"&window=7d&lang=ru")
 
 	if !strings.Contains(body, ">31.08<") {
 		t.Errorf("page = %q, want Russian dates on the axis", body)
@@ -245,7 +245,7 @@ func TestHistoryPageTranslatesEveryRefusal(t *testing.T) {
 // spec: history.md#page — the window shown is marked whatever the query spelled it as, and
 // a regional tag survives into every link the page builds.
 func TestHistoryPageMarksTheWindowItShowsAndKeepsTheLanguage(t *testing.T) {
-	store := served{series: []storage.SeriesPoints{volume()}}
+	store := served{series: []seriesPoints{volume()}}
 
 	_, body := page(t, store, oneVolume+"&window=1440m&lang=ru-BY")
 
@@ -263,7 +263,7 @@ func TestHistoryPageDrawsExtremeValues(t *testing.T) {
 	full := volume()
 	full.Points = []storage.Point{{TS: collected.Add(-15 * time.Minute), Value: 0}, {TS: collected, Value: 0}}
 
-	_, body := page(t, served{series: []storage.SeriesPoints{full}}, oneVolume)
+	_, body := page(t, served{series: []seriesPoints{full}}, oneVolume)
 	if !strings.Contains(body, "<polyline") || strings.Contains(body, "NaN") {
 		t.Errorf("page = %q, want a chart of an empty volume", body)
 	}
@@ -272,7 +272,7 @@ func TestHistoryPageDrawsExtremeValues(t *testing.T) {
 	huge.Metric = "disk.free_bytes"
 	huge.Points = []storage.Point{{TS: collected.Add(-15 * time.Minute), Value: 1.7e308}, {TS: collected, Value: 1.7e308}}
 
-	_, body = page(t, served{series: []storage.SeriesPoints{huge}}, "/history?metric=disk.free_bytes&node=server-b")
+	_, body = page(t, served{series: []seriesPoints{huge}}, "/history?metric=disk.free_bytes&node=server-b")
 	if strings.Contains(body, "NaN") || strings.Contains(body, "Inf") {
 		t.Errorf("page = %q, want finite axis labels", body)
 	}
