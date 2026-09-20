@@ -67,6 +67,12 @@ func Thresholds(store ThresholdStore, configured func(node string) bool) http.Ha
 			http.Error(w, printer.T("error.method"), http.StatusMethodNotAllowed)
 			return
 		}
+		// A save from another site is refused before anything is read: what it names is
+		// none of its business either (ADR 0032).
+		if r.Method == http.MethodPost && !sameOrigin(r) {
+			http.Error(w, printer.T("error.origin"), http.StatusForbidden)
+			return
+		}
 		ref, err := seriesOf(values)
 		if err != nil {
 			http.Error(w, printer.T("error.query"), http.StatusBadRequest)
@@ -84,12 +90,6 @@ func Thresholds(store ThresholdStore, configured func(node string) bool) http.Ha
 		}
 
 		if r.Method == http.MethodPost {
-			// The hub has no session, so what keeps another site from posting through a
-			// reader's cached credentials is the request's own origin (ADR 0032).
-			if !sameOrigin(r) {
-				http.Error(w, printer.T("error.origin"), http.StatusForbidden)
-				return
-			}
 			save(w, r, store, printer, ref, language(values))
 			return
 		}

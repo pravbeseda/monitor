@@ -89,7 +89,7 @@ One row = one test. Anchors: `spec: thresholds.md#<heading>`.
 | `critical` not strictly beyond `warning` in the chosen direction | refused, naming both fields; nothing is stored |
 | a direction that is neither `below` nor `above` | refused; nothing is stored |
 | a save for a series the hub has never stored | `404`; nothing is stored |
-| a save whose `Origin` is another site, or a cross-site form post | refused as a page; nothing is stored |
+| a save whose `Origin` is another site, or a cross-site form post | refused as a page before anything is read, whatever address it names and whether or not that series exists; nothing is stored |
 | a save with no `Origin` at all — an old browser, a hand-made request | refused the same way: the form's own saves always carry one |
 | two saves for one series | the later one is what is stored: a form is a statement of the whole configuration, not a patch |
 | a save reloaded by the browser afterwards | nothing is saved twice: the answer to a save is a redirect, not a page |

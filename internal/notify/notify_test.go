@@ -340,3 +340,18 @@ func TestAMessageNamesTheSeriesItIsAbout(t *testing.T) {
 		t.Errorf("message = %q, want the volume named by its mount point alone", got)
 	}
 }
+
+// spec: evaluation.md#messages — an empty mount is a label like any other: the series
+// that carries it is not the series that carries none.
+func TestAnEmptyMountStillNamesItsSeries(t *testing.T) {
+	printer := i18n.For(i18n.English)
+	bare, empty := entering(), entering()
+	bare.Metric, empty.Metric = "queue.depth", "queue.depth"
+	bare.Labels, empty.Labels = map[string]string{}, map[string]string{"mount": ""}
+	bare.Readings = map[string]float64{"queue.depth": 42}
+	empty.Readings = map[string]float64{"queue.depth": 42}
+
+	if notify.Render(printer, bare) == notify.Render(printer, empty) {
+		t.Fatalf("an empty mount reads like no labels at all:\n%s", notify.Render(printer, bare))
+	}
+}

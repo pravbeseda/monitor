@@ -57,7 +57,7 @@ func naming(labels map[string]string) string {
 	for _, key := range slices.Sorted(maps.Keys(labels)) {
 		switch {
 		case decoration[key]:
-		case key == "mount":
+		case key == "mount" && labels[key] != "":
 			named = append(named, labels[key])
 		default:
 			named = append(named, key+"="+labels[key])

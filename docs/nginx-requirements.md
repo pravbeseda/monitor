@@ -195,12 +195,17 @@ at all:
 ```sh
 curl -s -o /dev/null -w '%{http_code}\n' -u "$human_cred" -X POST \
      -H 'Origin: https://hub.example.com' \
-     https://hub.example.com/thresholds       # must not be 403
+     https://hub.example.com/thresholds       # 400, and not 403
+curl -s -o /dev/null -w '%{http_code}\n' -u "$human_cred" -X POST \
+     -H 'Origin: https://elsewhere.example' \
+     https://hub.example.com/thresholds       # 403
 ```
 
-A `403` there means the two do not match at the hub: `Host` is arriving as something else —
-the loopback upstream, or the name without its port — and every save made in a browser is
-refused the same way.
+The hub compares the two before it reads anything, so the address needs to name no series:
+the first must not be `403`, and the second must be. A `403` on the first means the two do
+not match at the hub — `Host` is arriving as something else, the loopback upstream or the
+name without its port — and every save made in a browser is refused the same way. A `400`
+on the second means the comparison is not happening at all.
 
 Requirement 4 — the one that proves agents still get in:
 

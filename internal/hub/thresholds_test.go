@@ -599,3 +599,20 @@ func TestThresholdPageIsNotRefreshed(t *testing.T) {
 		t.Fatalf("the refused save declares itself live, so the error would be refreshed away: %s", rec.Body)
 	}
 }
+
+// spec: thresholds.md#saving — a save from another site is refused before the hub reads
+// anything: what it names is none of its business either.
+func TestACrossOriginSaveIsRefusedBeforeTheSeriesIsRead(t *testing.T) {
+	store := holding(dataSeries)
+
+	// An address naming no series at all: the refusal is still the origin's, which is
+	// what makes the proxy's own check answerable ([nginx-requirements.md]).
+	rec := saveForm(t, store, "/thresholds", url.Values{}, "https://elsewhere.example")
+
+	if rec.Code != http.StatusForbidden {
+		t.Fatalf("status = %d, want 403: %s", rec.Code, rec.Body)
+	}
+	if len(store.held) != 0 {
+		t.Fatalf("stored %+v, want nothing", store.held)
+	}
+}
