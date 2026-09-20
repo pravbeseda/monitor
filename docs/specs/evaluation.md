@@ -282,6 +282,7 @@ alike: the node, then a mount point as itself and every other label as the pair 
 | a value whose metric id ends in `_bytes`, `_pct` or `_seconds` | rendered in that unit; any other metric is rendered as a plain number ([history.md](history.md#wire-format)) |
 | two subjects of one metric on one node, differing only by a label | two messages a reader can tell apart: each names its own labels |
 | a volume's subject | named by its mount point; `fs` and `removable` are not in the text |
+| a label whose value is empty | named like any other: an empty value is part of what tells one series from another |
 | `locale: ru` | text, sizes and times of delivered messages come from the Russian catalogue ([0008](../decisions/0008-english-repo-bilingual-ui.md)) |
 | `channel: log` with `locale: ru` | the log line stays English: logs are diagnostic, and the locale governs delivered channels only |
 
@@ -418,6 +419,9 @@ stored.
   as it is among any other subjects ([state.md](state.md#model)).
 - **A threshold of zero** has a margin of zero, so it cannot flap-protect: entry is strict
   below zero and exit clears at zero itself. It is legal, and the form says what it means.
+  A threshold small enough that 20% of it is not a number the machine can tell from zero —
+  below roughly 1e-323 — behaves the same way, and for the same reason: at that magnitude
+  the margin does not exist to be computed.
 - **Clock skew on the agent** cannot affect silence, which runs on hub receipt time, but a
   measurement stamped in the future is still the newest value of its series and is
   evaluated as such until a later one arrives.

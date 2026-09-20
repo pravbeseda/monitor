@@ -267,6 +267,20 @@ func TestListing(t *testing.T) {
 		}
 	})
 
+	t.Run("a series whose stored threshold this build cannot read is still aged", func(t *testing.T) {
+		unreadable := watch("server-b", "disk.free_bytes", volume("/"))
+		unreadable.Direction = "sideways"
+		snap := storage.Snapshot{
+			Nodes:      []storage.NodeState{heard("server-b", 0, reported(volume("/"), 4*interval)...)},
+			Thresholds: []storage.Threshold{unreadable},
+		}
+		got := subject(t, build(t, snap), "server-b", "disk.free_bytes", "/")
+		if staleOf(got.Stale) != "true" {
+			t.Fatalf("stale = %s, want true: nothing judged it, so nothing said its values were fresh",
+				staleOf(got.Stale))
+		}
+	})
+
 	t.Run("a series whose stored threshold this build cannot read", func(t *testing.T) {
 		unreadable := watch("server-b", "disk.free_bytes", volume("/"))
 		unreadable.Direction = "sideways"

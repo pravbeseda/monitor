@@ -322,6 +322,17 @@ func TestAMessageNamesTheSeriesItIsAbout(t *testing.T) {
 		t.Errorf("message = %q, want it to name the series", first)
 	}
 
+	// An empty value is part of the identity too: it is a different series from one that
+	// carries no such label at all.
+	bare, empty := entering(), entering()
+	bare.Metric, empty.Metric = "queue.depth", "queue.depth"
+	bare.Labels, empty.Labels = map[string]string{}, map[string]string{"queue": ""}
+	bare.Readings = map[string]float64{"queue.depth": 42}
+	empty.Readings = map[string]float64{"queue.depth": 42}
+	if notify.Render(printer, bare) == notify.Render(printer, empty) {
+		t.Errorf("a label with an empty value reads like no label at all:\n%s", notify.Render(printer, bare))
+	}
+
 	// A volume still reads as its mount point, without the labels that decorate it.
 	volume := entering()
 	volume.Labels = map[string]string{"mount": "/data", "fs": "ext4", "removable": "false"}

@@ -119,7 +119,8 @@ One row = one test. Anchors: `spec: thresholds.md#<heading>`.
 
 - **A value of zero** is legal and means what it says; the form states that a zero
   threshold has a margin of zero, so it cannot damp a flapping series
-  ([evaluation.md](evaluation.md#hysteresis)).
+  ([evaluation.md](evaluation.md#hysteresis)). A value small enough that 20% of it is
+  indistinguishable from zero behaves the same way.
 - **A negative value** is legal too — a balance may be judged below −100 — and its margin
   is 20% of its magnitude, so it clears in the direction the comparison's negation points:
   upwards for `below`, downwards for `above`.
