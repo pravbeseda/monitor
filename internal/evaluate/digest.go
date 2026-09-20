@@ -8,6 +8,18 @@ import (
 	"github.com/pravbeseda/monitor/internal/storage"
 )
 
+// watching counts what a tick judged and what it left alone, so the digest can say that
+// a series nobody configured exists at all (docs/specs/evaluation.md#digest).
+type watching struct {
+	reporting bool
+	watched   int
+	unwatched int
+}
+
+// nothingWatched is a hub with nodes reporting and no series judged at all — a fresh
+// installation, or a database restored without its thresholds.
+func (w watching) nothingWatched() bool { return w.reporting && w.watched == 0 }
+
 // Schedule is when the daily digest goes out. The zone comes from the file rather than
 // from the host, so moving the hub to another machine cannot move the hour it arrives.
 type Schedule struct {
@@ -52,7 +64,7 @@ func (e *Evaluator) openDigestWindow(ctx context.Context) (time.Time, error) {
 // digest sends the day's summary when the tick crosses the configured hour. The window is
 // closed even when there was nothing to say, so a warning that appears after the hour
 // waits for tomorrow rather than going out at once.
-func (e *Evaluator) digest(ctx context.Context, subjects []Subject, since, now time.Time) error {
+func (e *Evaluator) digest(ctx context.Context, subjects []Subject, watch watching, since, now time.Time) error {
 	// The occurrence decides whether a digest is due; the tick time records what has been
 	// reported, which is why it is the mark below.
 	occurrence := e.schedule.mostRecent(now)
@@ -64,9 +76,11 @@ func (e *Evaluator) digest(ctx context.Context, subjects []Subject, since, now t
 	if err != nil {
 		return err
 	}
-	if len(entries) > 0 {
+	// A hub that judges nothing says so every day until something is set: silence while
+	// all is well means nothing when nothing is being watched.
+	if len(entries) > 0 || watch.nothingWatched() {
 		if err := e.send(ctx, func(ctx context.Context) error {
-			return e.notifier.Digest(ctx, occurrence, entries)
+			return e.notifier.Digest(ctx, occurrence, entries, watch.unwatched)
 		}); err != nil {
 			// The window stays open, so the next tick sends the same one again.
 			slog.Error("deliver the digest", "at", occurrence, "error", err)
@@ -80,7 +94,9 @@ func (e *Evaluator) digest(ctx context.Context, subjects []Subject, since, now t
 
 // entries is what the digest lists: every transition of the window that was not delivered
 // at once, and every subject standing in warning, one line per subject, in the order
-// subjects come out in. A frozen subject is neither, because its values are stale.
+// subjects come out in. A frozen subject's transition still counts — it was recorded from
+// values that were fresh — while its standing reading does not, because that reading is
+// stale (docs/specs/evaluation.md#digest).
 func (e *Evaluator) entries(ctx context.Context, subjects []Subject, since, now, occurrence time.Time) ([]Message, error) {
 	events, err := e.store.EventsBetween(ctx, since, now)
 	if err != nil {
@@ -97,9 +113,6 @@ func (e *Evaluator) entries(ctx context.Context, subjects []Subject, since, now,
 
 	var out []Message
 	for _, subject := range subjects {
-		if subject.Frozen {
-			continue
-		}
 		key, err := subject.Key()
 		if err != nil {
 			continue
@@ -108,12 +121,14 @@ func (e *Evaluator) entries(ctx context.Context, subjects []Subject, since, now,
 		// last move was such a change has nothing left to report here — but it is still
 		// listed below if it is standing in warning now.
 		if event, changed := newest[key]; changed && !instant(event) {
-			from := storedLevel(event.From, subject.Node, subject.Rule)
-			to := storedLevel(event.To, subject.Node, subject.Rule)
+			from := storedLevel(event.From, subject.Node, subject.Metric)
+			to := storedLevel(event.To, subject.Node, subject.Metric)
 			out = append(out, message(subject, from, to, event.Readings, event.FromSince, event.At))
 			continue
 		}
-		if subject.Level == Warning {
+		// A stale reading says nothing about now, so a frozen subject is not listed as
+		// standing in warning.
+		if subject.Level == Warning && !subject.Frozen {
 			out = append(out, message(subject, Warning, Warning, subject.Readings, subject.Since, occurrence))
 		}
 	}

@@ -37,11 +37,15 @@ type Point struct {
 type SeriesNewest struct {
 	SeriesRef
 	Newest time.Time
+	// Sensor is what produced the newest point, and what staleness is measured against
+	// (docs/specs/evaluation.md#freezing). It is empty when no measurement named one.
+	Sensor string
 }
 
-// Series lists every stored series of a metric, whatever the age of its last point. It
-// reads the series table rather than ranking points, so it costs what it answers (ADR 0031).
-func (s *SQLite) Series(ctx context.Context, sel Selection) ([]SeriesRef, error) {
+// Series lists every stored series of a metric, whatever the age of its last point, each
+// with the sensor its newest value named. It reads the series table rather than ranking
+// points, so it costs what it answers (ADR 0031).
+func (s *SQLite) Series(ctx context.Context, sel Selection) ([]SeriesNewest, error) {
 	query, args := seriesStatement(sel)
 	rows, err := s.db.QueryContext(ctx, query, args...)
 	if err != nil {
@@ -49,22 +53,26 @@ func (s *SQLite) Series(ctx context.Context, sel Selection) ([]SeriesRef, error)
 	}
 	defer func() { _ = rows.Close() }()
 
-	var out []SeriesRef
+	var out []SeriesNewest
 	for rows.Next() {
-		var node, labels string
-		if err := rows.Scan(&node, &labels); err != nil {
+		var node, labels, ts, sensor string
+		if err := rows.Scan(&node, &labels, &ts, &sensor); err != nil {
 			return nil, fmt.Errorf("read series of %s: %w", sel.Metric, err)
 		}
 		ref, err := seriesRef(node, sel.Metric, labels)
 		if err != nil {
 			return nil, err
 		}
-		out = append(out, ref)
+		at, err := parseTime(ts)
+		if err != nil {
+			return nil, fmt.Errorf("series %s of %s: %w", labels, node, err)
+		}
+		out = append(out, SeriesNewest{SeriesRef: ref, Newest: at, Sensor: sensor})
 	}
 	if err := rows.Err(); err != nil {
 		return nil, fmt.Errorf("read series of %s: %w", sel.Metric, err)
 	}
-	sortSeries(out, func(ref SeriesRef) SeriesRef { return ref })
+	sortSeries(out, func(s SeriesNewest) SeriesRef { return s.SeriesRef })
 	return out, nil
 }
 
@@ -83,8 +91,8 @@ func (s *SQLite) Newest(ctx context.Context, sel Selection, from time.Time) ([]S
 
 	var out []SeriesNewest
 	for rows.Next() {
-		var node, labels, ts string
-		if err := rows.Scan(&node, &labels, &ts); err != nil {
+		var node, labels, ts, sensor string
+		if err := rows.Scan(&node, &labels, &ts, &sensor); err != nil {
 			return nil, fmt.Errorf("read the series of %s in the window: %w", sel.Metric, err)
 		}
 		ref, err := seriesRef(node, sel.Metric, labels)
@@ -95,7 +103,7 @@ func (s *SQLite) Newest(ctx context.Context, sel Selection, from time.Time) ([]S
 		if err != nil {
 			return nil, fmt.Errorf("series %s of %s: %w", labels, node, err)
 		}
-		out = append(out, SeriesNewest{SeriesRef: ref, Newest: at})
+		out = append(out, SeriesNewest{SeriesRef: ref, Newest: at, Sensor: sensor})
 	}
 	if err := rows.Err(); err != nil {
 		return nil, fmt.Errorf("read the series of %s in the window: %w", sel.Metric, err)
@@ -154,12 +162,12 @@ func (s *SQLite) Points(ctx context.Context, ref SeriesRef, from, to time.Time) 
 // exactly what these reads run: one row per series, never a pass over the points (ADR 0031).
 func seriesStatement(sel Selection) (string, []any) {
 	where, args := sel.where()
-	return `SELECT node, labels FROM series WHERE ` + where, args
+	return `SELECT node, labels, last_ts, sensor FROM series WHERE ` + where, args
 }
 
 func newestStatement(sel Selection, from time.Time) (string, []any) {
 	where, args := sel.where()
-	return `SELECT node, labels, last_ts FROM series WHERE ` + where + ` AND last_ts >= ?`,
+	return `SELECT node, labels, last_ts, sensor FROM series WHERE ` + where + ` AND last_ts >= ?`,
 		append(args, formatTime(from))
 }
 

@@ -3,6 +3,7 @@ package config_test
 import (
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/pravbeseda/monitor/internal/config"
 	"github.com/pravbeseda/monitor/internal/evaluate"
@@ -14,7 +15,7 @@ func target(t *testing.T, cfg *config.Config, name string) evaluate.Target {
 }
 
 // spec: evaluation.md#freezing — a sensor the node resolves as disabled collects nothing,
-// so the rule that reads it has no subjects on that node.
+// so its series have no interval to be aged against on that node.
 func TestASwitchedOffSensorLeavesNoInterval(t *testing.T) {
 	got := target(t, load(t, `
 nodes:
@@ -29,7 +30,7 @@ nodes:
 }
 
 // spec: evaluation.md#freezing — a sensor no layer delivers is not collected either, and
-// the rule that reads it has no subjects for the same reason.
+// its series have no interval for the same reason.
 func TestAnUndeliveredSensorLeavesNoInterval(t *testing.T) {
 	got := target(t, load(t, minimal), "laptop-a")
 	if interval, runs := got.Intervals["nosuchsensor"]; runs {
@@ -40,30 +41,23 @@ func TestAnUndeliveredSensorLeavesNoInterval(t *testing.T) {
 	}
 }
 
-// spec: evaluation.md#configuration — a target carries the thresholds of the node and of
-// every volume it names, which is what evaluation judges a mount by.
-func TestATargetCarriesTheNodesWindowAndRules(t *testing.T) {
+// spec: evaluation.md#configuration — thresholds are not in the file, so a target carries
+// only what the installation says about the node: its silence window and its intervals.
+func TestATargetCarriesTheNodesSilenceWindow(t *testing.T) {
 	cfg := load(t, `
 classes:
-  laptop: { silence_after: 48h }
+  laptop: { silence_after: 12h }
 nodes:
   laptop-a:
     class: laptop
     token_env: MONITOR_TOKEN_LAPTOP_A
-    volumes:
-      "/data/backup": { role: backup }
 `)
 	got := target(t, cfg, "laptop-a")
-	if got.Node != "laptop-a" || got.SilenceAfter != node(t, cfg, "laptop-a").SilenceAfter {
-		t.Fatalf("target %s carries a silence window of %v", got.Node, got.SilenceAfter)
+	if got.Node != "laptop-a" || got.SilenceAfter != 12*time.Hour {
+		t.Fatalf("target %s carries a silence window of %v, want 12h", got.Node, got.SilenceAfter)
 	}
-	backup, ok := got.Rule("disk", "/data/backup")
-	if !ok || backup.Warning.Ratio != 0 {
-		t.Fatalf("the backup volume resolved %+v, want the band-less rule", backup)
-	}
-	plain, ok := got.Rule("disk", "/")
-	if !ok || plain.Warning.Ratio == 0 {
-		t.Fatalf("an unnamed volume resolved %+v, want the node's own rule", plain)
+	if got.SilenceAfter != node(t, cfg, "laptop-a").SilenceAfter {
+		t.Fatalf("the target's window %v is not the node's %v", got.SilenceAfter, node(t, cfg, "laptop-a").SilenceAfter)
 	}
 }
 

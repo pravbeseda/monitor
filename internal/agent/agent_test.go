@@ -526,3 +526,29 @@ func TestRunStopsWithItsContext(t *testing.T) {
 		t.Errorf("Run returned %v, want the context's error", err)
 	}
 }
+
+// spec: ingest.md#wire-format — every measurement the agent sends names the sensor that
+// produced it, which is what the hub measures staleness against.
+func TestMeasurementsNameTheirSensor(t *testing.T) {
+	h, c := &hub{}, &clock{at: start}
+	h.answers = []answer{{response: configure("v1", "5m", map[string]api.SensorConfig{
+		"disk": {Enabled: true, Interval: "5m"},
+	})}}
+	a := newAgent(t, h, c, &stub{name: "disk", measurements: []sensor.Measurement{reading("disk.free_bytes", 1)}})
+
+	if err := a.Tick(context.Background()); err != nil {
+		t.Fatalf("Tick: %v", err)
+	}
+	c.advance(5 * time.Minute)
+	if err := a.Tick(context.Background()); err != nil {
+		t.Fatalf("Tick: %v", err)
+	}
+
+	sent := measurements(h.last())
+	if len(sent) != 1 {
+		t.Fatalf("measurements = %+v, want one", sent)
+	}
+	if sent[0].Sensor == nil || *sent[0].Sensor != "disk" {
+		t.Errorf("sensor = %v, want %q", sent[0].Sensor, "disk")
+	}
+}

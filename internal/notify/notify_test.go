@@ -21,17 +21,14 @@ var at = time.Date(2026, time.August, 30, 9, 0, 0, 0, time.UTC)
 
 func entering() evaluate.Message {
 	return evaluate.Message{
-		Node:   "server-b",
-		Rule:   "disk",
-		Labels: map[string]string{"mount": "/data", "fs": "ext4", "removable": "false"},
-		From:   evaluate.Warning,
-		To:     evaluate.Critical,
-		Readings: map[string]float64{
-			"disk.free_bytes": 3e9,
-			"disk.free_pct":   2.34,
-		},
-		Since: at.Add(-2 * time.Hour),
-		At:    at,
+		Node:     "server-b",
+		Metric:   "disk.free_bytes",
+		Labels:   map[string]string{"mount": "/data", "fs": "ext4", "removable": "false"},
+		From:     evaluate.Warning,
+		To:       evaluate.Critical,
+		Readings: map[string]float64{"disk.free_bytes": 3e9},
+		Since:    at.Add(-2 * time.Hour),
+		At:       at,
 	}
 }
 
@@ -93,14 +90,44 @@ func TestARussianMessageComesFromTheRussianCatalogue(t *testing.T) {
 	}
 }
 
-// spec: evaluation.md#messages — every message carries the node, the subject, both levels,
-// the values that produced it and how long the subject had been where it was.
+// spec: evaluation.md#messages — every message carries the node, the metric id, the
+// subject's labels, both levels, the value that produced it and how long the subject had
+// been where it was.
 func TestAMessageCarriesEveryField(t *testing.T) {
 	got := notify.Render(i18n.For(i18n.English), entering())
-	for _, want := range []string{"server-b", "/data", "critical", "warning", "3.0 GB", "2.3%", "2026-08-30 07:00"} {
+	for _, want := range []string{
+		"server-b", "/data", "disk.free_bytes", "critical", "warning", "3.0 GB", "2026-08-30 07:00",
+	} {
 		if !strings.Contains(got, want) {
 			t.Fatalf("the message is missing %q: %s", want, got)
 		}
+	}
+}
+
+// spec: evaluation.md#messages — a value is rendered in the unit its metric id declares,
+// and a metric id that declares none is rendered as a plain number.
+func TestAValueIsRenderedInTheUnitItsMetricIDDeclares(t *testing.T) {
+	tests := []struct {
+		metric string
+		value  float64
+		want   string
+	}{
+		{"disk.free_bytes", 3e9, "3.0 GB"},
+		{"disk.free_pct", 2.34, "2.3%"},
+		{"battery.age_seconds", 90, "1.5 min"},
+		{"queue.depth", 42, "42.00"},
+	}
+	for _, tc := range tests {
+		t.Run(tc.metric, func(t *testing.T) {
+			message := entering()
+			message.Metric = tc.metric
+			message.Readings = map[string]float64{tc.metric: tc.value}
+
+			got := notify.Render(i18n.For(i18n.English), message)
+			if want := tc.metric + " is " + tc.want; !strings.Contains(got, want) {
+				t.Fatalf("the message reads %q, want it to carry %q", got, want)
+			}
+		})
 	}
 }
 
@@ -108,12 +135,12 @@ func TestAMessageCarriesEveryField(t *testing.T) {
 // says what it is instead of pretending to values.
 func TestTheSilenceMessageNamesTheNodeAlone(t *testing.T) {
 	message := entering()
-	message.Rule = evaluate.SilenceRule
+	message.Metric = evaluate.SilenceMetric
 	message.Labels = nil
 	message.Readings = nil
 
 	got := notify.Render(i18n.For(i18n.English), message)
-	if !strings.Contains(got, "server-b") || strings.Contains(got, "GB") {
+	if !strings.Contains(got, "server-b") || !strings.Contains(got, "no report") || strings.Contains(got, "GB") {
 		t.Fatalf("the silence message reads %q", got)
 	}
 }
@@ -138,7 +165,7 @@ func TestTheLogChannelWritesOneDigest(t *testing.T) {
 	first, second := entering(), entering()
 	second.Labels = map[string]string{"mount": "/srv"}
 
-	if err := channel.Digest(context.Background(), at, []evaluate.Message{first, second}); err != nil {
+	if err := channel.Digest(context.Background(), at, []evaluate.Message{first, second}, 0); err != nil {
 		t.Fatalf("Digest: %v", err)
 	}
 	line := out.String()
@@ -257,5 +284,21 @@ func TestAnUnusableTokenNeverReachesTheError(t *testing.T) {
 	}
 	if strings.Contains(err.Error(), "AAsecretTOKENvalue") {
 		t.Fatalf("the error carries the bot token: %v", err)
+	}
+}
+
+// spec: evaluation.md#digest — a digest with nothing to list says that nothing is being
+// judged, and one that lists something still names the series nobody watches.
+func TestTheDigestSaysWhatIsNotWatched(t *testing.T) {
+	printer := i18n.For(i18n.English)
+
+	empty := notify.RenderDigest(printer, nil, 3)
+	if !strings.Contains(empty, "Nothing on this hub is being judged") {
+		t.Fatalf("a digest of an unwatched hub reads:\n%s", empty)
+	}
+
+	listed := notify.RenderDigest(printer, []evaluate.Message{entering()}, 2)
+	if !strings.Contains(listed, "2 series have no threshold") {
+		t.Fatalf("a digest with entries did not name the unwatched series:\n%s", listed)
 	}
 }

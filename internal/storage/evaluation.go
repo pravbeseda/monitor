@@ -15,11 +15,12 @@ import (
 // by every digest that goes out, so a reader is never told twice about one transition.
 const lastDigestKey = "last_digest_at"
 
-// Subject is what has a level: one node, one rule, and the labels of the series that rule
-// reads together (docs/specs/evaluation.md).
+// Subject is what has a level: one series — a node, a metric and the labels that pick
+// one of its instances (ADR 0033). A node's own silence is the subject whose metric is
+// `silence` and whose labels are empty.
 type Subject struct {
 	Node   string
-	Rule   string
+	Metric string
 	Labels map[string]string
 }
 
@@ -28,9 +29,9 @@ type Subject struct {
 func (s Subject) Key() (string, error) {
 	labels, err := encodeLabels(s.Labels)
 	if err != nil {
-		return "", fmt.Errorf("subject %s %s: %w", s.Node, s.Rule, err)
+		return "", fmt.Errorf("subject %s %s: %w", s.Node, s.Metric, err)
 	}
-	return s.Node + "\x00" + s.Rule + "\x00" + labels, nil
+	return s.Node + "\x00" + s.Metric + "\x00" + labels, nil
 }
 
 // describe names a subject in an error: a node has many volumes, and "state of server-b"
@@ -40,14 +41,18 @@ func (s Subject) describe() string {
 	if err != nil {
 		labels = "{}"
 	}
-	return fmt.Sprintf("%s %s %s", s.Node, s.Rule, labels)
+	return fmt.Sprintf("%s %s %s", s.Node, s.Metric, labels)
 }
 
 // State is what a subject looks like between ticks.
 type State struct {
 	Subject
 	Level string
-	Since time.Time
+	// Direction is the direction the level was judged under. Hysteresis holds a level
+	// against the comparison that created it, so a level earned under another direction
+	// is dropped rather than held (docs/specs/evaluation.md#hysteresis).
+	Direction string
+	Since     time.Time
 	// LastNotifiedAt is zero until a message about this subject has been delivered.
 	LastNotifiedAt time.Time
 }
@@ -62,8 +67,10 @@ type Transition struct {
 	// FromSince is when the subject entered the level it is leaving, which is what a
 	// message reports as how long it had been there.
 	FromSince time.Time
-	// Readings are the values that produced the change, keyed by metric id: a rule's own
-	// value names are local to it, and this log outlives any of them.
+	// Direction is what the subject was judged under when it changed.
+	Direction string
+	// Readings are the values that produced the change, keyed by metric id. A subject is
+	// one series, so this holds one entry; the shape outlives that.
 	Readings map[string]float64
 	// ID orders the log. It is set on read and ignored on write.
 	ID int64
@@ -76,6 +83,9 @@ type Snapshot struct {
 	Nodes []NodeState
 	// States is the level every subject held when the tick began.
 	States []State
+	// Thresholds is what every watched subject is judged by, read in the same view: an
+	// edit saved while a tick runs belongs to the next tick (ADR 0032).
+	Thresholds []Threshold
 	// Newest is the latest transition of every subject that entered or left one of the
 	// levels the caller named as owed. A later transition of a quieter kind must not hide
 	// it: a send that failed is owed whatever the subject has become since.
@@ -103,13 +113,16 @@ func (s *SQLite) Snapshot(ctx context.Context, owed []string) (Snapshot, error) 
 	if out.Newest, err = newestEvents(ctx, tx, owed); err != nil {
 		return Snapshot{}, err
 	}
+	if out.Thresholds, err = readThresholds(ctx, tx); err != nil {
+		return Snapshot{}, err
+	}
 	return out, nil
 }
 
 func loadStates(ctx context.Context, from querier) ([]State, error) {
 	rows, err := from.QueryContext(ctx, `
-		SELECT node, rule, labels, level, since, last_notified_at
-		FROM states ORDER BY node, rule, labels`)
+		SELECT node, metric, labels, level, direction, since, last_notified_at
+		FROM states ORDER BY node, metric, labels`)
 	if err != nil {
 		return nil, fmt.Errorf("read states: %w", err)
 	}
@@ -119,7 +132,7 @@ func loadStates(ctx context.Context, from querier) ([]State, error) {
 	for rows.Next() {
 		var state State
 		var labels, since, notified string
-		if err := rows.Scan(&state.Node, &state.Rule, &labels, &state.Level, &since, &notified); err != nil {
+		if err := rows.Scan(&state.Node, &state.Metric, &labels, &state.Level, &state.Direction, &since, &notified); err != nil {
 			return nil, fmt.Errorf("read states: %w", err)
 		}
 		if err := json.Unmarshal([]byte(labels), &state.Labels); err != nil {
@@ -148,7 +161,7 @@ func (s *SQLite) SaveState(ctx context.Context, state State) error {
 		return fmt.Errorf("state of %s: %w", state.describe(), err)
 	}
 	if _, err := s.db.ExecContext(ctx, upsertState,
-		state.Node, state.Rule, labels, state.Level, formatTime(state.Since)); err != nil {
+		state.Node, state.Metric, labels, state.Level, state.Direction, formatTime(state.Since)); err != nil {
 		return fmt.Errorf("save state of %s: %w", state.describe(), err)
 	}
 	return nil
@@ -157,11 +170,12 @@ func (s *SQLite) SaveState(ctx context.Context, state State) error {
 // upsertState keeps last_notified_at as it was: what a subject was told about is not part
 // of what it is.
 const upsertState = `
-	INSERT INTO states (node, rule, labels, level, since, last_notified_at)
-	VALUES (?, ?, ?, ?, ?, '')
-	ON CONFLICT(node, rule, labels) DO UPDATE SET
-		level = excluded.level,
-		since = excluded.since`
+	INSERT INTO states (node, metric, labels, level, direction, since, last_notified_at)
+	VALUES (?, ?, ?, ?, ?, ?, '')
+	ON CONFLICT(node, metric, labels) DO UPDATE SET
+		level     = excluded.level,
+		direction = excluded.direction,
+		since     = excluded.since`
 
 // ApplyTransition writes the new level and its event in one transaction, so a reader never
 // sees one without the other.
@@ -186,21 +200,37 @@ func (s *SQLite) ApplyTransition(ctx context.Context, change Transition) (err er
 	}()
 
 	if _, err = tx.ExecContext(ctx, upsertState,
-		change.Node, change.Rule, labels, change.To, formatTime(change.At)); err != nil {
+		change.Node, change.Metric, labels, change.To, change.Direction, formatTime(change.At)); err != nil {
 		return fmt.Errorf("save state of %s: %w", change.describe(), err)
 	}
 	// One subject changes level at most once per tick, so a second event at the same
 	// instant is a retry of the same one and is dropped rather than duplicated.
 	if _, err = tx.ExecContext(ctx, `
-		INSERT INTO events (at, node, rule, labels, from_level, to_level, from_since, readings)
+		INSERT INTO events (at, node, metric, labels, from_level, to_level, from_since, readings)
 		VALUES (?, ?, ?, ?, ?, ?, ?, ?)
 		ON CONFLICT DO NOTHING`,
-		formatTime(change.At), change.Node, change.Rule, labels,
+		formatTime(change.At), change.Node, change.Metric, labels,
 		change.From, change.To, formatTime(change.FromSince), string(readings)); err != nil {
 		return fmt.Errorf("record transition of %s: %w", change.describe(), err)
 	}
 	if err = tx.Commit(); err != nil {
 		return fmt.Errorf("commit transition of %s: %w", change.describe(), err)
+	}
+	return nil
+}
+
+// DeleteState forgets a subject: its threshold was cleared, so nothing judges it any
+// more and the level it held is not an answer to any question (ADR 0032). Its events stay
+// where they are: the log records what happened, and that did happen.
+func (s *SQLite) DeleteState(ctx context.Context, subject Subject) error {
+	labels, err := encodeLabels(subject.Labels)
+	if err != nil {
+		return fmt.Errorf("state of %s: %w", subject.describe(), err)
+	}
+	if _, err := s.db.ExecContext(ctx, `
+		DELETE FROM states WHERE node = ? AND metric = ? AND labels = ?`,
+		subject.Node, subject.Metric, labels); err != nil {
+		return fmt.Errorf("forget state of %s: %w", subject.describe(), err)
 	}
 	return nil
 }
@@ -214,8 +244,8 @@ func (s *SQLite) RecordNotified(ctx context.Context, subject Subject, at time.Ti
 	}
 	result, err := s.db.ExecContext(ctx, `
 		UPDATE states SET last_notified_at = ?
-		WHERE node = ? AND rule = ? AND labels = ?`,
-		formatTime(at), subject.Node, subject.Rule, labels)
+		WHERE node = ? AND metric = ? AND labels = ?`,
+		formatTime(at), subject.Node, subject.Metric, labels)
 	if err != nil {
 		return fmt.Errorf("record delivery to %s: %w", subject.describe(), err)
 	}
@@ -246,22 +276,22 @@ func newestEvents(ctx context.Context, from querier, owed []string) ([]Transitio
 		}
 	}
 	return readEvents(ctx, from, `
-		SELECT id, at, node, rule, labels, from_level, to_level, from_since, readings FROM (
-			SELECT id, at, node, rule, labels, from_level, to_level, from_since, readings,
+		SELECT id, at, node, metric, labels, from_level, to_level, from_since, readings FROM (
+			SELECT id, at, node, metric, labels, from_level, to_level, from_since, readings,
 			       -- One subject changes level at most once per instant, which the events
 			       -- table enforces; id breaks a tie that therefore cannot arise.
-			       ROW_NUMBER() OVER (PARTITION BY node, rule, labels ORDER BY at DESC, id DESC) AS recency
+			       ROW_NUMBER() OVER (PARTITION BY node, metric, labels ORDER BY at DESC, id DESC) AS recency
 			FROM events
 			WHERE from_level IN (`+placeholders+`) OR to_level IN (`+placeholders+`))
 		WHERE recency = 1
-		ORDER BY node, rule, labels`, args...)
+		ORDER BY node, metric, labels`, args...)
 }
 
 // EventsBetween returns the transitions recorded after from and up to and including to,
 // which is the window a digest covers.
 func (s *SQLite) EventsBetween(ctx context.Context, from, to time.Time) ([]Transition, error) {
 	return readEvents(ctx, s.db, `
-		SELECT id, at, node, rule, labels, from_level, to_level, from_since, readings
+		SELECT id, at, node, metric, labels, from_level, to_level, from_since, readings
 		FROM events WHERE at > ? AND at <= ? ORDER BY at, id`,
 		formatTime(from), formatTime(to))
 }
@@ -277,7 +307,7 @@ func readEvents(ctx context.Context, from querier, query string, args ...any) ([
 	for rows.Next() {
 		var event Transition
 		var at, labels, since, readings string
-		if err := rows.Scan(&event.ID, &at, &event.Node, &event.Rule, &labels,
+		if err := rows.Scan(&event.ID, &at, &event.Node, &event.Metric, &labels,
 			&event.From, &event.To, &since, &readings); err != nil {
 			return nil, fmt.Errorf("read events: %w", err)
 		}

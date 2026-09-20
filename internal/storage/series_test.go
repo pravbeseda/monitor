@@ -351,6 +351,7 @@ func TestEveryUpgradePathEndsWithTheSeriesItsMeasurementsImply(t *testing.T) {
 						t.Fatalf("seed a measurement: %v", err)
 					}
 				}
+				seedSeries(t, raw)
 			}
 			if err := raw.Close(); err != nil {
 				t.Fatalf("close: %v", err)
@@ -379,6 +380,26 @@ func TestEveryUpgradePathEndsWithTheSeriesItsMeasurementsImply(t *testing.T) {
 	}
 }
 
+// seedSeries gives a hand-built database the series its seeded measurements imply, as the
+// hub that wrote it would have. A version whose series table does not exist yet gets
+// nothing: the migration that creates it backfills from the points.
+func seedSeries(t *testing.T, raw *sql.DB) {
+	t.Helper()
+	var exists int
+	if err := raw.QueryRow(
+		`SELECT count(*) FROM sqlite_master WHERE type = 'table' AND name = 'series'`).Scan(&exists); err != nil {
+		t.Fatalf("read the schema: %v", err)
+	}
+	if exists == 0 {
+		return
+	}
+	if _, err := raw.Exec(`
+		INSERT INTO series (metric, node, labels, last_ts)
+		SELECT metric, node, labels, MAX(ts) FROM measurements GROUP BY metric, node, labels`); err != nil {
+		t.Fatalf("seed the series: %v", err)
+	}
+}
+
 // assertSeriesMatchTheMeasurements compares the two in both directions: neither a series the
 // measurements do not imply, nor a measured series the table is missing.
 func assertSeriesMatchTheMeasurements(t *testing.T, db *SQLite) {
@@ -398,8 +419,12 @@ func assertSeriesMatchTheMeasurements(t *testing.T, db *SQLite) {
 	}
 }
 
-// 1: the conflict clause of the backfill — a table left behind what the measurements say is
-// raised to them, so a repeated migration lands where a fresh one does.
+// seriesRebuild is the index of the migration that rebuilds the series table from the
+// measurements. Rewinding a database to it replays that step on rows that already exist.
+const seriesRebuild = 4
+
+// A table left behind what the measurements say is raised to them, so a repeated migration
+// lands where a fresh one does.
 func TestTheBackfillRaisesASeriesLeftBehind(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "monitor.db")
 	old, err := OpenSQLite(path)
@@ -409,7 +434,7 @@ func TestTheBackfillRaisesASeriesLeftBehind(t *testing.T) {
 	store(t, old, "server-b", pct("/", collected.Add(-time.Hour), 90), pct("/", collected, 42))
 	for _, statement := range []string{
 		`UPDATE series SET last_ts = ?`,
-		fmt.Sprintf(`PRAGMA user_version = %d`, len(migrations)-1),
+		fmt.Sprintf(`PRAGMA user_version = %d`, seriesRebuild),
 	} {
 		if _, err := old.db.Exec(statement, formatTime(collected.Add(-time.Hour))); err != nil {
 			t.Fatalf("%s: %v", statement, err)

@@ -2,9 +2,11 @@ package storage
 
 import (
 	"context"
+	"fmt"
 	"math"
 	"os"
 	"path/filepath"
+	"reflect"
 	"testing"
 	"time"
 )
@@ -15,7 +17,7 @@ var (
 )
 
 func volume(mount string) Subject {
-	return Subject{Node: "server-b", Rule: "disk", Labels: map[string]string{"mount": mount, "fs": "ext4"}}
+	return Subject{Node: "server-b", Metric: "disk", Labels: map[string]string{"mount": mount, "fs": "ext4"}}
 }
 
 func transition(subject Subject, at time.Time, from, to string) Transition {
@@ -81,13 +83,17 @@ func TestApplyTransitionIsAtomic(t *testing.T) {
 	db := open(t)
 	ctx := context.Background()
 
-	if _, err := db.db.Exec(`DROP TABLE events`); err != nil {
-		t.Fatalf("drop the event log: %v", err)
+	// The log refuses the append rather than being dropped, so both tables can still be
+	// read afterwards and the assertions below mean something.
+	if _, err := db.db.Exec(`
+		CREATE TRIGGER refuse_events BEFORE INSERT ON events
+		BEGIN SELECT RAISE(ABORT, 'the event log is unavailable'); END`); err != nil {
+		t.Fatalf("break the event log: %v", err)
 	}
 	if err := db.ApplyTransition(ctx, transition(volume("/"), tickOne, "ok", "warning")); err == nil {
 		t.Fatal("a transition was reported stored with no event log to store it in")
 	}
-	if _, err := db.db.Exec(migrations[1]); err != nil {
+	if _, err := db.db.Exec(`DROP TRIGGER refuse_events`); err != nil {
 		t.Fatalf("restore the event log: %v", err)
 	}
 	if got := db.statesByMount(t); len(got) != 0 {
@@ -405,6 +411,152 @@ func TestOpeningAStageOneDatabase(t *testing.T) {
 	}
 }
 
+// subjectIsASeries is the index of the migration that rekeys the levels and the event log
+// on the metric. A database rewound to it is one the previous schema wrote.
+const subjectIsASeries = 5
+
+// spec: evaluation.md#configuration-changes — a level was keyed on a rule before, and a
+// rule cannot be translated into a series, so nothing judged survives the upgrade. What was
+// measured does: the measurements and the series they imply are the only copy anyone has.
+func TestOpeningADatabaseKeyedOnRules(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "monitor.db")
+	old, err := OpenSQLite(path)
+	if err != nil {
+		t.Fatalf("OpenSQLite: %v", err)
+	}
+	ctx := context.Background()
+	measurement := Measurement{
+		Metric: "disk.free_bytes",
+		Sensor: "disk",
+		Labels: map[string]string{"mount": "/"},
+		Value:  9e9,
+		TS:     tickOne,
+	}
+	if err := old.SaveIngest(ctx, ingest("server-b", tickOne, measurement)); err != nil {
+		t.Fatalf("SaveIngest: %v", err)
+	}
+	// The shape those tables had while a subject was a rule over two series, with a level
+	// and a transition stored under it.
+	if _, err := old.db.Exec(`DROP TABLE states; DROP TABLE events`); err != nil {
+		t.Fatalf("drop the tables keyed on the metric: %v", err)
+	}
+	if _, err := old.db.Exec(migrations[1]); err != nil {
+		t.Fatalf("restore the tables keyed on the rule: %v", err)
+	}
+	for _, statement := range []string{
+		`INSERT INTO states (node, rule, labels, level, since)
+		 VALUES ('server-b', 'disk', '{"mount":"/"}', 'critical', '2026-08-29T10:00:00.000Z')`,
+		`INSERT INTO events (at, node, rule, labels, from_level, to_level, from_since, readings)
+		 VALUES ('2026-08-29T10:00:00.000Z', 'server-b', 'disk', '{"mount":"/"}', 'ok', 'critical', '', '{}')`,
+		fmt.Sprintf(`PRAGMA user_version = %d`, subjectIsASeries),
+	} {
+		if _, err := old.db.Exec(statement); err != nil {
+			t.Fatalf("seed the previous schema: %v", err)
+		}
+	}
+	if err := old.Close(); err != nil {
+		t.Fatalf("Close: %v", err)
+	}
+
+	migrated, err := OpenSQLite(path)
+	if err != nil {
+		t.Fatalf("reopen a database keyed on rules: %v", err)
+	}
+	defer func() { _ = migrated.Close() }()
+
+	snap, err := migrated.Snapshot(ctx, []string{"critical"})
+	if err != nil {
+		t.Fatalf("Snapshot: %v", err)
+	}
+	if len(snap.States) != 0 || len(snap.Newest) != 0 {
+		t.Fatalf("the upgrade kept %d level(s) and %d event(s), want neither", len(snap.States), len(snap.Newest))
+	}
+	if len(snap.Nodes) != 1 || len(snap.Nodes[0].Values) != 1 || snap.Nodes[0].Values[0].Sensor != "disk" {
+		t.Fatalf("the upgrade lost history: %+v", snap.Nodes)
+	}
+
+	// The tables are keyed on the metric now, which a level written under the new shape
+	// and read back is what proves.
+	if err := migrated.SaveState(ctx, State{Subject: volume("/"), Level: "ok", Since: tickTwo}); err != nil {
+		t.Fatalf("SaveState on the migrated database: %v", err)
+	}
+	if got := migrated.statesByMount(t)["/"]; got.Metric != "disk" || got.Level != "ok" {
+		t.Fatalf("the migrated state is %+v, want one keyed on the metric", got)
+	}
+}
+
+// spec: evaluation.md#configuration-changes — the last threshold of a subject is removed,
+// so it stops being a subject: its level is forgotten. The log is not: what happened did
+// happen, and only this subject's level goes.
+func TestDeleteStateForgetsOneSubjectAndKeepsTheLog(t *testing.T) {
+	db := open(t)
+	ctx := context.Background()
+
+	if err := db.ApplyTransition(ctx, transition(volume("/"), tickOne, "ok", "critical")); err != nil {
+		t.Fatalf("ApplyTransition: %v", err)
+	}
+	if err := db.ApplyTransition(ctx, transition(volume("/data"), tickOne, "ok", "warning")); err != nil {
+		t.Fatalf("ApplyTransition: %v", err)
+	}
+
+	if err := db.DeleteState(ctx, volume("/")); err != nil {
+		t.Fatalf("DeleteState: %v", err)
+	}
+
+	states := db.statesByMount(t)
+	if _, kept := states["/"]; kept {
+		t.Fatalf("the level of / outlived its threshold: %+v", states["/"])
+	}
+	if got := states["/data"]; got.Level != "warning" {
+		t.Fatalf("the level of /data is %q, want the other volume left alone", got.Level)
+	}
+	events, err := db.EventsBetween(ctx, tickOne.Add(-time.Minute), tickTwo)
+	if err != nil {
+		t.Fatalf("EventsBetween: %v", err)
+	}
+	if len(events) != 2 {
+		t.Fatalf("the log holds %+v, want both transitions: forgetting a level is not forgetting the log", events)
+	}
+
+	// Forgetting a subject that has no level is what a tick does on every pass after the
+	// first, so it cannot be an error.
+	if err := db.DeleteState(ctx, volume("/")); err != nil {
+		t.Fatalf("DeleteState of a subject with no level: %v", err)
+	}
+}
+
+// spec: evaluation.md#the-tick — the thresholds a tick judges by come from the same view as
+// the values, so a save that lands while a tick runs belongs to the next one.
+func TestSnapshotCarriesTheStoredThresholds(t *testing.T) {
+	db := open(t)
+	ctx := context.Background()
+
+	for _, th := range []Threshold{
+		{Series: bytesRef("server-b", "/data"), Direction: Below, Warning: value(20e9)},
+		{Series: bytesRef("server-b", "/"), Direction: Below, Warning: value(10e9), Critical: value(4e9)},
+	} {
+		save(t, db, th)
+	}
+
+	snapshot, err := db.Snapshot(ctx, nil)
+	if err != nil {
+		t.Fatalf("Snapshot: %v", err)
+	}
+	want := []Threshold{
+		{Series: bytesRef("server-b", "/"), Direction: Below, Warning: value(10e9), Critical: value(4e9)},
+		{Series: bytesRef("server-b", "/data"), Direction: Below, Warning: value(20e9)},
+	}
+	if !reflect.DeepEqual(snapshot.Thresholds, want) {
+		t.Fatalf("snapshot thresholds = %+v, want %+v", snapshot.Thresholds, want)
+	}
+
+	// A save after the read is not in it: the snapshot is what the tick judges by.
+	save(t, db, Threshold{Series: bytesRef("laptop-a", "/"), Direction: Below, Warning: value(1)})
+	if len(snapshot.Thresholds) != 2 {
+		t.Fatalf("the snapshot grew to %d thresholds after a later save", len(snapshot.Thresholds))
+	}
+}
+
 // spec: evaluation.md#the-tick — one view of the data, taken at the instant the tick
 // evaluates for.
 func TestSnapshotReadsEveryPartTogether(t *testing.T) {
@@ -441,7 +593,7 @@ func TestSubjectKey(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Key: %v", err)
 	}
-	again, err := Subject{Node: "server-b", Rule: "disk", Labels: map[string]string{"fs": "ext4", "mount": "/"}}.Key()
+	again, err := Subject{Node: "server-b", Metric: "disk", Labels: map[string]string{"fs": "ext4", "mount": "/"}}.Key()
 	if err != nil {
 		t.Fatalf("Key: %v", err)
 	}

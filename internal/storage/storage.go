@@ -9,9 +9,11 @@ import (
 	"time"
 )
 
-// Measurement is one reading of one metric, as it was collected.
+// Measurement is one reading of one metric, as it was collected. Sensor names what
+// produced it, and is empty when the agent is too old to say (docs/specs/ingest.md).
 type Measurement struct {
 	Metric string
+	Sensor string
 	Labels map[string]string
 	Value  float64
 	TS     time.Time
@@ -47,6 +49,9 @@ type NodeState struct {
 // Value is the latest reading of one series.
 type Value struct {
 	Metric string
+	// Sensor is what produced it, and what staleness is measured against; empty when no
+	// measurement of the series ever named one (docs/specs/evaluation.md#freezing).
+	Sensor string
 	Labels map[string]string
 	Value  float64
 	TS     time.Time
@@ -59,8 +64,9 @@ type Storage interface {
 	// SaveIngest stores one request atomically — measurements, manifest and last-seen —
 	// skipping measurements already stored under the same node, metric, labels and ts.
 	SaveIngest(ctx context.Context, in Ingest) error
-	// Series lists every stored series of a metric, ordered by node then by labels.
-	Series(ctx context.Context, sel Selection) ([]SeriesRef, error)
+	// Series lists every stored series of a metric, ordered by node then by labels, each
+	// with its newest timestamp and the sensor that value named.
+	Series(ctx context.Context, sel Selection) ([]SeriesNewest, error)
 	// Newest lists the selected series holding a point from `from` onwards, in the same
 	// order, each with the timestamp of its newest stored point.
 	Newest(ctx context.Context, sel Selection, from time.Time) ([]SeriesNewest, error)

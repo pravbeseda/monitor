@@ -54,7 +54,7 @@ func (s *spy) SaveIngest(_ context.Context, in storage.Ingest) error {
 	return nil
 }
 
-func (s *spy) Series(context.Context, storage.Selection) ([]storage.SeriesRef, error) {
+func (s *spy) Series(context.Context, storage.Selection) ([]storage.SeriesNewest, error) {
 	return nil, nil
 }
 
@@ -68,7 +68,7 @@ func (s *spy) Points(context.Context, storage.SeriesRef, time.Time, time.Time) i
 
 func (s *spy) Close() error { return nil }
 
-func newHandler(t *testing.T) (http.Handler, *spy, config.Node) {
+func loadConfig(t *testing.T) *config.Config {
 	t.Helper()
 	t.Setenv(tokenEnv, token)
 
@@ -80,6 +80,12 @@ func newHandler(t *testing.T) (http.Handler, *spy, config.Node) {
 	if err != nil {
 		t.Fatalf("load config: %v", err)
 	}
+	return cfg
+}
+
+func newHandler(t *testing.T) (http.Handler, *spy, config.Node) {
+	t.Helper()
+	cfg := loadConfig(t)
 	node, ok := cfg.Node("laptop-a")
 	if !ok {
 		t.Fatal("laptop-a is missing from the configuration")
@@ -438,5 +444,69 @@ func TestRateLimit(t *testing.T) {
 	}
 	if len(store.saved) != 60 {
 		t.Errorf("saved %d requests, want the refused one stored nothing", len(store.saved))
+	}
+}
+
+// spec: ingest.md#storage — a measurement names the sensor that produced it, and the series
+// it writes keeps that name. The assertion goes through the real store, because the name
+// ends up on the series rather than on the request.
+func TestStoresTheSensorOfAMeasurement(t *testing.T) {
+	cfg := loadConfig(t)
+	db, err := storage.OpenSQLite(filepath.Join(t.TempDir(), "monitor.db"))
+	if err != nil {
+		t.Fatalf("OpenSQLite: %v", err)
+	}
+	t.Cleanup(func() {
+		if err := db.Close(); err != nil {
+			t.Errorf("Close: %v", err)
+		}
+	})
+	h := ingest.NewHandler(cfg, db, func() time.Time { return received })
+	body := strings.Replace(strings.ReplaceAll(validBody, "%s", ""),
+		`"value": 123456789`, `"value": 123456789, "sensor": "disk"`, 1)
+
+	if rec := post(t, h, bearer(), body); rec.Code != http.StatusOK {
+		t.Fatalf("status = %d, want 200; body %q", rec.Code, rec.Body.String())
+	}
+
+	series, err := db.Series(context.Background(), storage.Selection{Metric: "disk.free_bytes"})
+	if err != nil {
+		t.Fatalf("Series: %v", err)
+	}
+	if len(series) != 1 {
+		t.Fatalf("series = %+v, want the one the request wrote", series)
+	}
+	if series[0].Sensor != "disk" {
+		t.Errorf("sensor = %q, want %q", series[0].Sensor, "disk")
+	}
+}
+
+// spec: ingest.md#storage — an agent too old to name its sensor is accepted as it is.
+func TestAcceptsAMeasurementWithoutASensor(t *testing.T) {
+	h, store, _ := newHandler(t)
+
+	if rec := post(t, h, bearer(), strings.ReplaceAll(validBody, "%s", "")); rec.Code != http.StatusOK {
+		t.Fatalf("status = %d, want 200", rec.Code)
+	}
+	if got := store.saved[0].Measurements[0].Sensor; got != "" {
+		t.Errorf("sensor = %q, want it empty", got)
+	}
+}
+
+// spec: ingest.md#validation — a sensor name is checked for shape like a metric id is.
+func TestRefusesASensorNameThatIsNotAnID(t *testing.T) {
+	for _, sensor := range []string{`"Disk"`, `""`, `42`} {
+		h, store, _ := newHandler(t)
+		body := strings.Replace(strings.ReplaceAll(validBody, "%s", ""),
+			`"value": 123456789`, `"value": 123456789, "sensor": `+sensor, 1)
+
+		rec := post(t, h, bearer(), body)
+
+		if rec.Code != http.StatusBadRequest {
+			t.Errorf("sensor %s: status = %d, want 400", sensor, rec.Code)
+		}
+		if len(store.saved) != 0 {
+			t.Errorf("sensor %s: saved %+v, want nothing stored", sensor, store.saved)
+		}
 	}
 }

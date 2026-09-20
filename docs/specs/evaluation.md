@@ -57,8 +57,10 @@ above    enter L when v >  T(L)      leave L when v <= T(L) − 0.2·|T(L)|
 ```
 
 The **margin** is `0.2·|T|`; the value on the far side of it — `T + margin` going up,
-`T − margin` going down — is the level's **clearing value**. Comparisons are made at full
-precision on the stored value, and a value exactly at a clearing value counts as cleared.
+`T − margin` going down — is the level's **clearing value**. Comparisons are made on the
+stored value, to a tolerance of one part in a billion of the threshold's magnitude, so that
+a value sitting exactly on a clearing value counts as cleared however the two were
+computed. The tolerance is far below anything a sensor can tell apart.
 
 **A level with no value is never entered and never held**, so removing `critical` from a
 subject standing in `critical` drops it to whatever `warning` and the value say on the next
@@ -192,9 +194,10 @@ The same subject: `below`, `warning: 10GB`, `critical: 4GB`, so the margins are 
 ### Freezing
 
 Stale values are never re-evaluated: a frozen subject keeps its level and its `since`,
-writes no event, sends no repeat, and is left out of the digest. What freezing withholds is
-judgement of stale values, not a record already written: a message recorded from fresh
-values and never delivered is still owed.
+writes no event and sends no repeat, and its stale reading is not what the digest lists as
+standing. What freezing withholds is judgement of stale values, not a record already
+written: a message recorded from fresh values is still owed, and a transition recorded
+while they were fresh is still part of the day's story.
 
 Age is the tick time minus the measurement's own `ts`, against `stale_after` = 3× the
 interval the node resolves for the series' sensor.
@@ -305,7 +308,8 @@ occurrence, because that is the day it speaks for. On a database that has never 
 | several warnings on several nodes | one message, not one per subject, entries ordered by node name, then metric id, then labels |
 | a frozen subject whose move into `warning` was recorded while its values were fresh | listed as the transition it was: freezing withholds judgement, not a record already written |
 | a frozen subject standing in `warning` with no transition inside the window | left out of the standing list: its reading is stale |
-| the digest hour on a hub where no subject is configured at all | one message saying that nothing here is being judged and where to set a threshold, every day until something is: a hub watching nothing must not look like a quiet one |
+| the digest hour on a hub where a node reports and no subject is configured at all | one message saying that nothing here is being judged and where to set a threshold, and how many series are waiting for one, every day until something is: a hub watching nothing must not look like a quiet one |
+| the same on a hub no node has reported to yet | nothing: there is no series to watch, and an installation half done is not an incident |
 | a digest that is sent on a hub where some series have no threshold | a closing line naming how many, so a volume nobody configured is visible |
 | the digest notifier returns an error | `last_digest_at` is not advanced; the next tick sends the same window again |
 | the hub restarts between a warning transition and `digest.at` | the transition is still in the digest: it was recorded when it happened |

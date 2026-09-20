@@ -14,7 +14,7 @@ func (s stuck) Notify(context.Context, Message) error {
 	return nil
 }
 
-func (s stuck) Digest(context.Context, time.Time, []Message) error {
+func (s stuck) Digest(context.Context, time.Time, []Message, int) error {
 	<-s.released
 	return nil
 }
@@ -33,7 +33,7 @@ func TestASendThatNeverAnswersIsAbandoned(t *testing.T) {
 	evaluator := New(Options{Notifier: channel, Now: time.Now})
 	for name, deliver := range map[string]func(context.Context) error{
 		"a message": func(ctx context.Context) error { return channel.Notify(ctx, Message{}) },
-		"a digest":  func(ctx context.Context) error { return channel.Digest(ctx, time.Time{}, nil) },
+		"a digest":  func(ctx context.Context) error { return channel.Digest(ctx, time.Time{}, nil, 0) },
 	} {
 		if err := evaluator.send(context.Background(), deliver); err == nil {
 			t.Fatalf("%s the channel never answered was counted as a delivery", name)

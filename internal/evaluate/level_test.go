@@ -2,163 +2,230 @@ package evaluate_test
 
 import (
 	"testing"
+	"time"
 
 	"github.com/pravbeseda/monitor/internal/evaluate"
+	"github.com/pravbeseda/monitor/internal/storage"
 )
 
 // Sizes are decimal, the way the specs and the interface write them.
 func gb(n float64) float64 { return n * 1e9 }
-func tb(n float64) float64 { return n * 1e12 }
 
-func disk(t *testing.T) evaluate.Definition {
-	t.Helper()
-	found, ok := evaluate.Lookup("disk")
-	if !ok {
-		t.Fatal("the hub has no disk rule")
+func num(v float64) *float64 { return &v }
+
+const (
+	node   = "server-b"
+	metric = "disk.free_bytes"
+	sensor = "disk"
+)
+
+var mount = map[string]string{"mount": "/"}
+
+// judged is the target of a node that runs the disk sensor every 15 minutes and is not
+// silent, so nothing in these tables is frozen.
+func judged() []evaluate.Target {
+	return []evaluate.Target{{
+		Node:         node,
+		SilenceAfter: time.Hour,
+		Intervals:    map[string]time.Duration{sensor: 15 * time.Minute},
+	}}
+}
+
+// below is the running example of docs/specs/evaluation.md#levels: warning at 10 GB,
+// critical at 4 GB, low is bad.
+func below() storage.Threshold {
+	return storage.Threshold{
+		Series:    storage.SeriesRef{Node: node, Metric: metric, Labels: mount},
+		Direction: storage.Below,
+		Warning:   num(gb(10)),
+		Critical:  num(gb(4)),
 	}
-	return found
 }
 
-// levelCase is one row of a behaviour table: what the subject was, what the volume
-// reports, and the level that follows.
+func above(warning, critical *float64) storage.Threshold {
+	return storage.Threshold{
+		Series:    storage.SeriesRef{Node: node, Metric: metric, Labels: mount},
+		Direction: storage.Above,
+		Warning:   warning,
+		Critical:  critical,
+	}
+}
+
+// levelCase is one row of a behaviour table: what the subject was, what it is judged by,
+// what it reports, and the level that follows.
 type levelCase struct {
-	name     string
-	previous evaluate.Level
-	free     float64
-	pct      float64
-	want     evaluate.Level
+	name      string
+	previous  evaluate.Level
+	stored    storage.Direction
+	threshold *storage.Threshold
+	value     float64
+	want      evaluate.Level
+	unwatched bool
 }
 
-func run(t *testing.T, rule evaluate.Rule, cases []levelCase) {
+// run builds the one subject each row describes and asserts the level a tick gives it.
+// The level is read through Subjects, because that is what the tick judges by: a row of
+// the table is a statement about a subject, not about a helper.
+func run(t *testing.T, cases []levelCase) {
 	t.Helper()
+	now := time.Date(2026, 9, 20, 12, 0, 0, 0, time.UTC)
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {
-			if got := rule.Level(c.previous, c.free, c.pct); got != c.want {
-				t.Fatalf("Level(%v, %g, %g) = %v, want %v", c.previous, c.free, c.pct, got, c.want)
+			threshold := below()
+			if c.threshold != nil {
+				threshold = *c.threshold
+			}
+			snap := storage.Snapshot{
+				Nodes: []storage.NodeState{{
+					Node:     node,
+					LastSeen: now,
+					Values: []storage.Value{{
+						Metric: metric, Sensor: sensor, Labels: mount, Value: c.value, TS: now,
+					}},
+				}},
+			}
+			if !c.unwatched {
+				snap.Thresholds = []storage.Threshold{threshold}
+			}
+			if c.previous != evaluate.OK || c.stored != "" {
+				direction := c.stored
+				if direction == "" {
+					direction = threshold.Direction
+				}
+				snap.States = []storage.State{{
+					Subject:   storage.Subject{Node: node, Metric: metric, Labels: mount},
+					Level:     c.previous.String(),
+					Direction: string(direction),
+					Since:     now.Add(-time.Hour),
+				}}
+			}
+
+			subjects := evaluate.Subjects(judged(), snap, now)
+			var found *evaluate.Subject
+			for i, subject := range subjects {
+				if subject.Metric == metric {
+					found = &subjects[i]
+				}
+			}
+			if c.unwatched {
+				if found != nil {
+					t.Fatalf("an unwatched series is a subject at %v, want none", found.Level)
+				}
+				return
+			}
+			if found == nil {
+				t.Fatal("the watched series is no subject")
+			}
+			if found.Level != c.want {
+				t.Fatalf("level = %v, want %v", found.Level, c.want)
 			}
 		})
 	}
 }
 
-// spec: evaluation.md#levels — a 128 GB volume unless the row says otherwise.
+// spec: evaluation.md#levels
 func TestLevels(t *testing.T) {
-	run(t, disk(t).Default, []levelCase{
-		{"neither arm holds", evaluate.OK, gb(40), 31.25, evaluate.OK},
-		{"the floor comparison is strict", evaluate.OK, gb(10), 25.00, evaluate.OK},
-		{"band under the ratio and the ceiling", evaluate.OK, gb(19), 14.84, evaluate.Warning},
-		{"the ratio comparison is strict", evaluate.OK, gb(19.2), 15.00, evaluate.OK},
-		{"floor whatever the percentage", evaluate.OK, gb(9), 45.00, evaluate.Warning},
-		{"band on a large volume", evaluate.OK, gb(99), 1.24, evaluate.Warning},
-		{"the ceiling guards the band", evaluate.OK, tb(1.1), 13.75, evaluate.OK},
-		{"the critical band alone", evaluate.OK, gb(5), 3.91, evaluate.Critical},
-		{"the critical floor is strict", evaluate.OK, gb(4), 10.00, evaluate.Warning},
-		{"above the critical ceiling", evaluate.OK, gb(45), 5.00, evaluate.Warning},
-		{"the critical ceiling comparison is strict", evaluate.OK, gb(40), 4.00, evaluate.Warning},
-		{"both critical arms hold", evaluate.OK, gb(3), 2.34, evaluate.Critical},
-		{"the more severe level wins", evaluate.Warning, gb(3), 2.34, evaluate.Critical},
-		{"a full volume", evaluate.OK, 0, 0, evaluate.Critical},
+	run(t, []levelCase{
+		{name: "neither comparison holds", value: gb(40), want: evaluate.OK},
+		{name: "entry is strict", value: gb(10), want: evaluate.OK},
+		{name: "below warning, above critical", value: gb(9.99), want: evaluate.Warning},
+		{name: "the critical comparison is strict too", value: gb(4), want: evaluate.Warning},
+		{name: "below the critical value", value: gb(3), want: evaluate.Critical},
+		{name: "the more severe level is entered at once", previous: evaluate.Warning, value: gb(3), want: evaluate.Critical},
+		{name: "an empty volume is a value", value: 0, want: evaluate.Critical},
+		{
+			name: "a level with no value is never entered", value: gb(9),
+			threshold: withValues(storage.Below, nil, num(gb(4))), want: evaluate.OK,
+		},
+		{
+			name: "with no critical value, warning is the worst it reaches", value: gb(1),
+			threshold: withValues(storage.Below, num(gb(10)), nil), want: evaluate.Warning,
+		},
+		{name: "nothing configured, nothing judged", value: gb(1), unwatched: true},
+		{name: "judged upwards, below both", threshold: ptr(above(num(4), num(8))), value: 3.5, want: evaluate.OK},
+		{name: "entry is strict upwards as well", threshold: ptr(above(num(4), num(8))), value: 4, want: evaluate.OK},
+		{name: "past the warning value", threshold: ptr(above(num(4), num(8))), value: 4.1, want: evaluate.Warning},
+		{name: "exactly the critical value, upwards", threshold: ptr(above(num(4), num(8))), value: 8, want: evaluate.Warning},
+		{name: "past the critical value", threshold: ptr(above(num(4), num(8))), value: 8.2, want: evaluate.Critical},
 	})
 }
 
-// spec: evaluation.md#hysteresis — recovery is the negated entry rule with a 20% margin on
-// every comparison, never a per-condition clearance.
+// spec: evaluation.md#hysteresis — the clearing values are 12 GB and 4.8 GB.
 func TestHysteresis(t *testing.T) {
-	run(t, disk(t).Default, []levelCase{
-		{"below the floor margin", evaluate.Warning, gb(11), 27.50, evaluate.Warning},
-		{"clears the floor with its margin", evaluate.Warning, gb(12), 30.00, evaluate.OK},
-		{"below the ratio margin", evaluate.Warning, gb(20), 15.63, evaluate.Warning},
-		{"one step below the ratio margin", evaluate.Warning, gb(23), 17.97, evaluate.Warning},
-		{"exactly the ratio margin", evaluate.Warning, gb(23.04), 18.00, evaluate.OK},
-		{"clears both floor and ratio margins", evaluate.Warning, gb(24), 18.75, evaluate.OK},
-		{"the rule re-enters at that size", evaluate.Warning, gb(12), 9.38, evaluate.Warning},
-		{"the ceiling comparison clears first", evaluate.Warning, gb(120), 1.50, evaluate.OK},
-		{"only the critical floor margin holds it", evaluate.Critical, gb(4.5), 10.00, evaluate.Critical},
-		{"hysteresis never raises a level", evaluate.Warning, gb(4.5), 10.00, evaluate.Warning},
-		{"clears critical, still under the warning floor", evaluate.Critical, gb(6), 30.00, evaluate.Warning},
-		{"clears both levels in one tick", evaluate.Critical, gb(24), 18.75, evaluate.OK},
+	run(t, []levelCase{
+		{name: "past entry, below the clearing value", previous: evaluate.Warning, value: gb(11), want: evaluate.Warning},
+		{name: "exactly the clearing value", previous: evaluate.Warning, value: gb(12), want: evaluate.OK},
+		{name: "entry still holds", previous: evaluate.Warning, value: gb(9), want: evaluate.Warning},
+		{name: "hysteresis never creates a level", previous: evaluate.OK, value: gb(11), want: evaluate.OK},
+		{name: "hysteresis never raises one", previous: evaluate.Warning, value: gb(4.5), want: evaluate.Warning},
+		{name: "critical is held inside its margin", previous: evaluate.Critical, value: gb(4.5), want: evaluate.Critical},
+		{name: "exactly the critical value holds", previous: evaluate.Critical, value: gb(4), want: evaluate.Critical},
+		{name: "clears critical, still under warning", previous: evaluate.Critical, value: gb(4.9), want: evaluate.Warning},
+		{name: "a level steps down one band at a time", previous: evaluate.Critical, value: gb(11), want: evaluate.Warning},
+		{name: "clears both levels in one tick", previous: evaluate.Critical, value: gb(12), want: evaluate.OK},
+		{
+			name: "above the clearing value, upwards", previous: evaluate.Warning,
+			threshold: ptr(above(num(4), nil)), value: 3.5, want: evaluate.Warning,
+		},
+		{
+			name: "exactly the clearing value, upwards", previous: evaluate.Warning,
+			threshold: ptr(above(num(4), nil)), value: 3.2, want: evaluate.OK,
+		},
+		{
+			name: "critical held inside its margin, upwards", previous: evaluate.Critical,
+			threshold: ptr(above(num(4), num(8))), value: 7, want: evaluate.Critical,
+		},
+		{
+			name: "the margin is 20% of the magnitude", previous: evaluate.Warning,
+			threshold: withValues(storage.Below, num(-100), nil), value: -90, want: evaluate.Warning,
+		},
+		{
+			name: "a negative threshold clears upwards", previous: evaluate.Warning,
+			threshold: withValues(storage.Below, num(-100), nil), value: -80, want: evaluate.OK,
+		},
+		{
+			name: "an above threshold clears downwards", previous: evaluate.Warning,
+			threshold: ptr(above(num(-100), nil)), value: -120, want: evaluate.OK,
+		},
+		{
+			name: "a zero threshold alerts below zero only", previous: evaluate.OK,
+			threshold: withValues(storage.Below, num(0), nil), value: 0, want: evaluate.OK,
+		},
+		{
+			name: "a margin of zero clears at the threshold", previous: evaluate.Warning,
+			threshold: withValues(storage.Below, num(0), nil), value: 0, want: evaluate.OK,
+		},
+		{
+			name: "critical cannot be held without a value", previous: evaluate.Critical,
+			threshold: withValues(storage.Below, num(gb(10)), nil), value: gb(11), want: evaluate.Warning,
+		},
+		{
+			name: "warning cannot be held without a value", previous: evaluate.Warning,
+			threshold: withValues(storage.Below, nil, num(gb(4))), value: gb(9), want: evaluate.OK,
+		},
+		{
+			name:   "a flipped direction discards the level it held",
+			stored: storage.Below, previous: evaluate.Warning,
+			threshold: ptr(above(num(gb(10)), nil)), value: gb(9), want: evaluate.OK,
+		},
+		{
+			name: "a held level clears against the new clearing value", previous: evaluate.Warning,
+			threshold: withValues(storage.Below, num(gb(5)), nil), value: gb(9), want: evaluate.OK,
+		},
+		{
+			name: "an edited threshold re-enters outright", previous: evaluate.Warning,
+			threshold: withValues(storage.Below, num(gb(20)), nil), value: gb(9), want: evaluate.Warning,
+		},
 	})
 }
 
-// spec: evaluation.md#backup-volumes — a 2 TB volume declared role: backup, which drops the
-// band and keeps absolute headroom.
-func TestBackupVolumes(t *testing.T) {
-	run(t, disk(t).Backup, []levelCase{
-		{"under the warning floor", evaluate.OK, gb(40), 2.00, evaluate.Warning},
-		{"below the warning margin", evaluate.Warning, gb(55), 2.75, evaluate.Warning},
-		{"clears the warning floor with its margin", evaluate.Warning, gb(60), 3.00, evaluate.OK},
-		{"the default rule would warn here", evaluate.OK, gb(70), 3.50, evaluate.OK},
-		{"under the critical floor", evaluate.OK, gb(9), 0.45, evaluate.Critical},
-		{"below the critical margin", evaluate.Critical, gb(11), 0.55, evaluate.Critical},
-		{"clears the critical margin", evaluate.Critical, gb(12), 0.60, evaluate.Warning},
-	})
-}
-
-// A margin lands exactly on a two-decimal percentage whenever the ratio is a multiple of
-// 0.05, and such a value has to count as cleared however the product is computed.
-func TestRatioMarginIsExactOnTwoDecimals(t *testing.T) {
-	rule := evaluate.Rule{Warning: evaluate.Threshold{Floor: gb(10), Ratio: 6.7, Ceiling: gb(100)}}
-	if got := rule.Level(evaluate.Warning, gb(50), 8.04); got != evaluate.OK {
-		t.Fatalf("8.04%% is exactly 20%% above 6.7%%, so the level is %v, want ok", got)
+func withValues(direction storage.Direction, warning, critical *float64) *storage.Threshold {
+	return &storage.Threshold{
+		Series:    storage.SeriesRef{Node: node, Metric: metric, Labels: mount},
+		Direction: direction,
+		Warning:   warning,
+		Critical:  critical,
 	}
 }
 
-// A band needs both halves; the hub refuses a configuration carrying one of them
-// (spec: evaluation.md#startup-validation), and the engine ignores what it cannot read as
-// a band rather than half-applying it.
-func TestHalfABandIsNoBand(t *testing.T) {
-	rule := evaluate.Rule{Warning: evaluate.Threshold{Floor: gb(10), Ratio: 15}}
-	if got := rule.Level(evaluate.OK, gb(19), 14.84); got != evaluate.OK {
-		t.Fatalf("a ratio with no ceiling gave %v, want ok: the floor alone decides", got)
-	}
-}
-
-// A level read back from storage may have been written by another build, so an unknown
-// name is refused rather than guessed at.
-func TestParseLevel(t *testing.T) {
-	for _, want := range []evaluate.Level{evaluate.OK, evaluate.Warning, evaluate.Critical} {
-		if got, ok := evaluate.ParseLevel(want.String()); !ok || got != want {
-			t.Fatalf("ParseLevel(%q) = %v, %v; want %v, true", want.String(), got, ok, want)
-		}
-	}
-	for _, text := range []string{"", "unknown", "OK", "warn"} {
-		if got, ok := evaluate.ParseLevel(text); ok {
-			t.Fatalf("ParseLevel(%q) = %v, true; want it refused", text, got)
-		}
-	}
-}
-
-// Storage keeps a level as its name, so the names are part of the stored form.
-func TestLevelNames(t *testing.T) {
-	for level, want := range map[evaluate.Level]string{
-		evaluate.OK: "ok", evaluate.Warning: "warning", evaluate.Critical: "critical",
-		evaluate.Level(9): "unknown",
-	} {
-		if got := level.String(); got != want {
-			t.Fatalf("Level(%d).String() = %q, want %q", int(level), got, want)
-		}
-	}
-}
-
-// A configured ratio carries whatever the file wrote, so its margin is not quantised to the
-// two decimals the sensor reports: 20% above 6.755 is 8.106, and 8.11% has cleared it.
-func TestARatioFinerThanTwoDecimalsKeepsItsMargin(t *testing.T) {
-	rule := evaluate.Rule{Warning: evaluate.Threshold{Floor: gb(10), Ratio: 6.755, Ceiling: gb(100)}}
-	if got := rule.Level(evaluate.Warning, gb(50), 8.11); got != evaluate.OK {
-		t.Fatalf("8.11%% is above the 8.106%% margin of 6.755%%, so the level is %v, want ok", got)
-	}
-	if got := rule.Level(evaluate.Warning, gb(50), 8.10); got != evaluate.Warning {
-		t.Fatalf("8.10%% is below that margin, so the level is %v, want warning", got)
-	}
-}
-
-// The margin of a ratio finer than a sensor step is compared at full precision in both
-// directions: 20% above 6.759 is 8.1108, which 8.11% has not reached.
-func TestARatioBetweenSensorStepsIsNotRoundedIntoTheMargin(t *testing.T) {
-	rule := evaluate.Rule{Warning: evaluate.Threshold{Floor: gb(10), Ratio: 6.759, Ceiling: gb(100)}}
-	if got := rule.Level(evaluate.Warning, gb(50), 8.11); got != evaluate.Warning {
-		t.Fatalf("8.11%% is below the 8.1108%% margin of 6.759%%, so the level is %v, want warning", got)
-	}
-	if got := rule.Level(evaluate.Warning, gb(50), 8.12); got != evaluate.OK {
-		t.Fatalf("8.12%% clears that margin, so the level is %v, want ok", got)
-	}
-}
+func ptr(th storage.Threshold) *storage.Threshold { return &th }

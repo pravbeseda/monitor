@@ -21,9 +21,11 @@ func at() time.Time { return collected }
 
 var errFailed = errors.New("database is locked")
 
-// seriesPoints is one stored series as a test writes it down.
+// seriesPoints is one stored series as a test writes it down. Sensor is what its newest
+// point named, and what a node resolves an interval — and a staleness bound — against.
 type seriesPoints struct {
 	storage.SeriesRef
+	Sensor string
 	Points []storage.Point
 }
 
@@ -33,12 +35,18 @@ type served struct {
 	series []seriesPoints
 }
 
-func (h served) Series(context.Context, storage.Selection) ([]storage.SeriesRef, error) {
-	refs := make([]storage.SeriesRef, 0, len(h.series))
+func (h served) Series(_ context.Context, sel storage.Selection) ([]storage.SeriesNewest, error) {
+	out := make([]storage.SeriesNewest, 0, len(h.series))
 	for _, series := range h.series {
-		refs = append(refs, series.SeriesRef)
+		if sel.Node != "" && series.Node != sel.Node {
+			continue
+		}
+		if sel.Metric != "" && series.Metric != sel.Metric {
+			continue
+		}
+		out = append(out, storage.SeriesNewest{SeriesRef: series.SeriesRef, Sensor: series.Sensor})
 	}
-	return refs, h.err
+	return out, h.err
 }
 
 func (h served) Newest(_ context.Context, sel storage.Selection, from time.Time) ([]storage.SeriesNewest, error) {
@@ -56,7 +64,7 @@ func (h served) Newest(_ context.Context, sel storage.Selection, from time.Time)
 		if newest.IsZero() {
 			continue
 		}
-		out = append(out, storage.SeriesNewest{SeriesRef: series.SeriesRef, Newest: newest})
+		out = append(out, storage.SeriesNewest{SeriesRef: series.SeriesRef, Newest: newest, Sensor: series.Sensor})
 	}
 	return out, h.err
 }
@@ -86,6 +94,7 @@ func volume() seriesPoints {
 			Metric: "disk.free_pct",
 			Labels: map[string]string{"mount": "/", "fs": "ext4"},
 		},
+		Sensor: "disk",
 		Points: []storage.Point{
 			{TS: collected.Add(-time.Hour), Value: 34.2},
 			{TS: collected.Add(-30 * time.Minute), Value: 34.1},
@@ -270,7 +279,7 @@ func TestHistoryAPICarriesTheWindowAndTheInterval(t *testing.T) {
 // spec: history.md — a metric no rule declares carries no interval.
 func TestHistoryAPILeavesAnUndeclaredMetricWithoutAnInterval(t *testing.T) {
 	other := volume()
-	other.Metric = "coffee.level"
+	other.Metric, other.Sensor = "coffee.level", ""
 	recorder := get(t, served{series: []seriesPoints{other}}, "/api/v1/history?metric=coffee.level")
 
 	var body struct {

@@ -13,6 +13,8 @@
     th, td { text-align: left; padding: 0.3rem 0.6rem; border-bottom: 1px solid var(--rule); }
     th { font-weight: 600; font-size: 0.85rem; color: var(--muted); }
     small.stale { color: var(--warn); }
+    small.unwatched, a.set { color: var(--muted); font-size: 0.85rem; }
+    p.notice { color: var(--warn); }
     .level-ok { color: var(--accent); }
     .level-warning { color: var(--warn); }
     .level-critical { color: var(--bad); font-weight: 600; }
@@ -23,10 +25,11 @@
   {{ if not .Nodes }}
     <p>{{ .Empty }}</p>
   {{ end }}
+  {{ with .NothingWatched }}<p class="notice">{{ . }}</p>{{ end }}
   {{ range .Nodes }}
     <section>
       <h2>{{ .Name }}{{ with .Version }} <small>{{ . }}</small>{{ end }}{{ with .Level }} <span class="{{ .Class }}">{{ .Word }}</span>{{ end }}</h2>
-      <p class="meta">{{ $.LastSeenLabel }}: {{ .LastSeen }}{{ with .Silent }} <small class="level-critical">{{ . }}</small>{{ end }}</p>
+      <p class="meta">{{ $.LastSeenLabel }}: {{ .LastSeen }}{{ with .Silent }} <small class="level-critical">{{ . }}</small>{{ end }}{{ with .Unwatched }} <small class="unwatched">{{ . }}</small>{{ end }}</p>
       {{ if .Rows }}
         <table>
           <thead>
@@ -43,8 +46,8 @@
               <tr>
                 <td>{{ .Metric }}</td>
                 <td>{{ .Volume }}</td>
-                <td>{{ range $i, $_ := .Values }}{{ if $i }} · {{ end }}<a href="{{ .History }}" title="{{ .Metric }}">{{ .Value }}</a>{{ end }}</td>
-                <td>{{ with .Level }}<span class="{{ .Class }}">{{ .Word }}</span>{{ else }}—{{ end }}</td>
+                <td><a href="{{ .History }}">{{ .Value }}</a></td>
+                <td>{{ with .Level }}<span class="{{ .Class }}">{{ .Word }}</span>{{ else }}—{{ end }} <a class="set" href="{{ .Thresholds }}">{{ .SetLabel }}</a></td>
                 <td>{{ .Collected }}{{ with .Stale }} <small class="stale">{{ . }}</small>{{ end }}</td>
               </tr>
             {{ end }}

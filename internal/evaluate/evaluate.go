@@ -1,63 +1,15 @@
-// Package evaluate turns stored measurements into meaning: every subject gets a level, a
-// change of level becomes an event, and events become notifications
+// Package evaluate turns stored measurements into meaning: every watched subject gets a
+// level, a change of level becomes an event, and events become notifications
 // (docs/specs/evaluation.md).
 package evaluate
 
-import "sort"
+// SilenceMetric is the metric of the subject that carries a node's own silence. Nothing
+// is stored for it and nothing can be: it has no threshold, only the window its class
+// resolves to, and its input is hub receipt time, which is always fresh (ADR 0032).
+const SilenceMetric = "silence"
 
-// Definition is what a rule reads and what it defaults to. Naming the sensor is what makes
-// staleness computable: the metric ids alone do not identify one.
-type Definition struct {
-	// Sensor is the sensor whose interval a subject of this rule ages against.
-	Sensor string
-	// Free and Pct are the metric ids of the absolute and the proportional series a rule
-	// reads together: the threshold model of ADR 0012 needs both.
-	Free string
-	Pct  string
-	// Default is the product default of the rule; Backup is the default for a volume
-	// declared role: backup, which keeps headroom and drops percentages.
-	Default Rule
-	Backup  Rule
-}
-
-// definitions holds every rule a configuration file may carry. `silence` is not here: it
-// has no thresholds and nothing to configure, only a window that belongs to a node class.
-var definitions = map[string]Definition{
-	"disk": {
-		Sensor:  "disk",
-		Free:    "disk.free_bytes",
-		Pct:     "disk.free_pct",
-		Default: defaultDiskRule(),
-		Backup:  defaultBackupRule(),
-	},
-}
-
-// Names lists the rules the hub implements, in order. The hub's configuration resolves a
-// rule for each of them, whether or not the file mentions any.
-func Names() []string {
-	names := make([]string, 0, len(definitions))
-	for name := range definitions {
-		names = append(names, name)
-	}
-	sort.Strings(names)
-	return names
-}
-
-// Lookup returns the definition of one rule, and reports whether the hub implements it at
-// all: a configuration naming a rule nobody reads is a startup error.
-func Lookup(name string) (Definition, bool) {
-	found, ok := definitions[name]
-	return found, ok
-}
-
-// SensorOf names the sensor a metric comes from, so a reader outside evaluation can age a
-// series by the interval its subjects age by (docs/specs/history.md#gaps). It reports
-// false for a metric no rule declares.
-func SensorOf(metric string) (string, bool) {
-	for _, definition := range definitions {
-		if definition.Free == metric || definition.Pct == metric {
-			return definition.Sensor, true
-		}
-	}
-	return "", false
-}
+// StaleFactor turns a sensor's interval into the age at which its values stop being
+// evidence: three collections missed is no longer a hiccup. It is exported because a
+// history chart breaks its line at the same age (docs/specs/history.md#gaps), and two
+// copies of the number would let the two drift apart.
+const StaleFactor = 3

@@ -41,8 +41,8 @@ func (t Telegram) Notify(ctx context.Context, m evaluate.Message) error {
 }
 
 // Digest sends the day's summary as one message, not one per subject.
-func (t Telegram) Digest(ctx context.Context, _ time.Time, entries []evaluate.Message) error {
-	return t.send(ctx, RenderDigest(i18n.For(t.Locale), entries))
+func (t Telegram) Digest(ctx context.Context, _ time.Time, entries []evaluate.Message, unwatched int) error {
+	return t.send(ctx, RenderDigest(i18n.For(t.Locale), entries, unwatched))
 }
 
 func (t Telegram) send(ctx context.Context, text string) error {

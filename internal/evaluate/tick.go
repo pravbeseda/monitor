@@ -89,6 +89,10 @@ func (e *Evaluator) Tick(ctx context.Context) error {
 	}
 
 	subjects := Subjects(e.targets, snapshot, now)
+	watch := e.counted(subjects, snapshot)
+	if err := e.forget(ctx, subjects, snapshot); err != nil {
+		return err
+	}
 	for _, subject := range subjects {
 		// A hub asked to stop evaluates no further subject; what it already recorded
 		// stays recorded, and the next start picks the rest up.
@@ -97,7 +101,7 @@ func (e *Evaluator) Tick(ctx context.Context) error {
 		}
 		key, err := subject.Key()
 		if err != nil {
-			slog.Error("identify a subject", "node", subject.Node, "rule", subject.Rule, "error", err)
+			slog.Error("identify a subject", "node", subject.Node, "metric", subject.Metric, "error", err)
 			continue
 		}
 		// Stale values judge nothing, so a frozen subject writes no state and no event —
@@ -118,7 +122,69 @@ func (e *Evaluator) Tick(ctx context.Context) error {
 		e.deliver(ctx, subject, event, recorded, now)
 	}
 	// The digest runs last, so a warning this pass recorded is in the window it closes.
-	return e.digest(ctx, subjects, since, now)
+	return e.digest(ctx, subjects, watch, since, now)
+}
+
+// named is the set of nodes the configuration file lists, which is what a tick acts on
+// at all: a node it does not name is neither judged nor forgotten.
+func (e *Evaluator) named() map[string]struct{} {
+	out := make(map[string]struct{}, len(e.targets))
+	for _, target := range e.targets {
+		out[target.Node] = struct{}{}
+	}
+	return out
+}
+
+// counted says how much of what the nodes report is judged at all. A node's silence is
+// judged without a threshold, so it counts as neither.
+func (e *Evaluator) counted(subjects []Subject, snap storage.Snapshot) watching {
+	named := e.named()
+	out := watching{}
+	for _, node := range snap.Nodes {
+		if _, ours := named[node.Node]; !ours {
+			continue
+		}
+		out.reporting = true
+		out.unwatched += len(node.Values)
+	}
+	for _, subject := range subjects {
+		if subject.Metric == SilenceMetric {
+			continue
+		}
+		out.watched++
+		out.unwatched--
+	}
+	return out
+}
+
+// forget drops the level of a subject nothing watches any more. Clearing a threshold
+// withdraws the question rather than answering it, so no event is written and no recovery
+// is announced (docs/specs/evaluation.md#configuration-changes). A node the file no longer
+// names is left alone: its levels are not evaluated, and not forgotten either.
+func (e *Evaluator) forget(ctx context.Context, subjects []Subject, snap storage.Snapshot) error {
+	judged := make(map[string]struct{}, len(subjects))
+	for _, subject := range subjects {
+		if key, err := subject.Key(); err == nil {
+			judged[key] = struct{}{}
+		}
+	}
+	listed := e.named()
+	for _, state := range snap.States {
+		if _, ours := listed[state.Node]; !ours {
+			continue
+		}
+		key, err := state.Key()
+		if err != nil {
+			continue
+		}
+		if _, still := judged[key]; still {
+			continue
+		}
+		if err := e.store.DeleteState(ctx, state.Subject); err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
 // deliver sends what the subject is owed, if anything, and records the delivery only once
@@ -133,12 +199,12 @@ func (e *Evaluator) deliver(ctx context.Context, subject Subject, newest storage
 		return e.notifier.Notify(ctx, message)
 	}); err != nil {
 		slog.Error("deliver a notification",
-			"node", subject.Node, "rule", subject.Rule, "error", err)
+			"node", subject.Node, "metric", subject.Metric, "error", err)
 		return
 	}
 	if err := e.store.RecordNotified(ctx, subject.Subject, now); err != nil {
 		slog.Error("record a delivery",
-			"node", subject.Node, "rule", subject.Rule, "error", err)
+			"node", subject.Node, "metric", subject.Metric, "error", err)
 	}
 }
 
@@ -170,9 +236,10 @@ func (e *Evaluator) record(ctx context.Context, subject Subject, now time.Time) 
 			return nil, nil
 		}
 		return nil, e.store.SaveState(ctx, storage.State{
-			Subject: subject.Subject,
-			Level:   subject.Level.String(),
-			Since:   subject.Since,
+			Subject:   subject.Subject,
+			Level:     subject.Level.String(),
+			Direction: string(subject.Direction),
+			Since:     subject.Since,
 		})
 	}
 	change := storage.Transition{
@@ -180,6 +247,7 @@ func (e *Evaluator) record(ctx context.Context, subject Subject, now time.Time) 
 		At:        now,
 		From:      subject.Previous.String(),
 		To:        subject.Level.String(),
+		Direction: string(subject.Direction),
 		FromSince: subject.Since,
 		Readings:  subject.Readings,
 	}

@@ -107,7 +107,7 @@ One row = one test. Anchors: `spec: hub-config.md#<heading>`.
 | file missing or unreadable | startup error naming the path |
 | not valid YAML | startup error naming the path and the position |
 | a key the hub does not know, at any level | startup error naming the key |
-| `rules` or `volumes`, at any level | the hub starts; one warning per key names it and says thresholds are now set on the page, and no number inside it is used ([thresholds.md](thresholds.md)) |
+| `rules` at any level, or a node's `volumes` — the two keys thresholds used to live in | the hub starts; one warning per key names it and says thresholds are now set on the page, and no number inside it is used ([thresholds.md](thresholds.md)) |
 | `nodes` missing or empty | startup error: a hub with no nodes serves nobody |
 | a node without `token_env` | startup error naming the node |
 | `token_env` names a variable that is unset or empty | startup error naming the variable |

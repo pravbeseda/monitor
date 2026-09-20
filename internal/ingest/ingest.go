@@ -170,6 +170,12 @@ func validateMeasurement(m api.Measurement, sent time.Time) (storage.Measurement
 	if m.Value == nil || math.IsNaN(*m.Value) || math.IsInf(*m.Value, 0) {
 		return storage.Measurement{}, fmt.Errorf("metric %s: value is required and must be finite", m.Metric)
 	}
+	var sensor string
+	if m.Sensor != nil {
+		if sensor = *m.Sensor; !api.MetricID.MatchString(sensor) {
+			return storage.Measurement{}, fmt.Errorf("metric %s: sensor %q is not an id of [a-z0-9_.]", m.Metric, sensor)
+		}
+	}
 
 	collected := sent
 	if m.TS != "" {
@@ -178,7 +184,7 @@ func validateMeasurement(m api.Measurement, sent time.Time) (storage.Measurement
 			return storage.Measurement{}, err
 		}
 	}
-	return storage.Measurement{Metric: m.Metric, Labels: m.Labels, Value: *m.Value, TS: collected}, nil
+	return storage.Measurement{Metric: m.Metric, Sensor: sensor, Labels: m.Labels, Value: *m.Value, TS: collected}, nil
 }
 
 func timestamp(key, value string) (time.Time, error) {

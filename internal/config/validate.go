@@ -5,8 +5,6 @@ import (
 	"regexp"
 
 	"gopkg.in/yaml.v3"
-
-	"github.com/pravbeseda/monitor/internal/evaluate"
 )
 
 // validate checks the whole file rather than the part some node happens to reference: a
@@ -21,10 +19,6 @@ func validate(f file) error {
 	if err := validateAgentTarget("", f.AgentTarget); err != nil {
 		return err
 	}
-	if err := validateRuleLayer("", f.Rules); err != nil {
-		return err
-	}
-
 	for _, name := range classNames(f) {
 		if err := validateClass(f, name); err != nil {
 			return err
@@ -38,12 +32,6 @@ func validate(f file) error {
 			return err
 		}
 		if err := validateAgentTarget(where, node.AgentTarget); err != nil {
-			return err
-		}
-		if err := validateRuleLayer(where, node.Rules); err != nil {
-			return err
-		}
-		if err := validateVolumes(where, node.Volumes); err != nil {
 			return err
 		}
 	}
@@ -85,11 +73,7 @@ func validateClass(f file, name string) error {
 		return fmt.Errorf("%s%w", where, err)
 	}
 
-	// A class nobody uses yet is checked as written, so a threshold typo surfaces at
-	// startup rather than on the day the class is wired to a node. Only what the class says
-	// on its own terms is judged here: whether critical is stricter than warning depends on
-	// layers above, so that check waits for a resolved node, like the base tick above.
-	return validateRuleLayer(where, custom.Rules)
+	return nil
 }
 
 // classNames is every class the hub knows: the compiled-in ones and the file's own.
@@ -122,109 +106,6 @@ func validateLayer(where, baseTick string, filesystems []string, sensors map[str
 				return err
 			}
 		}
-	}
-	return nil
-}
-
-// validateRuleLayer checks what a layer says about thresholds on its own terms: the rules
-// it names, the shape of a backup branch, and that every size and ratio it writes can be
-// read at all.
-func validateRuleLayer(where string, rules map[string]fileRule) error {
-	for _, name := range sorted(rules) {
-		if _, known := evaluate.Lookup(name); !known {
-			return fmt.Errorf("%srules.%s: no rule of that name is implemented", where, name)
-		}
-		declared := rules[name]
-		key := fmt.Sprintf("%srules.%s", where, name)
-		if err := validateThresholdText(key+".warning", declared.Warning); err != nil {
-			return err
-		}
-		if err := validateThresholdText(key+".critical", declared.Critical); err != nil {
-			return err
-		}
-		if declared.Backup == nil {
-			continue
-		}
-		for _, level := range levelsOf(*declared.Backup) {
-			if err := refuseBand(key+".backup."+level.name, level.threshold); err != nil {
-				return err
-			}
-			if err := validateThresholdText(key+".backup."+level.name, level.threshold); err != nil {
-				return err
-			}
-		}
-	}
-	return nil
-}
-
-// validateVolumes judges what a node says about single volumes. A volume carries its role,
-// so it writes thresholds directly, and a volume that is a backup writes no band: it is
-// the very volume percentages say nothing about.
-func validateVolumes(where string, volumes map[string]fileVolume) error {
-	for _, mount := range sorted(volumes) {
-		declared := volumes[mount]
-		volumeWhere := fmt.Sprintf("%svolume %q: ", where, mount)
-		if declared.Role != "" && declared.Role != roleBackup {
-			return fmt.Errorf("%srole %q is unknown; the only role is %s", volumeWhere, declared.Role, roleBackup)
-		}
-		if err := validateRuleLayer(volumeWhere, declared.Rules); err != nil {
-			return err
-		}
-		for _, name := range sorted(declared.Rules) {
-			key := fmt.Sprintf("%srules.%s", volumeWhere, name)
-			if declared.Rules[name].Backup != nil {
-				return fmt.Errorf("%s: a volume carries its role, so it writes thresholds directly", key)
-			}
-			if declared.Role != roleBackup {
-				continue
-			}
-			for _, level := range levelsOf(fileBackup{declared.Rules[name].Warning, declared.Rules[name].Critical}) {
-				if err := refuseBand(key+"."+level.name, level.threshold); err != nil {
-					return err
-				}
-			}
-		}
-	}
-	return nil
-}
-
-// levelsOf names the two levels of a rule in a fixed order, so an error about a pair of
-// them does not depend on map iteration.
-func levelsOf(rule fileBackup) []struct {
-	name      string
-	threshold fileThreshold
-} {
-	return []struct {
-		name      string
-		threshold fileThreshold
-	}{
-		{"warning", rule.Warning},
-		{"critical", rule.Critical},
-	}
-}
-
-// validateThresholdText reads every value a layer writes, so that a size or a ratio nobody
-// can parse is named here rather than surfacing as a merged rule two layers later.
-func validateThresholdText(where string, declared fileThreshold) error {
-	if declared.Floor != "" {
-		if _, err := sizeValue(where+".floor", declared.Floor); err != nil {
-			return err
-		}
-	}
-	if declared.Ceiling != "" {
-		if _, err := sizeValue(where+".ceiling", declared.Ceiling); err != nil {
-			return err
-		}
-	}
-	if declared.Ratio != nil {
-		return checkRatio(where+".ratio", *declared.Ratio)
-	}
-	return nil
-}
-
-func refuseBand(where string, declared fileThreshold) error {
-	if declared.Ratio != nil || declared.Ceiling != "" {
-		return fmt.Errorf("%s: a backup rule is a floor, so it takes no ratio and no ceiling", where)
 	}
 	return nil
 }

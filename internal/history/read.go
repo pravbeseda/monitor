@@ -12,14 +12,14 @@ import (
 // a read holds its answer rather than its window: a year of a busy metric is millions of
 // stored points and at most 1001 returned ones.
 type Source interface {
-	Series(ctx context.Context, sel storage.Selection) ([]storage.SeriesRef, error)
+	Series(ctx context.Context, sel storage.Selection) ([]storage.SeriesNewest, error)
 	Newest(ctx context.Context, sel storage.Selection, from time.Time) ([]storage.SeriesNewest, error)
 	Points(ctx context.Context, ref storage.SeriesRef, from, to time.Time) iter.Seq2[storage.Point, error]
 }
 
-// Interval reports how often a node is expected to report a metric, and zero when the
-// metric belongs to no rule.
-type Interval func(node, metric string) time.Duration
+// Interval reports how often a node is expected to report a sensor's series, and zero
+// when nothing says: the series names no sensor, or its node does not run it.
+type Interval func(node, sensor string) time.Duration
 
 // Reader answers history queries.
 type Reader struct {
@@ -41,7 +41,7 @@ func (r Reader) List(ctx context.Context, query Query) ([]Series, error) {
 	out := make([]Series, 0, len(refs))
 	for _, ref := range refs {
 		if matches(ref.Labels, query.Labels) {
-			out = append(out, r.describe(ref))
+			out = append(out, r.describe(ref.SeriesRef, ref.Sensor))
 		}
 	}
 	if len(out) > maxSeries {
@@ -98,7 +98,7 @@ func (r Reader) Read(ctx context.Context, query Query) (Result, error) {
 		if held.stored == 0 {
 			continue
 		}
-		out := r.describe(series.SeriesRef)
+		out := r.describe(series.SeriesRef, series.Sensor)
 		out.Stored = held.stored
 		out.Points, out.Reduced = held.result()
 		result.Series = append(result.Series, out)
@@ -106,13 +106,13 @@ func (r Reader) Read(ctx context.Context, query Query) (Result, error) {
 	return result, nil
 }
 
-func (r Reader) describe(ref storage.SeriesRef) Series {
+func (r Reader) describe(ref storage.SeriesRef, sensor string) Series {
 	return Series{
 		Node:     ref.Node,
 		Metric:   ref.Metric,
 		Labels:   ref.Labels,
 		Unit:     UnitOf(ref.Metric),
-		Interval: r.Interval(ref.Node, ref.Metric),
+		Interval: r.Interval(ref.Node, sensor),
 	}
 }
 

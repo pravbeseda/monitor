@@ -54,8 +54,9 @@ type Unit string
 
 // The units a metric id can declare today.
 const (
-	Bytes   Unit = "bytes"
-	Percent Unit = "percent"
+	Bytes    Unit = "bytes"
+	Percent  Unit = "percent"
+	Duration Unit = "duration"
 	// Number is what a metric id declaring no unit reads as.
 	Number Unit = "number"
 )
@@ -68,6 +69,8 @@ func UnitOf(metric string) Unit {
 		return Bytes
 	case strings.HasSuffix(metric, "_pct"):
 		return Percent
+	case strings.HasSuffix(metric, "_seconds"):
+		return Duration
 	default:
 		return Number
 	}

@@ -50,8 +50,9 @@ plain number; what is stored is always the number in the series' own unit.
 **A save is refused unless the browser says it came from this page.** The hub has no
 session and no login of its own ([0023](../decisions/0023-proxy-holds-the-web-perimeter.md)),
 so the guard against another site posting through a reader's cached credentials is the
-request's own origin, not a stored token: a save whose `Origin` is not this hub is refused
-before anything is read.
+request's own origin, not a stored token: a save whose `Origin` names another host than the
+one it was sent to is refused before anything is read. The host is what is compared — the
+hub answers the proxy over plain HTTP, so its own scheme is not the reader's.
 
 ## Behaviour
 
@@ -82,6 +83,8 @@ One row = one test. Anchors: `spec: thresholds.md#<heading>`.
 | both values blank | the configuration is removed; the subject loses its level without an event or a recovery message ([evaluation.md](evaluation.md#configuration-changes)) |
 | a value that is not a finite number | refused, naming the field; nothing is stored, and what the reader typed is still in the form |
 | a `_bytes` value written `10GB` | accepted and stored as 10 000 000 000; the form shows it back as a size |
+| a `_bytes` value written as a bare number | accepted as that many bytes, which is what the field says it is asking for |
+| a `_bytes` value no round size names — 20 123 456 789 | shown back as that number, not rounded to a size: redrawing the form must not rewrite the threshold |
 | a `_pct` value written `12%`, or any value with a unit the metric does not take | refused, naming the field |
 | `critical` not strictly beyond `warning` in the chosen direction | refused, naming both fields; nothing is stored |
 | a direction that is neither `below` nor `above` | refused; nothing is stored |

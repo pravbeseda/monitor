@@ -154,6 +154,7 @@ func (a *Agent) collect(ctx context.Context, now time.Time) []api.Measurement {
 			slog.Error("sensor failed", "sensor", s.Name(), "error", err)
 			continue
 		}
+		name := s.Name()
 		for _, m := range measurements {
 			value := m.Value
 			out = append(out, api.Measurement{
@@ -161,6 +162,7 @@ func (a *Agent) collect(ctx context.Context, now time.Time) []api.Measurement {
 				Labels: m.Labels,
 				Value:  &value,
 				TS:     m.TS.UTC().Format(time.RFC3339),
+				Sensor: &name,
 			})
 		}
 	}

@@ -15,6 +15,7 @@ import (
 type Store interface {
 	storage.Storage
 	Snapshots
+	ThresholdStore
 }
 
 // Routes mounts every endpoint the hub serves. The version prefix is part of the
@@ -31,5 +32,11 @@ func Routes(cfg *config.Config, store Store, now func() time.Time) *http.ServeMu
 	mux.Handle("GET /api/v1/history", HistoryAPI(read))
 	mux.Handle("GET /api/v1/state", StateAPI(current))
 	mux.Handle("GET /history", HistoryPage(read))
+	// One handler for both methods: a save is the same page answering for itself, and a
+	// method it does not take is its own refusal rather than the mux's (thresholds.md).
+	mux.Handle("/thresholds", Thresholds(store, func(node string) bool {
+		_, known := cfg.Node(node)
+		return known
+	}))
 	return mux
 }

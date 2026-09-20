@@ -11,14 +11,25 @@ var catalogue = map[string]map[Locale]string{
 	"node.no_values":  {English: "No measurements yet", Russian: "Измерений ещё нет"},
 	"node.no_current": {English: "No current measurements", Russian: "Актуальных измерений нет"},
 	"node.silent":     {English: "silent", Russian: "молчит"},
+	"node.unwatched":  {English: "%d series without a threshold", Russian: "серий без порога: %d"},
 	"table.metric":    {English: "Metric", Russian: "Метрика"},
 	"table.volume":    {English: "Volume", Russian: "Том"},
 	"table.free":      {English: "Value", Russian: "Значение"},
 	"table.level":     {English: "Level", Russian: "Уровень"},
 	"table.collected": {English: "Collected", Russian: "Собрано"},
+	"table.set":       {English: "set", Russian: "настроить"},
 	"label.removable": {English: "removable", Russian: "съёмный"},
 	"value.stale":     {English: "no fresh data", Russian: "нет свежих данных"},
-	"error.storage":   {English: "The panel cannot read its data right now", Russian: "Панель сейчас не может прочитать свои данные"},
+	"page.nothing_watched": {
+		English: "Nothing here is being judged yet: open a series and set a threshold for it.",
+		Russian: "Здесь пока ничего не оценивается: откройте серию и задайте порог.",
+	},
+
+	"error.storage":        {English: "The panel cannot read its data right now", Russian: "Панель сейчас не может прочитать свои данные"},
+	"error.method":         {English: "method not allowed", Russian: "метод не поддерживается"},
+	"error.query":          {English: "this address does not name one series", Russian: "этот адрес не называет одну серию"},
+	"error.unknown_series": {English: "no such series has reported", Russian: "такая серия не приходила"},
+	"error.origin":         {English: "this save did not come from this page; reload it and try again", Russian: "сохранение пришло не с этой страницы; перезагрузите её и повторите"},
 
 	"level.ok":       {English: "ok", Russian: "норма"},
 	"level.warning":  {English: "warning", Russian: "предупреждение"},
@@ -26,9 +37,60 @@ var catalogue = map[string]map[Locale]string{
 
 	"notify.changed":  {English: "%s: %s (was %s since %s)", Russian: "%s: %s (было %s с %s)"},
 	"notify.standing": {English: "%s: still %s since %s", Russian: "%s: по-прежнему %s с %s"},
-	"notify.readings": {English: "%s free, %s", Russian: "свободно %s, %s"},
+	"notify.reading":  {English: "%s is %s", Russian: "%s — %s"},
 	"notify.silent":   {English: "no report", Russian: "нет отчётов"},
 	"digest.title":    {English: "Daily digest", Russian: "Ежедневная сводка"},
+	"digest.nothing_watched": {
+		English: "Nothing on this hub is being judged: open a series and set a threshold for it.",
+		Russian: "На этом хабе ничего не оценивается: откройте серию и задайте порог.",
+	},
+	"digest.unwatched": {
+		English: "%d series have no threshold and are not judged.",
+		Russian: "серий без порога, они не оцениваются: %d",
+	},
+
+	"threshold.title":     {English: "What this series is judged by", Russian: "Чем оценивается эта серия"},
+	"threshold.direction": {English: "Alert when the value is", Russian: "Тревога, когда значение"},
+	"threshold.below":     {English: "below the threshold", Russian: "ниже порога"},
+	"threshold.above":     {English: "above the threshold", Russian: "выше порога"},
+	"threshold.save":      {English: "Save", Russian: "Сохранить"},
+	"threshold.back":      {English: "History of this series", Russian: "История этой серии"},
+	"threshold.unwatched": {
+		English: "Nothing is set, so this series has no level and never alerts.",
+		Russian: "Ничего не задано: у серии нет уровня и она не шлёт тревог.",
+	},
+	"threshold.detached": {
+		English: "The configuration no longer names this node, so the series is not judged.",
+		Russian: "Эта нода больше не описана в конфигурации, поэтому серия не оценивается.",
+	},
+	"threshold.unreadable": {
+		English: "The stored configuration could not be read; saving replaces it.",
+		Russian: "Сохранённую настройку не удалось прочитать; сохранение заменит её.",
+	},
+	"threshold.bad_direction": {English: "Choose one direction.", Russian: "Выберите направление."},
+	"threshold.bad_warning": {
+		English: "The warning value is not a number.",
+		Russian: "Значение предупреждения не число.",
+	},
+	"threshold.bad_critical": {
+		English: "The critical value is not a number.",
+		Russian: "Критическое значение не число.",
+	},
+	"threshold.unordered": {
+		English: "Critical must be strictly beyond warning in the chosen direction.",
+		Russian: "Критическое значение должно быть строго за предупреждением в выбранном направлении.",
+	},
+
+	// The unit a metric id declares, as the form names the field's unit …
+	"unit.bytes":    {English: "bytes, e.g. 10GB", Russian: "байты, например 10GB"},
+	"unit.percent":  {English: "percent", Russian: "проценты"},
+	"unit.duration": {English: "seconds", Russian: "секунды"},
+	"unit.number":   {English: "number", Russian: "число"},
+	// … and the suffixes a rendered duration is written with.
+	"unit.seconds": {English: "s", Russian: "с"},
+	"unit.minutes": {English: "min", Russian: "мин"},
+	"unit.hours":   {English: "h", Russian: "ч"},
+	"unit.days":    {English: "d", Russian: "д"},
 
 	"history.title":   {English: "History", Russian: "История"},
 	"history.index":   {English: "All nodes", Russian: "Все узлы"},

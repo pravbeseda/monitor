@@ -1,6 +1,8 @@
 package config_test
 
 import (
+	"bytes"
+	"log/slog"
 	"os"
 	"path/filepath"
 	"strings"
@@ -97,6 +99,62 @@ func TestLoadRejects(t *testing.T) {
 			}
 			if !strings.Contains(err.Error(), tc.want) {
 				t.Errorf("error = %q, want it to name %q", err, tc.want)
+			}
+		})
+	}
+}
+
+// spec: hub-config.md#startup — thresholds left the file (ADR 0032), but a hub that
+// upgrades itself unattended has to start on the file already on its disk: `rules` and
+// `volumes` are accepted wherever they were written, and no number inside one is used.
+func TestLoadStartsOnAFileStillCarryingRulesOrVolumes(t *testing.T) {
+	tests := []struct {
+		name string
+		body string
+	}{
+		{"rules at the top level", minimal + `
+rules:
+  disk:
+    warning:  { floor: 10GB, ratio: 15, ceiling: 100GB }
+    critical: { floor: 4GB,  ratio: 7,  ceiling: 40GB }
+`},
+		{"rules on a class", minimal + `
+classes:
+  laptop:
+    rules:
+      disk:
+        warning: { floor: 1GB }
+`},
+		{"rules on a node", strings.TrimSuffix(minimal, "\n") + `
+    rules:
+      disk:
+        warning: { floor: 1GB }
+`},
+		{"volumes on a node", strings.TrimSuffix(minimal, "\n") + `
+    volumes:
+      "/data/backup": { role: backup }
+`},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Setenv(tokenEnv, token)
+			var written bytes.Buffer
+			before := slog.Default()
+			slog.SetDefault(slog.New(slog.NewTextHandler(&written, nil)))
+			t.Cleanup(func() { slog.SetDefault(before) })
+
+			if _, err := config.Load(write(t, tc.body)); err != nil {
+				t.Fatalf("Load refused a file carrying a key it no longer reads: %v", err)
+			}
+			// The numbers in it do nothing, and an operator who left them there has to
+			// hear that once (docs/specs/hub-config.md#startup).
+			line := written.String()
+			if !strings.Contains(line, "a threshold in the configuration file is ignored") {
+				t.Errorf("startup said %q, want it to name the key it ignores", line)
+			}
+			if got := strings.Count(line, "key="); got != 1 {
+				t.Errorf("startup said %q, want one warning naming one key", line)
 			}
 		})
 	}

@@ -45,10 +45,16 @@
       var inFlight = false;
       var halted = false;
       var leaving = false;
+      var edited = false;
       var next;
 
+      // A page carrying a form the reader has typed into is left alone: a refresh
+      // replaces the content, and what was typed would go with it
+      // (docs/specs/thresholds.md#form).
+      document.addEventListener("input", function () { edited = true; });
+
       function refresh() {
-        if (inFlight || halted) return;
+        if (inFlight || halted || edited) return;
         clearTimeout(next);
         if (document.visibilityState !== "visible") return;
         inFlight = true;

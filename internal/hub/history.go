@@ -145,13 +145,13 @@ func reader(cfg *config.Config, store storage.Storage, now func() time.Time) his
 	return history.Reader{Source: store, Now: now, Interval: intervalOf(cfg)}
 }
 
-// intervalOf is the interval a node resolves for the sensor behind a metric — the same
-// input evaluation ages a subject by, so one definition of silence serves both
-// (docs/specs/history.md#gaps).
+// intervalOf is the interval a node resolves for a sensor — the same input evaluation
+// ages a subject by, so one definition of silence serves both
+// (docs/specs/history.md#gaps). A series that names no sensor has no interval and no
+// gaps (ADR 0033).
 func intervalOf(cfg *config.Config) history.Interval {
-	return func(node, metric string) time.Duration {
-		sensor, declared := evaluate.SensorOf(metric)
-		if !declared {
+	return func(node, sensor string) time.Duration {
+		if sensor == "" {
 			return 0
 		}
 		entry, known := cfg.Node(node)

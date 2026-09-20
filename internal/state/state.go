@@ -14,85 +14,89 @@ import (
 )
 
 // State is everything at one instant. A nil Level is no level: nothing under it has one.
+// Watched and Unwatched count the subjects a threshold is stored for and those without
+// one, because a hub that watches nothing must not look like a hub where nothing is wrong
+// (docs/specs/state.md#model).
 type State struct {
-	At       time.Time
-	Level    *evaluate.Level
-	Nodes    []Node
-	Subjects []Subject
-	Readings []Reading
+	At        time.Time
+	Level     *evaluate.Level
+	Watched   int
+	Unwatched int
+	Nodes     []Node
+	Subjects  []Subject
 }
 
 // Node is one node that has reported. Its Level counts only subjects that are not stale:
-// what is wrong now by fresh values.
+// what is wrong now by fresh values. Configured says the file still names it, which is a
+// different statement from a subject being watched.
 type Node struct {
 	Node         string
 	Configured   bool
 	AgentVersion string
 	LastSeen     time.Time
 	Level        *evaluate.Level
+	Watched      int
+	Unwatched    int
 }
 
-// Subject is what has a level. Level is nil, and Since zero, when evaluation holds no level
-// for it that this build can read.
+// Subject is a series, plus one per node for its own silence (ADR 0033). Level is nil,
+// and Since zero, when evaluation holds no level for it that this build can read — which
+// is always so for a series nothing watches. Stale is nil when no freshness rule applies.
 type Subject struct {
-	Node   string
-	Rule   string
-	Labels map[string]string
-	Level  *evaluate.Level
-	Since  time.Time
-	Stale  bool
-	Values []Value
-}
-
-// Value is the newest reading of one series.
-type Value struct {
-	Metric string
-	Unit   history.Unit
-	Value  float64
-	TS     time.Time
-}
-
-// Reading is the newest value of a series no subject reads. Stale is nil when no freshness
-// rule applies to it: no rule reads its metric, or its node runs no sensor for it.
-type Reading struct {
-	Node   string
-	Labels map[string]string
-	Value
-	Stale *bool
+	Node    string
+	Metric  string
+	Labels  map[string]string
+	Watched bool
+	Level   *evaluate.Level
+	Since   time.Time
+	Stale   *bool
+	// Unit, Value and TS are the newest reading of the series. The silence subject has
+	// none: its input is the node's last-seen time.
+	Unit  history.Unit
+	Value *float64
+	TS    time.Time
 }
 
 // Build reads the state out of one snapshot at now. targets resolves a node as evaluation
 // reads it, and false for a node the configuration does not name.
 func Build(targets func(node string) (evaluate.Target, bool), snap storage.Snapshot, now time.Time) State {
-	out := State{
-		At:       now,
-		Nodes:    make([]Node, 0, len(snap.Nodes)),
-		Subjects: []Subject{},
-		Readings: []Reading{},
-	}
+	out := State{At: now, Nodes: make([]Node, 0, len(snap.Nodes)), Subjects: []Subject{}}
+
 	resolved := map[string]evaluate.Target{}
 	var configured []evaluate.Target
-	series := map[string]storage.Value{}
 	for _, reported := range snap.Nodes {
 		if target, known := targets(reported.Node); known {
 			resolved[reported.Node] = target
 			configured = append(configured, target)
 		}
-		for _, value := range reported.Values {
-			series[seriesKey(reported.Node, value.Metric, value.Labels)] = value
-		}
+	}
+
+	// A series is watched when a threshold is stored for it, whether or not this build
+	// can judge by it: something is set, and saying otherwise would read as "nobody
+	// configured this" (docs/specs/state.md#listing).
+	set := make(map[string]struct{}, len(snap.Thresholds))
+	for _, threshold := range snap.Thresholds {
+		set[seriesKey(threshold.Series.Node, threshold.Series.Metric, threshold.Series.Labels)] = struct{}{}
 	}
 
 	// Evaluation's own subjects, so the state lists and freezes exactly what a tick would.
-	// The level a tick would decide now is not reported: the stored one is.
-	read := map[string]bool{}
-	fresh := map[string]*evaluate.Level{}
+	// The level a tick would decide now is not reported: the stored one is (ADR 0030).
+	watched := map[string]Subject{}
 	for _, subject := range evaluate.Subjects(configured, snap, now) {
-		one := subjectOf(subject, series, read)
-		if !one.Stale {
-			fresh[one.Node] = worse(fresh[one.Node], one.Level)
+		one := Subject{
+			Node:    subject.Node,
+			Metric:  subject.Metric,
+			Labels:  subject.Labels,
+			Watched: true,
 		}
-		out.Subjects = append(out.Subjects, one)
+		if subject.Restored {
+			level := subject.Previous
+			one.Level, one.Since = &level, subject.Since
+		}
+		// The silence subject reads hub receipt time, which is never stale.
+		stale := subject.Metric != evaluate.SilenceMetric && subject.Frozen
+		one.Stale = &stale
+		watched[seriesKey(subject.Node, subject.Metric, subject.Labels)] = one
 	}
 
 	for _, reported := range snap.Nodes {
@@ -102,80 +106,77 @@ func Build(targets func(node string) (evaluate.Target, bool), snap storage.Snaps
 			Configured:   known,
 			AgentVersion: reported.AgentVersion,
 			LastSeen:     reported.LastSeen,
-			Level:        fresh[reported.Node],
 		}
+
+		if silence, judged := watched[seriesKey(reported.Node, evaluate.SilenceMetric, nil)]; judged {
+			// Silence is judged without a threshold, so it counts as neither watched nor
+			// unwatched: the counts are of the series somebody has to configure, and a
+			// hub where they are zero is watching nothing (docs/specs/state.md#model).
+			node.Level = worse(node.Level, silence.Level)
+			out.Subjects = append(out.Subjects, silence)
+		}
+		for _, value := range reported.Values {
+			key := seriesKey(reported.Node, value.Metric, value.Labels)
+			one, judged := watched[key]
+			_, isWatched := set[key]
+			if !judged {
+				one = Subject{Node: reported.Node, Metric: value.Metric, Labels: value.Labels}
+			}
+			// A threshold this build cannot judge by still makes the series watched: it
+			// says "something is set", which a reader has to be able to tell from
+			// "nobody set anything" (docs/specs/state.md#listing).
+			one.Watched = isWatched
+			// A tick freezes a watched series, but a series no freshness rule applies to
+			// says so rather than reading as fresh — watched or not.
+			if !isWatched || !known || !target.Ages(value.Sensor, reported.LastSeen, now) {
+				one.Stale = staleOf(target, known, reported.LastSeen, value, now)
+			}
+			one.Unit, one.Value, one.TS = history.UnitOf(value.Metric), &value.Value, value.TS
+			if isWatched {
+				node.Watched++
+				if one.Stale == nil || !*one.Stale {
+					node.Level = worse(node.Level, one.Level)
+				}
+			} else if known {
+				// A node the file no longer names cannot be given a threshold that would
+				// be judged, so its series are not counted as waiting for one; the digest
+				// counts the same population (docs/specs/evaluation.md#digest).
+				node.Unwatched++
+			}
+			out.Subjects = append(out.Subjects, one)
+		}
+
+		out.Watched += node.Watched
+		out.Unwatched += node.Unwatched
 		out.Level = worse(out.Level, node.Level)
 		out.Nodes = append(out.Nodes, node)
-
-		for _, value := range reported.Values {
-			if read[seriesKey(reported.Node, value.Metric, value.Labels)] {
-				continue
-			}
-			out.Readings = append(out.Readings, Reading{
-				Node:   reported.Node,
-				Labels: value.Labels,
-				Value:  valueOf(value),
-				Stale:  staleOf(target, known, reported.LastSeen, value, now),
-			})
-		}
 	}
 
 	sort.Slice(out.Nodes, func(i, j int) bool { return out.Nodes[i].Node < out.Nodes[j].Node })
 	sortSubjects(out.Subjects)
-	sortReadings(out.Readings)
 	return out
 }
 
-// subjectOf reports one subject with the level stored for it and the values it reads,
-// marking those values as read so they are not listed again as readings.
-func subjectOf(subject evaluate.Subject, series map[string]storage.Value, read map[string]bool) Subject {
-	out := Subject{
-		Node:   subject.Node,
-		Rule:   subject.Rule,
-		Labels: subject.Labels,
-		Stale:  subject.Frozen,
-		Values: []Value{},
-	}
-	if subject.Restored {
-		level := subject.Previous
-		out.Level, out.Since = &level, subject.Since
-	}
-	definition, judged := evaluate.Lookup(subject.Rule)
-	if !judged {
-		return out // the silence subject reads no series.
-	}
-	for _, metric := range []string{definition.Free, definition.Pct} {
-		key := seriesKey(subject.Node, metric, subject.Labels)
-		if value, stored := series[key]; stored {
-			out.Values = append(out.Values, valueOf(value))
-			read[key] = true
-		}
-	}
-	sort.Slice(out.Values, func(i, j int) bool { return out.Values[i].Metric < out.Values[j].Metric })
-	return out
-}
-
-// staleOf ages a reading by evaluation's freezing rule when that rule applies to it at all.
+// staleOf ages a series nothing watches by the same rule evaluation freezes a subject by.
+// A node the file no longer names is stale whatever its values say: nothing will refresh
+// them. A series whose newest value names no sensor has no freshness rule at all, unless
+// its node is silent, which ages everything under it (docs/specs/state.md#staleness).
 func staleOf(target evaluate.Target, configured bool, lastSeen time.Time, value storage.Value, now time.Time) *bool {
-	sensor, declared := evaluate.SensorOf(value.Metric)
-	if !configured || !declared {
+	if !configured {
+		stale := true
+		return &stale
+	}
+	if !target.Ages(value.Sensor, lastSeen, now) {
 		return nil
 	}
-	if _, runs := target.Intervals[sensor]; !runs {
-		return nil
-	}
-	stale := target.Frozen(sensor, lastSeen, value.TS, now)
+	stale := target.Frozen(value.Sensor, lastSeen, value.TS, now)
 	return &stale
 }
 
-func valueOf(value storage.Value) Value {
-	return Value{Metric: value.Metric, Unit: history.UnitOf(value.Metric), Value: value.Value, TS: value.TS}
-}
-
-// seriesKey identifies a series by the encoding evaluation joins on, so a subject reads
-// exactly the series evaluation joined for it.
+// seriesKey identifies a series by the encoding evaluation keys a subject on, so the two
+// cannot drift apart.
 func seriesKey(node, metric string, labels map[string]string) string {
-	key, err := storage.Subject{Node: node, Rule: metric, Labels: labels}.Key()
+	key, err := storage.Subject{Node: node, Metric: metric, Labels: labels}.Key()
 	if err != nil {
 		slog.Error("identify a series", "node", node, "metric", metric, "error", err)
 	}
@@ -190,31 +191,17 @@ func worse(a, b *evaluate.Level) *evaluate.Level {
 	return a
 }
 
-// sortSubjects orders by node, then mount, then rule, then labels, a node's silence subject
-// first even beside a volume that reports no mount (docs/specs/state.md#ordering).
+// sortSubjects orders by node, a node's silence first, then metric, then labels. No
+// label is privileged: grouping a volume's series is the page's own rendering
+// (docs/specs/state.md#ordering).
 func sortSubjects(subjects []Subject) {
 	sort.Slice(subjects, func(i, j int) bool {
 		a, b := subjects[i], subjects[j]
 		switch {
 		case a.Node != b.Node:
 			return a.Node < b.Node
-		case (a.Rule == evaluate.SilenceRule) != (b.Rule == evaluate.SilenceRule):
-			return a.Rule == evaluate.SilenceRule
-		case a.Labels["mount"] != b.Labels["mount"]:
-			return a.Labels["mount"] < b.Labels["mount"]
-		case a.Rule != b.Rule:
-			return a.Rule < b.Rule
-		}
-		return storage.LabelKey(a.Labels) < storage.LabelKey(b.Labels)
-	})
-}
-
-func sortReadings(readings []Reading) {
-	sort.Slice(readings, func(i, j int) bool {
-		a, b := readings[i], readings[j]
-		switch {
-		case a.Node != b.Node:
-			return a.Node < b.Node
+		case (a.Metric == evaluate.SilenceMetric) != (b.Metric == evaluate.SilenceMetric):
+			return a.Metric == evaluate.SilenceMetric
 		case a.Metric != b.Metric:
 			return a.Metric < b.Metric
 		}

@@ -51,7 +51,9 @@ statement — that the file still names it — and the two never mean the same t
 
 **The response counts what is watched**, per node and in total, because a hub that watches
 nothing must not look like a hub where nothing is wrong: that is the fresh installation, and
-that is a database restored without its thresholds.
+that is a database restored without its thresholds. The counts are of series — the things
+somebody has to configure — so a node's silence, judged without a threshold, counts in
+neither.
 
 **Stale** is evaluation's *frozen* ([evaluation](evaluation.md#freezing)), decided by the
 same code at the instant of the request: a subject is stale when its newest value is older
@@ -118,8 +120,8 @@ exactly as [history](history.md#wire-format) reads it. `level` is `ok`, `warning
 level or a unit it does not know as opaque. Lists and label maps are never `null`, only
 empty. The silence subject carries no value of its own — `unit`, `value` and `ts` are
 `null` — because its input is the node's last-seen time, which `nodes` already states.
-`watched` and `unwatched` count that node's subjects, and at the top level every node's;
-a silence subject counts as watched. `node` names a node today; a subject that belongs to
+`watched` and `unwatched` count that node's series, and at the top level every node's; a
+silence subject is watched and counted in neither. `node` names a node today; a subject that belongs to
 none, which manual input will bring, will carry `node: null` and have no entry in `nodes`.
 
 ## Behaviour
@@ -143,11 +145,11 @@ One row = one test. Anchors: `spec: state.md#<heading>`.
 |---|---|
 | a configured node that has reported | in `nodes` with `configured: true`, and its silence subject in `subjects` |
 | a configured node that has never reported | nowhere: an uninstalled agent is not a node yet |
-| a node the configuration no longer names | in `nodes` with `configured: false` and `level: null`, which says the file dropped it, not that anything is fresh; its series listed, `stale: true`, since nothing will refresh them |
+| a node the configuration no longer names | in `nodes` with `configured: false` and `level: null`, which says the file dropped it, not that anything is fresh; its series listed, `stale: true`, since nothing will refresh them, and no silence subject: silence is judged against a window the file no longer gives |
 | a volume both of whose series are stored | two subjects, one per series, each with its own newest value |
 | a series with a threshold stored for it | `watched: true` |
 | a series with no threshold | `watched: false`, `level: null`, `since: null` |
-| a node's silence subject | `watched: true` always: it is judged without a stored threshold |
+| a node's silence subject | `watched: true` always: it is judged without a stored threshold, and counted in neither `watched` nor `unwatched` |
 | a series whose threshold was removed while it held a level | `watched: false`, `level: null`: the level was forgotten with the threshold ([evaluation](evaluation.md#configuration-changes)) |
 | a series whose stored threshold this build cannot read | `watched: true`, `level: null`: something is set, and nothing is judged by it |
 | a hub where nothing is watched | `watched: 0` at the top level and on every node |
@@ -216,7 +218,8 @@ Names and labels are compared byte by byte; labels are rendered as history rende
 - Every `level` and `since` equal the ones evaluation last stored for that subject, or are
   `null` when no stored level is readable.
 - Only a `watched` subject ever carries a level.
-- `watched` and `unwatched` sum to the subjects listed, per node and in total.
+- `watched` and `unwatched` sum to the series listed, per node and in total; a node's
+  silence is in neither.
 - A node's `level` is the most severe `level` of its subjects that are not stale in the same
   response, and the response's `level` the most severe of its nodes'.
 - A subject is stale exactly when evaluation's own freezing code says so at `at`.

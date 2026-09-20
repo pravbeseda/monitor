@@ -8,9 +8,12 @@ import (
 	"sort"
 	"strings"
 
+	"fmt"
+	"time"
+
 	"github.com/pravbeseda/monitor/internal/evaluate"
-	"github.com/pravbeseda/monitor/internal/history"
 	"github.com/pravbeseda/monitor/internal/i18n"
+	"github.com/pravbeseda/monitor/internal/notify"
 	"github.com/pravbeseda/monitor/internal/state"
 	"github.com/pravbeseda/monitor/internal/storage"
 	"github.com/pravbeseda/monitor/internal/version"
@@ -27,6 +30,7 @@ type view struct {
 	shell
 	Version        string
 	Empty          string
+	NothingWatched string
 	LastSeenLabel  string
 	MetricLabel    string
 	VolumeLabel    string
@@ -43,7 +47,10 @@ type nodeView struct {
 	// Level is shown beside the name only when it is worth a glance: warning or critical.
 	Level  *levelView
 	Silent string
-	Rows   []rowView
+	// Unwatched says how many of this node's series nobody has given a threshold, so a
+	// volume left unconfigured is visible rather than quietly unjudged (ADR 0032).
+	Unwatched string
+	Rows      []rowView
 	// Empty says why a node has no rows: nothing measured yet, or nothing current.
 	Empty string
 }
@@ -54,23 +61,21 @@ type levelView struct {
 	Class string
 }
 
-// rowView is one subject, or the readings of one volume or one metric no rule declares
-// (docs/specs/history.md#page). A nil Level is shown as a dash.
+// rowView is one series (ADR 0033): its metric, the volume its labels name, its newest
+// value and what judges it. A nil Level is shown as a dash.
 type rowView struct {
-	Metric    string
-	Volume    string
-	Values    []valueView
-	Level     *levelView
-	Collected string
+	Metric string
+	Volume string
+	Value  string
+	// History addresses the drill-down page of this series, Thresholds the page that sets
+	// what it is judged by (docs/specs/history.md#page, docs/specs/thresholds.md).
+	History    string
+	Thresholds string
+	SetLabel   string
+	Level      *levelView
+	Collected  string
 	// Stale is the translated mark of a row that stopped arriving, empty on a fresh one.
 	Stale string
-}
-
-type valueView struct {
-	Metric string
-	Value  string
-	// History addresses the drill-down page of this series (docs/specs/history.md#page).
-	History string
 }
 
 // Page renders the state of every node — the debug view of docs/specs/state.md#page —
@@ -109,6 +114,11 @@ func index(printer *i18n.Printer, current state.State, lang string) view {
 		CollectedLabel: printer.T("table.collected"),
 		Nodes:          make([]nodeView, 0, len(current.Nodes)),
 	}
+	// A hub that watches nothing must say so: it looks exactly like one where nothing is
+	// wrong (docs/specs/state.md#page).
+	if current.Watched == 0 {
+		out.NothingWatched = printer.T("page.nothing_watched")
+	}
 	rows, silent := rowsByNode(current)
 	for _, reported := range current.Nodes {
 		node := nodeView{
@@ -122,11 +132,14 @@ func index(printer *i18n.Printer, current state.State, lang string) view {
 		if silent[reported.Node] {
 			node.Silent = printer.T("node.silent")
 		}
-		for _, group := range rows[reported.Node] {
-			if group.stale && group.labels["removable"] == "true" {
+		if reported.Unwatched > 0 {
+			node.Unwatched = fmt.Sprintf(printer.T("node.unwatched"), reported.Unwatched)
+		}
+		for _, row := range rows[reported.Node] {
+			if row.stale && row.labels["removable"] == "true" {
 				continue
 			}
-			node.Rows = append(node.Rows, rowOf(printer, reported.Node, group, lang))
+			node.Rows = append(node.Rows, rowOf(printer, reported.Node, row, lang))
 		}
 		switch {
 		case len(rows[reported.Node]) == 0:
@@ -139,29 +152,21 @@ func index(printer *i18n.Printer, current state.State, lang string) view {
 	return out
 }
 
-func rowOf(printer *i18n.Printer, node string, group seriesRow, lang string) rowView {
-	row := rowView{
-		Metric: group.key.name,
-		Volume: volume(printer, group.labels),
-		Level:  levelOf(printer, group.level),
+func rowOf(printer *i18n.Printer, node string, row seriesRow, lang string) rowView {
+	out := rowView{
+		Metric:     row.metric,
+		Volume:     volume(printer, row.labels),
+		Value:      format(printer, row.metric, row.value),
+		History:    historyLink(node, row.metric, row.labels, lang, ""),
+		Thresholds: thresholdLink(node, row.metric, row.labels, lang),
+		SetLabel:   printer.T("table.set"),
+		Level:      levelOf(printer, row.level),
+		Collected:  printer.Time(row.ts),
 	}
-	oldest := group.values[0].TS
-	for _, value := range group.values {
-		if value.TS.Before(oldest) {
-			oldest = value.TS
-		}
-		row.Values = append(row.Values, valueView{
-			Metric:  value.Metric,
-			Value:   format(printer, value.Metric, value.Value),
-			History: historyLink(node, value.Metric, group.labels, lang, ""),
-		})
+	if row.stale {
+		out.Stale = printer.T("value.stale")
 	}
-	// Aged by its older series, as evaluation freezes the volume.
-	row.Collected = printer.Time(oldest)
-	if group.stale {
-		row.Stale = printer.T("value.stale")
-	}
-	return row
+	return out
 }
 
 func levelOf(printer *i18n.Printer, level *evaluate.Level) *levelView {
@@ -171,89 +176,50 @@ func levelOf(printer *i18n.Printer, level *evaluate.Level) *levelView {
 	return &levelView{Word: printer.T("level." + level.String()), Class: "level-" + level.String()}
 }
 
-// rowKey identifies the series one row shows: one sensor's, or one undeclared metric's,
-// sharing every label.
-type rowKey struct {
-	name     string
-	declared bool
-	labels   string
-}
-
-// seriesRow is one row before it is translated: a subject, or readings grouped the way a
-// subject would group them.
+// seriesRow is one series before it is translated.
 type seriesRow struct {
-	key    rowKey
+	metric string
 	labels map[string]string
-	values []state.Value
+	value  float64
+	ts     time.Time
 	level  *evaluate.Level
 	stale  bool
 }
 
-// rowsByNode is each node's rows ordered by name, then by labels, each row's series
-// ordered by metric — its subjects, then its readings grouped by sensor and labels — and
-// which nodes the state holds silent.
+// rowsByNode is each node's rows — one per series — grouped so that the series of one
+// volume sit together and ordered by metric inside the group, and which nodes the state
+// holds silent. The grouping is the page's own: the state privileges no label
+// (docs/specs/state.md#ordering).
 func rowsByNode(current state.State) (map[string][]seriesRow, map[string]bool) {
 	rows := map[string][]seriesRow{}
 	silent := map[string]bool{}
 	for _, subject := range current.Subjects {
-		if subject.Rule == evaluate.SilenceRule {
+		if subject.Metric == evaluate.SilenceMetric {
 			silent[subject.Node] = subject.Level != nil && *subject.Level == evaluate.Critical
 			continue
 		}
-		row := seriesRow{
-			key:    keyOf(subject.Rule, subject.Labels),
+		if subject.Value == nil {
+			continue
+		}
+		rows[subject.Node] = append(rows[subject.Node], seriesRow{
+			metric: subject.Metric,
 			labels: subject.Labels,
-			values: subject.Values,
+			value:  *subject.Value,
+			ts:     subject.TS,
 			level:  subject.Level,
-			stale:  subject.Stale,
-		}
-		if definition, known := evaluate.Lookup(subject.Rule); known {
-			row.key.name, row.key.declared = definition.Sensor, true
-		}
-		rows[subject.Node] = append(rows[subject.Node], row)
-	}
-	position := map[string]map[rowKey]int{}
-	for _, reading := range current.Readings {
-		key := keyOf(reading.Metric, reading.Labels)
-		if sensor, declared := evaluate.SensorOf(reading.Metric); declared {
-			key.name, key.declared = sensor, true
-		}
-		if position[reading.Node] == nil {
-			position[reading.Node] = map[rowKey]int{}
-		}
-		at, seen := position[reading.Node][key]
-		if !seen {
-			at = len(rows[reading.Node])
-			position[reading.Node][key] = at
-			rows[reading.Node] = append(rows[reading.Node], seriesRow{key: key, labels: reading.Labels})
-		}
-		group := &rows[reading.Node][at]
-		group.values = append(group.values, reading.Value)
-		if reading.Stale != nil && *reading.Stale {
-			group.stale = true
-		}
+			stale:  subject.Stale != nil && *subject.Stale,
+		})
 	}
 	for _, list := range rows {
 		sort.SliceStable(list, func(i, j int) bool {
 			a, b := list[i], list[j]
-			if a.key.name != b.key.name {
-				return a.key.name < b.key.name
+			if first, second := storage.LabelKey(a.labels), storage.LabelKey(b.labels); first != second {
+				return first < second
 			}
-			return storage.LabelKey(a.labels) < storage.LabelKey(b.labels)
+			return a.metric < b.metric
 		})
-		for _, row := range list {
-			sort.Slice(row.values, func(i, j int) bool { return row.values[i].Metric < row.values[j].Metric })
-		}
 	}
 	return rows, silent
-}
-
-func keyOf(name string, labels map[string]string) rowKey {
-	encoded, err := storage.Subject{Labels: labels}.Key()
-	if err != nil {
-		slog.Error("group a series into a row", "name", name, "error", err)
-	}
-	return rowKey{name: name, labels: encoded}
 }
 
 // volume names the thing a series is about, from the labels the sensor set.
@@ -271,14 +237,8 @@ func volume(printer *i18n.Printer, labels map[string]string) string {
 	return strings.Join(parts, " · ")
 }
 
-// format renders a value in the unit its metric id declares.
+// format renders a value in the unit its metric id declares, the way every other surface
+// renders one (docs/specs/history.md#wire-format).
 func format(printer *i18n.Printer, metric string, value float64) string {
-	switch history.UnitOf(metric) {
-	case history.Bytes:
-		return printer.Bytes(value)
-	case history.Percent:
-		return printer.Percent(value)
-	default:
-		return printer.Number(value)
-	}
+	return notify.Value(printer, metric, value)
 }

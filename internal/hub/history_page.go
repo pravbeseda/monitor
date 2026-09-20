@@ -6,7 +6,6 @@ import (
 	"log/slog"
 	"net/http"
 	"net/url"
-	"sort"
 
 	"github.com/pravbeseda/monitor/internal/history"
 	"github.com/pravbeseda/monitor/internal/i18n"
@@ -105,26 +104,28 @@ func historyPage(printer *i18n.Printer, query history.Query, result history.Resu
 	return out
 }
 
-// historyLink addresses one series. It names every label the series carries, because a
-// filter cannot demand that a series carry no others: a link short of one label would
-// reach the ambiguous page instead of the chart (docs/specs/history.md#page).
-func historyLink(node, metric string, labels map[string]string, lang, window string) string {
+// seriesQuery names one series in a link. It names every label the series carries,
+// because a filter cannot demand that a series carry no others: a link short of one label
+// would reach a family of series instead of one (docs/specs/history.md#page). Encode
+// sorts by key, so the same series is always spelled the same way.
+func seriesQuery(node, metric string, labels map[string]string, lang string) url.Values {
 	values := url.Values{}
 	values.Set("metric", metric)
 	if node != "" {
 		values.Set("node", node)
 	}
-	names := make([]string, 0, len(labels))
-	for name := range labels {
-		names = append(names, name)
-	}
-	sort.Strings(names)
-	for _, name := range names {
-		values.Set(history.LabelPrefix+name, labels[name])
+	for name, value := range labels {
+		values.Set(history.LabelPrefix+name, value)
 	}
 	if lang != "" {
 		values.Set("lang", lang)
 	}
+	return values
+}
+
+// historyLink addresses the drill-down page of one series.
+func historyLink(node, metric string, labels map[string]string, lang, window string) string {
+	values := seriesQuery(node, metric, labels, lang)
 	if window != "" {
 		values.Set("window", window)
 	}
