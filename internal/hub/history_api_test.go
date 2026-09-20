@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"iter"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -20,10 +21,16 @@ func at() time.Time { return collected }
 
 var errFailed = errors.New("database is locked")
 
+// seriesPoints is one stored series as a test writes it down.
+type seriesPoints struct {
+	storage.SeriesRef
+	Points []storage.Point
+}
+
 // served is a storage answering with the series a test put in it.
 type served struct {
 	stored
-	series []storage.SeriesPoints
+	series []seriesPoints
 }
 
 func (h served) Series(context.Context, storage.Selection) ([]storage.SeriesRef, error) {
@@ -34,12 +41,46 @@ func (h served) Series(context.Context, storage.Selection) ([]storage.SeriesRef,
 	return refs, h.err
 }
 
-func (h served) Points(context.Context, storage.Selection, time.Time) ([]storage.SeriesPoints, error) {
-	return h.series, h.err
+func (h served) Newest(_ context.Context, sel storage.Selection, from time.Time) ([]storage.SeriesNewest, error) {
+	var out []storage.SeriesNewest
+	for _, series := range h.series {
+		if sel.Node != "" && series.Node != sel.Node {
+			continue
+		}
+		var newest time.Time
+		for _, point := range series.Points {
+			if !point.TS.Before(from) && point.TS.After(newest) {
+				newest = point.TS
+			}
+		}
+		if newest.IsZero() {
+			continue
+		}
+		out = append(out, storage.SeriesNewest{SeriesRef: series.SeriesRef, Newest: newest})
+	}
+	return out, h.err
 }
 
-func volume() storage.SeriesPoints {
-	return storage.SeriesPoints{
+func (h served) Points(_ context.Context, ref storage.SeriesRef, from, to time.Time) iter.Seq2[storage.Point, error] {
+	return func(yield func(storage.Point, error) bool) {
+		for _, series := range h.series {
+			if series.Node != ref.Node || storage.LabelKey(series.Labels) != storage.LabelKey(ref.Labels) {
+				continue
+			}
+			for _, point := range series.Points {
+				if point.TS.Before(from) || point.TS.After(to) {
+					continue
+				}
+				if !yield(point, nil) {
+					return
+				}
+			}
+		}
+	}
+}
+
+func volume() seriesPoints {
+	return seriesPoints{
 		SeriesRef: storage.SeriesRef{
 			Node:   "server-b",
 			Metric: "disk.free_pct",
@@ -61,7 +102,7 @@ func get(t *testing.T, store hub.Store, target string) *httptest.ResponseRecorde
 
 // spec: history.md — the wire format a consumer reads.
 func TestHistoryAPIAnswersSeriesWithPoints(t *testing.T) {
-	store := served{series: []storage.SeriesPoints{volume()}}
+	store := served{series: []seriesPoints{volume()}}
 
 	recorder := get(t, store, "/api/v1/history?metric=disk.free_pct&node=server-b&label.mount=%2F")
 
@@ -108,7 +149,7 @@ func TestHistoryAPIAnswersSeriesWithPoints(t *testing.T) {
 
 // spec: history.md#selection — /api/v1/series lists what exists, without points.
 func TestSeriesAPIListsWhatExists(t *testing.T) {
-	store := served{series: []storage.SeriesPoints{volume()}}
+	store := served{series: []seriesPoints{volume()}}
 
 	recorder := get(t, store, "/api/v1/series?metric=disk.free_pct")
 
@@ -122,7 +163,7 @@ func TestSeriesAPIListsWhatExists(t *testing.T) {
 
 // spec: history.md#refusals — a malformed query is refused with an English message.
 func TestHistoryAPIRefusesAMalformedQuery(t *testing.T) {
-	store := served{series: []storage.SeriesPoints{volume()}}
+	store := served{series: []seriesPoints{volume()}}
 
 	for _, target := range []string{
 		"/api/v1/history",
@@ -152,7 +193,7 @@ func TestHistoryAPIReportsAFailedRead(t *testing.T) {
 
 // spec: history.md — a method other than GET is not answered.
 func TestHistoryAPIRefusesOtherMethods(t *testing.T) {
-	store := served{series: []storage.SeriesPoints{volume()}}
+	store := served{series: []seriesPoints{volume()}}
 
 	recorder := httptest.NewRecorder()
 	routesWith(t, store, at).ServeHTTP(recorder, httptest.NewRequest(http.MethodPost, "/api/v1/history?metric=disk.free_pct", nil))
@@ -191,7 +232,7 @@ func TestSeriesAPIReportsAFailedRead(t *testing.T) {
 
 // spec: history.md — a series always says whether its points were reduced, false included.
 func TestHistoryAPIAlwaysStatesWhetherASeriesWasReduced(t *testing.T) {
-	recorder := get(t, served{series: []storage.SeriesPoints{volume()}}, "/api/v1/history?metric=disk.free_pct")
+	recorder := get(t, served{series: []seriesPoints{volume()}}, "/api/v1/history?metric=disk.free_pct")
 
 	var body struct {
 		Series []struct {
@@ -209,7 +250,7 @@ func TestHistoryAPIAlwaysStatesWhetherASeriesWasReduced(t *testing.T) {
 // spec: history.md — the window and the interval are on the wire, in the format the
 // contract names.
 func TestHistoryAPICarriesTheWindowAndTheInterval(t *testing.T) {
-	recorder := get(t, served{series: []storage.SeriesPoints{volume()}}, "/api/v1/history?metric=disk.free_pct")
+	recorder := get(t, served{series: []seriesPoints{volume()}}, "/api/v1/history?metric=disk.free_pct")
 
 	var body struct {
 		Window struct{ From, To string }
@@ -230,7 +271,7 @@ func TestHistoryAPICarriesTheWindowAndTheInterval(t *testing.T) {
 func TestHistoryAPILeavesAnUndeclaredMetricWithoutAnInterval(t *testing.T) {
 	other := volume()
 	other.Metric = "coffee.level"
-	recorder := get(t, served{series: []storage.SeriesPoints{other}}, "/api/v1/history?metric=coffee.level")
+	recorder := get(t, served{series: []seriesPoints{other}}, "/api/v1/history?metric=coffee.level")
 
 	var body struct {
 		Series []struct{ Interval, Unit string }

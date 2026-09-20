@@ -3,6 +3,8 @@ package history_test
 import (
 	"context"
 	"errors"
+	"iter"
+	"runtime"
 	"testing"
 	"time"
 
@@ -12,12 +14,19 @@ import (
 
 var now = time.Date(2026, 8, 31, 12, 0, 0, 0, time.UTC)
 
+// seriesPoints is one stored series as a test writes it down.
+type seriesPoints struct {
+	storage.SeriesRef
+	Points []storage.Point
+}
+
 // source answers with whatever a test put in it, and records the read it was asked for.
 type source struct {
-	series []storage.SeriesPoints
-	err    error
-	from   time.Time
-	sel    storage.Selection
+	series    []seriesPoints
+	err       error
+	pointsErr error
+	from      time.Time
+	sel       storage.Selection
 }
 
 func (s *source) Series(_ context.Context, sel storage.Selection) ([]storage.SeriesRef, error) {
@@ -29,26 +38,50 @@ func (s *source) Series(_ context.Context, sel storage.Selection) ([]storage.Ser
 	return refs, s.err
 }
 
-func (s *source) Points(_ context.Context, sel storage.Selection, from time.Time) ([]storage.SeriesPoints, error) {
+func (s *source) Newest(_ context.Context, sel storage.Selection, from time.Time) ([]storage.SeriesNewest, error) {
 	s.from, s.sel = from, sel
-	out := make([]storage.SeriesPoints, 0, len(s.series))
+	var out []storage.SeriesNewest
 	for _, series := range s.series {
 		if sel.Node != "" && series.Node != sel.Node {
 			continue
 		}
-		kept := storage.SeriesPoints{SeriesRef: series.SeriesRef}
+		var newest time.Time
 		for _, point := range series.Points {
-			if !point.TS.Before(from) {
-				kept.Points = append(kept.Points, point)
+			if !point.TS.Before(from) && point.TS.After(newest) {
+				newest = point.TS
 			}
 		}
-		out = append(out, kept)
+		if newest.IsZero() {
+			continue
+		}
+		out = append(out, storage.SeriesNewest{SeriesRef: series.SeriesRef, Newest: newest})
 	}
 	return out, s.err
 }
 
-func series(node, mount string, points ...storage.Point) storage.SeriesPoints {
-	return storage.SeriesPoints{
+func (s *source) Points(_ context.Context, ref storage.SeriesRef, _, _ time.Time) iter.Seq2[storage.Point, error] {
+	return func(yield func(storage.Point, error) bool) {
+		if s.pointsErr != nil {
+			yield(storage.Point{}, s.pointsErr)
+			return
+		}
+		for _, series := range s.series {
+			if series.Node != ref.Node || storage.LabelKey(series.Labels) != storage.LabelKey(ref.Labels) {
+				continue
+			}
+			// The whole series is streamed, bounds and all: clipping the window is the
+			// reader's rule, not a favour a source does.
+			for _, point := range series.Points {
+				if !yield(point, nil) {
+					return
+				}
+			}
+		}
+	}
+}
+
+func series(node, mount string, points ...storage.Point) seriesPoints {
+	return seriesPoints{
 		SeriesRef: storage.SeriesRef{
 			Node:   node,
 			Metric: "disk.free_pct",
@@ -85,7 +118,7 @@ func query() history.Query {
 
 // spec: history.md#selection — a label filter keeps only the series that carry it.
 func TestReadFiltersByLabel(t *testing.T) {
-	src := &source{series: []storage.SeriesPoints{
+	src := &source{series: []seriesPoints{
 		series("server-b", "/", at(-time.Hour, 42)),
 		series("server-b", "/data", at(-time.Hour, 50)),
 	}}
@@ -101,7 +134,7 @@ func TestReadFiltersByLabel(t *testing.T) {
 
 // spec: history.md#selection — a filter naming a label no series carries matches nothing.
 func TestReadFilterThatMatchesNothing(t *testing.T) {
-	src := &source{series: []storage.SeriesPoints{series("server-b", "/", at(-time.Hour, 42))}}
+	src := &source{series: []seriesPoints{series("server-b", "/", at(-time.Hour, 42))}}
 
 	q := query()
 	q.Labels = map[string]string{"role": "backup"}
@@ -112,7 +145,7 @@ func TestReadFilterThatMatchesNothing(t *testing.T) {
 
 // spec: history.md#selection — a series whose every point is outside the window is not returned.
 func TestReadDropsSeriesWithoutPointsInTheWindow(t *testing.T) {
-	src := &source{series: []storage.SeriesPoints{
+	src := &source{series: []seriesPoints{
 		series("server-b", "/", at(-48*time.Hour, 42)),
 		series("server-b", "/data", at(-time.Hour, 50)),
 	}}
@@ -124,7 +157,7 @@ func TestReadDropsSeriesWithoutPointsInTheWindow(t *testing.T) {
 
 // spec: history.md#window — no window: the 24 hours ending now, bounds included.
 func TestReadWindowEndsNow(t *testing.T) {
-	src := &source{series: []storage.SeriesPoints{
+	src := &source{series: []seriesPoints{
 		series("server-b", "/", at(-24*time.Hour, 40), at(-24*time.Hour-time.Millisecond, 39), at(0, 42)),
 	}}
 
@@ -140,7 +173,7 @@ func TestReadWindowEndsNow(t *testing.T) {
 // spec: history.md#window — a point stamped after now ends the window instead.
 func TestReadWindowEndsAtAPointFromTheFuture(t *testing.T) {
 	ahead := 10 * time.Minute
-	src := &source{series: []storage.SeriesPoints{series("server-b", "/", at(-time.Hour, 42), at(ahead, 41))}}
+	src := &source{series: []seriesPoints{series("server-b", "/", at(-time.Hour, 42), at(ahead, 41))}}
 
 	got := read(t, src, query())
 	if !got.Window.To.Equal(now.Add(ahead)) {
@@ -158,7 +191,7 @@ func TestReadKeepsSmallSeriesRaw(t *testing.T) {
 	for i := range 1000 {
 		points = append(points, at(-24*time.Hour+time.Duration(i)*time.Minute, float64(i)))
 	}
-	src := &source{series: []storage.SeriesPoints{series("server-b", "/", points...)}}
+	src := &source{series: []seriesPoints{series("server-b", "/", points...)}}
 
 	got := read(t, src, query()).Series[0]
 	if got.Reduced || len(got.Points) != 1000 || got.Stored != 1000 {
@@ -175,7 +208,7 @@ func TestReadReducesToBothExtremes(t *testing.T) {
 		value := float64(i % 10)
 		points = append(points, at(-24*time.Hour+time.Duration(i)*step, value))
 	}
-	src := &source{series: []storage.SeriesPoints{series("server-b", "/", points...)}}
+	src := &source{series: []seriesPoints{series("server-b", "/", points...)}}
 
 	got := read(t, src, query()).Series[0]
 	if !got.Reduced || got.Stored != 2000 {
@@ -219,7 +252,7 @@ func TestReadRefusesTooManySeries(t *testing.T) {
 // spec: history.md — a series carries the unit its metric id declares and the interval its
 // node resolves; a metric no rule declares has neither.
 func TestReadCarriesUnitAndInterval(t *testing.T) {
-	src := &source{series: []storage.SeriesPoints{series("server-b", "/", at(-time.Hour, 42))}}
+	src := &source{series: []seriesPoints{series("server-b", "/", at(-time.Hour, 42))}}
 
 	got := read(t, src, query()).Series[0]
 	if got.Unit != history.Percent || got.Interval != 15*time.Minute {
@@ -230,7 +263,7 @@ func TestReadCarriesUnitAndInterval(t *testing.T) {
 // spec: history.md#selection — the metric and the node reach storage; the labels do not,
 // because no index can serve them.
 func TestReadSelectsByMetricAndNode(t *testing.T) {
-	src := &source{series: []storage.SeriesPoints{series("server-b", "/", at(-time.Hour, 42))}}
+	src := &source{series: []seriesPoints{series("server-b", "/", at(-time.Hour, 42))}}
 
 	q := query()
 	q.Node = "server-b"
@@ -247,7 +280,7 @@ func TestReadFiltersByEveryLabelGiven(t *testing.T) {
 	other := series("server-b", "/")
 	other.Labels = map[string]string{"mount": "/", "fs": "xfs"}
 	other.Points = []storage.Point{at(-time.Hour, 50)}
-	src := &source{series: []storage.SeriesPoints{series("server-b", "/", at(-time.Hour, 42)), other}}
+	src := &source{series: []seriesPoints{series("server-b", "/", at(-time.Hour, 42)), other}}
 
 	q := query()
 	q.Labels = map[string]string{"mount": "/", "fs": "ext4"}
@@ -260,7 +293,7 @@ func TestReadFiltersByEveryLabelGiven(t *testing.T) {
 
 // spec: history.md#window — a point further ahead than the window is long does not move it.
 func TestReadIgnoresATimestampBeyondTheWindow(t *testing.T) {
-	src := &source{series: []storage.SeriesPoints{
+	src := &source{series: []seriesPoints{
 		series("laptop-a", "/", at(48*time.Hour, 1)),
 		series("server-b", "/", at(-time.Hour, 42)),
 	}}
@@ -280,7 +313,7 @@ func TestReadInventsNothingForAnEmptyBucket(t *testing.T) {
 	for i := range 1001 {
 		points = append(points, at(-time.Hour+time.Duration(i)*time.Millisecond, float64(i%7)))
 	}
-	src := &source{series: []storage.SeriesPoints{series("server-b", "/", points...)}}
+	src := &source{series: []seriesPoints{series("server-b", "/", points...)}}
 
 	got := read(t, src, query()).Series[0]
 	if !got.Reduced {
@@ -313,7 +346,7 @@ func TestReadReducesEachBucketToItsExtremes(t *testing.T) {
 	for i := range 2001 {
 		points = append(points, at(-24*time.Hour+time.Duration(i)*step, float64(i%5)))
 	}
-	src := &source{series: []storage.SeriesPoints{series("server-b", "/", points...)}}
+	src := &source{series: []seriesPoints{series("server-b", "/", points...)}}
 
 	got := read(t, src, query()).Series[0]
 	if len(got.Points) > 1001 {
@@ -336,7 +369,7 @@ func TestReadReducesEachBucketToItsExtremes(t *testing.T) {
 // spec: history.md#gaps — a metric no rule declares has no interval, so nothing breaks its
 // line; its unit still comes from its id.
 func TestReadLeavesAnUndeclaredMetricWithoutAnInterval(t *testing.T) {
-	src := &source{series: []storage.SeriesPoints{series("server-b", "/", at(-20*time.Hour, 1), at(-time.Hour, 2))}}
+	src := &source{series: []seriesPoints{series("server-b", "/", at(-20*time.Hour, 1), at(-time.Hour, 2))}}
 	silent := reader(src)
 	silent.Interval = func(string, string) time.Duration { return 0 }
 
@@ -355,7 +388,7 @@ func TestReadLeavesAnUndeclaredMetricWithoutAnInterval(t *testing.T) {
 
 // spec: history.md#selection — the listing narrows by label and is bounded the same way.
 func TestListFiltersAndIsBounded(t *testing.T) {
-	src := &source{series: []storage.SeriesPoints{
+	src := &source{series: []seriesPoints{
 		series("server-b", "/", at(-time.Hour, 42)),
 		series("server-b", "/data", at(-time.Hour, 50)),
 	}}
@@ -392,7 +425,7 @@ func TestReadKeepsBothExtremesAndTheNewestPoint(t *testing.T) {
 	points[30].Value = 1  // the same value later: the earliest of the ties wins
 	points[20].Value = 9  // the highest
 	points[900].Value = 9 // likewise for the highest
-	src := &source{series: []storage.SeriesPoints{series("server-b", "/", points...)}}
+	src := &source{series: []seriesPoints{series("server-b", "/", points...)}}
 
 	got := read(t, src, query()).Series[0]
 
@@ -413,7 +446,7 @@ func TestReadKeepsOnePointForABucketWithoutSpread(t *testing.T) {
 	for i := range points {
 		points[i] = at(-24*time.Hour+time.Duration(i)*time.Millisecond, 5)
 	}
-	src := &source{series: []storage.SeriesPoints{series("server-b", "/", points...)}}
+	src := &source{series: []seriesPoints{series("server-b", "/", points...)}}
 
 	got := read(t, src, query()).Series[0]
 
@@ -424,13 +457,13 @@ func TestReadKeepsOnePointForABucketWithoutSpread(t *testing.T) {
 
 // spec: history.md#window — the clamp holds exactly at one window ahead.
 func TestReadWindowMovesToAPointExactlyOneWindowAhead(t *testing.T) {
-	src := &source{series: []storage.SeriesPoints{series("server-b", "/", at(24*time.Hour, 42))}}
+	src := &source{series: []seriesPoints{series("server-b", "/", at(24*time.Hour, 42))}}
 
 	if got := read(t, src, query()); !got.Window.To.Equal(now.Add(24 * time.Hour)) {
 		t.Fatalf("window ends at %v, want it moved to the point at %v", got.Window.To, now.Add(24*time.Hour))
 	}
 
-	beyond := &source{series: []storage.SeriesPoints{series("server-b", "/", at(24*time.Hour+time.Millisecond, 42))}}
+	beyond := &source{series: []seriesPoints{series("server-b", "/", at(24*time.Hour+time.Millisecond, 42))}}
 	if got := read(t, beyond, query()); !got.Window.To.Equal(now) {
 		t.Fatalf("window ends at %v, want it to stay at %v", got.Window.To, now)
 	}
@@ -450,7 +483,7 @@ func TestGapOpensAtThreeIntervals(t *testing.T) {
 // spec: history.md#window — when a future point carries the window forward, what falls off
 // the back of it is no longer inside.
 func TestReadDropsWhatTheShiftedWindowLeavesBehind(t *testing.T) {
-	src := &source{series: []storage.SeriesPoints{series("server-b", "/",
+	src := &source{series: []seriesPoints{series("server-b", "/",
 		at(-24*time.Hour+time.Minute, 90),
 		at(-time.Hour, 42),
 		at(10*time.Minute, 41),
@@ -460,5 +493,120 @@ func TestReadDropsWhatTheShiftedWindowLeavesBehind(t *testing.T) {
 
 	if len(got.Points) != 2 || got.Points[0].Value != 42 {
 		t.Fatalf("points = %+v, want the oldest one outside the window it moved to", got.Points)
+	}
+}
+
+// spec: history.md#refusals — a read that fails is an error, wherever it fails: the points
+// of a series are read after the window has been settled.
+func TestReadReportsAFailureOfThePointStream(t *testing.T) {
+	failed := errors.New("database is locked")
+	src := &source{series: []seriesPoints{series("server-b", "/", at(-time.Hour, 42))}, pointsErr: failed}
+
+	if _, err := reader(src).Read(context.Background(), query()); !errors.Is(err, failed) {
+		t.Fatalf("Read = %v, want the failure the point stream reported", err)
+	}
+}
+
+// spec: history.md#reduction — the last bucket is closed at the end of the window: the
+// point stamped exactly at `to` joins the last bucket instead of opening one past it.
+func TestReadKeepsThePointThatClosesTheWindow(t *testing.T) {
+	// The newest point is stamped an hour ahead of now, so the window ends exactly on it.
+	// 998 points open the window and three close it: the one at `to` is the highest of
+	// them, so it displaces the last bucket's own high and the answer is four points. A
+	// bucket of its own past the end would return five.
+	const ahead = time.Hour
+	points := make([]storage.Point, 0, 1001)
+	for i := range 998 {
+		points = append(points, at(-24*time.Hour+ahead+time.Duration(i)*time.Millisecond, float64(i%9+1)))
+	}
+	points = append(points,
+		at(ahead-2*time.Millisecond, 10),
+		at(ahead-time.Millisecond, 20),
+		at(ahead, 50),
+	)
+	src := &source{series: []seriesPoints{series("server-b", "/", points...)}}
+
+	got := read(t, src, query())
+	if !got.Window.To.Equal(now.Add(ahead)) {
+		t.Fatalf("window ends at %v, want the point at %v", got.Window.To, now.Add(ahead))
+	}
+	series := got.Series[0]
+	if !series.Reduced {
+		t.Fatal("series was not reduced, want it reduced above 1000 points")
+	}
+	want := []storage.Point{points[0], points[8], points[998], points[1000]}
+	if len(series.Points) != len(want) {
+		t.Fatalf("points = %+v, want the two buckets' extremes alone: %+v", series.Points, want)
+	}
+	for i, point := range want {
+		if series.Points[i] != point {
+			t.Fatalf("point %d = %+v, want %+v", i, series.Points[i], point)
+		}
+	}
+}
+
+// generated is one series too long to hold: its points are produced as they are read.
+type generated struct {
+	count int
+	step  time.Duration
+}
+
+func (g generated) ref() storage.SeriesRef {
+	return storage.SeriesRef{Node: "server-b", Metric: "disk.free_pct", Labels: map[string]string{"mount": "/"}}
+}
+
+func (g generated) at(i int) time.Time {
+	return now.Add(-24*time.Hour + time.Duration(i)*g.step)
+}
+
+func (g generated) Series(context.Context, storage.Selection) ([]storage.SeriesRef, error) {
+	return []storage.SeriesRef{g.ref()}, nil
+}
+
+func (g generated) Newest(context.Context, storage.Selection, time.Time) ([]storage.SeriesNewest, error) {
+	return []storage.SeriesNewest{{SeriesRef: g.ref(), Newest: g.at(g.count - 1)}}, nil
+}
+
+func (g generated) Points(context.Context, storage.SeriesRef, time.Time, time.Time) iter.Seq2[storage.Point, error] {
+	return func(yield func(storage.Point, error) bool) {
+		for i := range g.count {
+			if !yield(storage.Point{TS: g.at(i), Value: float64(i % 100)}, nil) {
+				return
+			}
+		}
+	}
+}
+
+// spec: history.md — a read holds its answer, not its window: the points are reduced as
+// they arrive, so a window holding millions of them costs what its answer costs.
+func TestReadHoldsItsAnswerNotItsWindow(t *testing.T) {
+	const count = 2_000_000
+	src := generated{count: count, step: 24 * time.Hour / count}
+	streaming := history.Reader{
+		Source:   src,
+		Interval: func(string, string) time.Duration { return 15 * time.Minute },
+		Now:      func() time.Time { return now },
+	}
+
+	var before, after runtime.MemStats
+	runtime.GC()
+	runtime.ReadMemStats(&before)
+	got, err := streaming.Read(context.Background(), query())
+	runtime.ReadMemStats(&after)
+	if err != nil {
+		t.Fatalf("Read: %v", err)
+	}
+
+	if len(got.Series) != 1 {
+		t.Fatalf("series = %d, want the one that was read", len(got.Series))
+	}
+	if series := got.Series[0]; series.Stored != count || len(series.Points) > 1001 {
+		t.Fatalf("series stored=%d points=%d, want %d stored reduced to at most 1001", series.Stored, len(series.Points), count)
+	}
+	// Holding the window would be 64 MB of storage.Point before anything is reduced.
+	// TotalAlloc counts the whole process, so this measures one read only while the tests
+	// of this package run one at a time.
+	if grew := after.TotalAlloc - before.TotalAlloc; grew > 4<<20 {
+		t.Fatalf("one read allocated %d bytes over %d stored points, want the size of its answer", grew, count)
 	}
 }

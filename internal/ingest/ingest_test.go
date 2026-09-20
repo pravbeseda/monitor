@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"iter"
 	"log/slog"
 	"net/http"
 	"net/http/httptest"
@@ -57,8 +58,12 @@ func (s *spy) Series(context.Context, storage.Selection) ([]storage.SeriesRef, e
 	return nil, nil
 }
 
-func (s *spy) Points(context.Context, storage.Selection, time.Time) ([]storage.SeriesPoints, error) {
+func (s *spy) Newest(context.Context, storage.Selection, time.Time) ([]storage.SeriesNewest, error) {
 	return nil, nil
+}
+
+func (s *spy) Points(context.Context, storage.SeriesRef, time.Time, time.Time) iter.Seq2[storage.Point, error] {
+	return func(func(storage.Point, error) bool) {}
 }
 
 func (s *spy) Close() error { return nil }

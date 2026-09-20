@@ -72,6 +72,30 @@ var migrations = []string{
 	// History selects by metric across every node, which the primary key cannot serve:
 	// its leading column is the node (docs/specs/history.md#selection).
 	`CREATE INDEX IF NOT EXISTS measurements_series ON measurements (metric, node, labels, ts);`,
+
+	// Every question the hub asks first is about series — which exist, when each last
+	// reported, what each holds now — and `measurements_series` could only answer them by
+	// ranking points, so the cost followed the stored history rather than the answer. An
+	// index cannot fix that shape, so the series are a table of their own (ADR 0031),
+	// backfilled from the measurements that imply them. No read scans `measurements` any
+	// more, so it keeps its primary key alone.
+	`DROP INDEX IF EXISTS measurements_series;
+
+	CREATE TABLE IF NOT EXISTS series (
+		metric  TEXT NOT NULL,
+		node    TEXT NOT NULL,
+		labels  TEXT NOT NULL,
+		last_ts TEXT NOT NULL,
+		PRIMARY KEY (metric, node, labels)
+	) WITHOUT ROWID;
+
+	-- Raising rather than ignoring on conflict makes the backfill repeatable: a database
+	-- whose series table is already there, or behind what the measurements say, ends up
+	-- with the same rows as one that is built from scratch.
+	INSERT INTO series (metric, node, labels, last_ts)
+	SELECT metric, node, labels, MAX(ts) FROM measurements GROUP BY metric, node, labels
+	ON CONFLICT (metric, node, labels) DO UPDATE SET
+		last_ts = MAX(last_ts, excluded.last_ts);`,
 }
 
 // querier is what a database handle and a transaction both offer, so one read runs either
@@ -206,6 +230,18 @@ func (s *SQLite) SaveIngest(ctx context.Context, in Ingest) (err error) {
 		if err != nil {
 			return fmt.Errorf("save measurement %s of %s: %w", m.Metric, in.Node, err)
 		}
+		// The series carries the newest timestamp it holds, and only ever forwards: a
+		// measurement arriving late is stored, but it is not what the series last
+		// reported (ADR 0031).
+		_, err = tx.ExecContext(ctx, `
+			INSERT INTO series (metric, node, labels, last_ts)
+			VALUES (?, ?, ?, ?)
+			ON CONFLICT (metric, node, labels) DO UPDATE SET
+				last_ts = MAX(last_ts, excluded.last_ts)`,
+			m.Metric, in.Node, labels, formatTime(m.TS))
+		if err != nil {
+			return fmt.Errorf("save series %s of %s: %w", m.Metric, in.Node, err)
+		}
 	}
 
 	if err = tx.Commit(); err != nil {
@@ -257,15 +293,23 @@ func nodeStates(ctx context.Context, from querier) (map[string]*NodeState, []str
 	return states, order, nil
 }
 
-// attachLatestValues keeps one row per series: the newest ts wins.
+const latestValuesQuery = `
+	SELECT series.node, series.metric, series.labels, series.last_ts, measurements.value
+	FROM series
+	-- CROSS fixes the order: the series are the small side and must drive the join, or
+	-- SQLite is free to scan every measurement instead (ADR 0031).
+	CROSS JOIN measurements
+	  ON measurements.node = series.node
+	 AND measurements.metric = series.metric
+	 AND measurements.labels = series.labels
+	 AND measurements.ts = series.last_ts
+	ORDER BY series.node, series.metric, series.labels`
+
+// attachLatestValues keeps one row per series: the point the series says is its newest. The
+// series table names it, so this reads one point per series instead of ranking every point
+// ever stored (ADR 0031).
 func attachLatestValues(ctx context.Context, from querier, states map[string]*NodeState) error {
-	rows, err := from.QueryContext(ctx, `
-		SELECT node, metric, labels, ts, value FROM (
-			SELECT node, metric, labels, ts, value,
-			       ROW_NUMBER() OVER (PARTITION BY node, metric, labels ORDER BY ts DESC) AS recency
-			FROM measurements)
-		WHERE recency = 1
-		ORDER BY node, metric, labels`)
+	rows, err := from.QueryContext(ctx, latestValuesQuery)
 	if err != nil {
 		return fmt.Errorf("read measurements: %w", err)
 	}

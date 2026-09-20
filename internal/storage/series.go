@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"iter"
 	"sort"
 	"strings"
 	"time"
@@ -31,17 +32,18 @@ type Point struct {
 	Value float64
 }
 
-// SeriesPoints is one series with the points a window holds, oldest first.
-type SeriesPoints struct {
+// SeriesNewest is one series a window holds, with the timestamp of its newest stored
+// point — the instant the window may end at (docs/specs/history.md#window).
+type SeriesNewest struct {
 	SeriesRef
-	Points []Point
+	Newest time.Time
 }
 
-// Series lists every stored series of a metric, whatever the age of its last point.
+// Series lists every stored series of a metric, whatever the age of its last point. It
+// reads the series table rather than ranking points, so it costs what it answers (ADR 0031).
 func (s *SQLite) Series(ctx context.Context, sel Selection) ([]SeriesRef, error) {
-	where, args := sel.where()
-	rows, err := s.db.QueryContext(ctx,
-		`SELECT DISTINCT node, labels FROM measurements WHERE `+where, args...)
+	query, args := seriesStatement(sel)
+	rows, err := s.db.QueryContext(ctx, query, args...)
 	if err != nil {
 		return nil, fmt.Errorf("read series of %s: %w", sel.Metric, err)
 	}
@@ -66,46 +68,99 @@ func (s *SQLite) Series(ctx context.Context, sel Selection) ([]SeriesRef, error)
 	return out, nil
 }
 
-// Points reads the stored points of every selected series from `from` onwards. It takes no
-// upper bound: a measurement stamped ahead of the hub's clock is the newest value of its
-// series and the window ends at it (docs/specs/history.md#window).
-func (s *SQLite) Points(ctx context.Context, sel Selection, from time.Time) ([]SeriesPoints, error) {
-	where, args := sel.where()
-	rows, err := s.db.QueryContext(ctx,
-		`SELECT node, labels, ts, value FROM measurements WHERE `+where+` AND ts >= ? ORDER BY node, labels, ts`,
-		append(args, formatTime(from))...)
+// Newest lists every selected series holding a point at or after `from`, each with the
+// timestamp of its newest stored point. It takes no upper bound: a measurement stamped
+// ahead of the hub's clock is the newest value of its series and the window may end at it
+// (docs/specs/history.md#window). One row per series is what lets a read settle its window
+// before it touches a single point, and the series table is what makes that row cheap.
+func (s *SQLite) Newest(ctx context.Context, sel Selection, from time.Time) ([]SeriesNewest, error) {
+	query, args := newestStatement(sel, from)
+	rows, err := s.db.QueryContext(ctx, query, args...)
 	if err != nil {
-		return nil, fmt.Errorf("read history of %s: %w", sel.Metric, err)
+		return nil, fmt.Errorf("read the series of %s in the window: %w", sel.Metric, err)
 	}
 	defer func() { _ = rows.Close() }()
 
-	var out []SeriesPoints
-	var current string
+	var out []SeriesNewest
 	for rows.Next() {
 		var node, labels, ts string
-		var point Point
-		if err := rows.Scan(&node, &labels, &ts, &point.Value); err != nil {
-			return nil, fmt.Errorf("read history of %s: %w", sel.Metric, err)
+		if err := rows.Scan(&node, &labels, &ts); err != nil {
+			return nil, fmt.Errorf("read the series of %s in the window: %w", sel.Metric, err)
 		}
-		if point.TS, err = parseTime(ts); err != nil {
+		ref, err := seriesRef(node, sel.Metric, labels)
+		if err != nil {
+			return nil, err
+		}
+		at, err := parseTime(ts)
+		if err != nil {
 			return nil, fmt.Errorf("series %s of %s: %w", labels, node, err)
 		}
-		if key := node + "\x00" + labels; key != current {
-			current = key
-			ref, err := seriesRef(node, sel.Metric, labels)
-			if err != nil {
-				return nil, err
-			}
-			out = append(out, SeriesPoints{SeriesRef: ref})
-		}
-		last := &out[len(out)-1]
-		last.Points = append(last.Points, point)
+		out = append(out, SeriesNewest{SeriesRef: ref, Newest: at})
 	}
 	if err := rows.Err(); err != nil {
-		return nil, fmt.Errorf("read history of %s: %w", sel.Metric, err)
+		return nil, fmt.Errorf("read the series of %s in the window: %w", sel.Metric, err)
 	}
-	sortSeries(out, func(s SeriesPoints) SeriesRef { return s.SeriesRef })
+	sortSeries(out, func(s SeriesNewest) SeriesRef { return s.SeriesRef })
 	return out, nil
+}
+
+// Points streams one series' stored points inside [from, to], oldest first. Stored
+// timestamps have millisecond resolution and so do the bounds, so a `from` falling between
+// two milliseconds reaches one point further back than it says; the exact window belongs to
+// the caller that set it. It yields
+// rather than returns them so that the memory a read needs follows the size of its answer
+// and not the length of its window: the reduction consumes the stream point by point
+// (docs/specs/history.md#reduction). A failed read yields one zero point with the error and
+// stops.
+func (s *SQLite) Points(ctx context.Context, ref SeriesRef, from, to time.Time) iter.Seq2[Point, error] {
+	return func(yield func(Point, error) bool) {
+		labels, err := encodeLabels(ref.Labels)
+		if err != nil {
+			yield(Point{}, fmt.Errorf("read history of %s of %s: %w", ref.Metric, ref.Node, err))
+			return
+		}
+		rows, err := s.db.QueryContext(ctx,
+			`SELECT ts, value FROM measurements
+			 WHERE metric = ? AND node = ? AND labels = ? AND ts >= ? AND ts <= ? ORDER BY ts`,
+			ref.Metric, ref.Node, labels, formatTime(from), formatTime(to))
+		if err != nil {
+			yield(Point{}, fmt.Errorf("read history of %s %s of %s: %w", ref.Metric, labels, ref.Node, err))
+			return
+		}
+		defer func() { _ = rows.Close() }()
+
+		for rows.Next() {
+			var ts string
+			var point Point
+			if err := rows.Scan(&ts, &point.Value); err != nil {
+				yield(Point{}, fmt.Errorf("read history of %s %s of %s: %w", ref.Metric, labels, ref.Node, err))
+				return
+			}
+			if point.TS, err = parseTime(ts); err != nil {
+				yield(Point{}, fmt.Errorf("series %s of %s: %w", labels, ref.Node, err))
+				return
+			}
+			if !yield(point, nil) {
+				return
+			}
+		}
+		if err := rows.Err(); err != nil {
+			yield(Point{}, fmt.Errorf("read history of %s %s of %s: %w", ref.Metric, labels, ref.Node, err))
+		}
+	}
+}
+
+// seriesStatement and newestStatement are single statements so that a test can EXPLAIN
+// exactly what these reads run: one row per series, never a pass over the points (ADR 0031).
+func seriesStatement(sel Selection) (string, []any) {
+	where, args := sel.where()
+	return `SELECT node, labels FROM series WHERE ` + where, args
+}
+
+func newestStatement(sel Selection, from time.Time) (string, []any) {
+	where, args := sel.where()
+	return `SELECT node, labels, last_ts FROM series WHERE ` + where + ` AND last_ts >= ?`,
+		append(args, formatTime(from))
 }
 
 func (sel Selection) where() (string, []any) {
