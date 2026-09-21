@@ -207,7 +207,7 @@ func TestRootIsMountedOnTheRoutes(t *testing.T) {
 }
 
 // spec: history.md#page — a series that stopped arriving is hidden when removable and marked
-// otherwise; one that names no sensor has no age at all.
+// otherwise; one that names no sensor ages by its node's longest interval.
 func TestPageLeavesOutOrMarksSeriesThatStoppedArriving(t *testing.T) {
 	const marker = "no fresh data"
 	bound := evaluate.StaleFactor * time.Minute
@@ -215,7 +215,11 @@ func TestPageLeavesOutOrMarksSeriesThatStoppedArriving(t *testing.T) {
 		return diskValue(metric, mount, removable, 1, age)
 	}
 	loose := func(mount string, age time.Duration) storage.Value {
-		value := diskValue("coffee.level", mount, "true", 1, age)
+		removable := "false"
+		if strings.Contains(mount, "stick") {
+			removable = "true"
+		}
+		value := diskValue("coffee.level", mount, removable, 1, age)
 		value.Sensor = ""
 		return value
 	}
@@ -234,7 +238,9 @@ func TestPageLeavesOutOrMarksSeriesThatStoppedArriving(t *testing.T) {
 		{"a series exactly at the bound", series("disk.free_pct", "/Volumes/stick-a", "true", bound), true, false},
 		{"a removable series past the bound", series("disk.free_pct", "/Volumes/stick-a", "true", bound+time.Second), false, false},
 		{"a fixed series past the bound", series("disk.free_pct", "/Volumes/data-a", "false", bound+time.Second), true, true},
-		{"a series naming no sensor", loose("/Volumes/stick-a", 24*time.Hour), true, false},
+		{"a series naming no sensor, inside its node's longest interval", loose("/Volumes/data-a", bound), true, false},
+		{"a removable series naming no sensor, past that bound", loose("/Volumes/stick-a", bound+time.Second), false, false},
+		{"a fixed series naming no sensor, past that bound", loose("/Volumes/data-a", bound+time.Second), true, true},
 		{"a removable series whose node runs no such sensor", unrun("/Volumes/stick-a", "true"), false, false},
 		{"a fixed series whose node runs no such sensor", unrun("/Volumes/data-a", "false"), true, true},
 	}

@@ -4,6 +4,7 @@ import (
 	"context"
 	"path/filepath"
 	"slices"
+	"strconv"
 	"testing"
 	"time"
 
@@ -125,15 +126,8 @@ func levelOf(level *evaluate.Level) string {
 	return level.String()
 }
 
-func staleOf(stale *bool) string {
-	switch {
-	case stale == nil:
-		return "null"
-	case *stale:
-		return "true"
-	default:
-		return "false"
-	}
+func staleOf(stale bool) string {
+	return strconv.FormatBool(stale)
 }
 
 // spec: state.md#endpoint — a hub no node has reported to.
@@ -444,15 +438,16 @@ func TestLevels(t *testing.T) {
 	})
 
 	t.Run("a node whose only critical subject names no sensor", func(t *testing.T) {
-		loose := storage.Value{Metric: "load.one", Value: 99, TS: now.Add(-24 * time.Hour)}
+		loose := storage.Value{Metric: "load.one", Value: 99, TS: now.Add(-staleAfter)}
 		snap := storage.Snapshot{
 			Nodes:      []storage.NodeState{heard("server-b", 0, loose)},
 			Thresholds: []storage.Threshold{watch("server-b", "load.one", nil)},
 			States:     []storage.State{recorded("server-b", "load.one", nil, evaluate.Critical, since)},
 		}
 		s := build(t, snap)
-		if got := subject(t, s, "server-b", "load.one", ""); staleOf(got.Stale) != "null" {
-			t.Fatalf("stale = %s: no freshness rule applies to a series naming no sensor", staleOf(got.Stale))
+		if got := subject(t, s, "server-b", "load.one", ""); staleOf(got.Stale) != "false" {
+			t.Fatalf("stale = %s: a series naming no sensor is fresh inside its node's longest interval",
+				staleOf(got.Stale))
 		}
 		if got := node(t, s, "server-b"); levelOf(got.Level) != "critical" {
 			t.Fatalf("node level = %s, want critical: that subject is not stale", levelOf(got.Level))
@@ -592,11 +587,30 @@ func TestStaleness(t *testing.T) {
 	})
 
 	t.Run("a series whose newest value names no sensor", func(t *testing.T) {
+		loose := func(age time.Duration) storage.Snapshot {
+			return storage.Snapshot{Nodes: []storage.NodeState{
+				heard("server-b", 0, storage.Value{Metric: "load.one", Value: 0.4, TS: now.Add(-age)}),
+			}}
+		}
+		if got := subject(t, build(t, loose(staleAfter)), "server-b", "load.one", ""); staleOf(got.Stale) != "false" {
+			t.Fatalf("stale = %s at exactly three of the node's longest interval, want the bound inclusive",
+				staleOf(got.Stale))
+		}
+		if got := subject(t, build(t, loose(staleAfter+time.Second)), "server-b", "load.one", ""); staleOf(got.Stale) != "true" {
+			t.Fatalf("stale = %s past that bound, want a series no agent will name again to age off the page",
+				staleOf(got.Stale))
+		}
+	})
+
+	t.Run("a series naming no sensor on a node that runs no sensor at all", func(t *testing.T) {
+		idle := func(node string) (evaluate.Target, bool) {
+			return evaluate.Target{Node: node, SilenceAfter: silenceAfter}, true
+		}
 		snap := storage.Snapshot{Nodes: []storage.NodeState{
-			heard("server-b", 0, storage.Value{Metric: "load.one", Value: 0.4, TS: now.Add(-24 * time.Hour)}),
+			heard("server-b", 0, storage.Value{Metric: "load.one", Value: 0.4, TS: now}),
 		}}
-		if got := subject(t, build(t, snap), "server-b", "load.one", ""); staleOf(got.Stale) != "null" {
-			t.Fatalf("stale = %s, want null: no freshness rule applies to it", staleOf(got.Stale))
+		if got := subject(t, state.Build(idle, snap, now), "server-b", "load.one", ""); staleOf(got.Stale) != "true" {
+			t.Fatalf("stale = %s, want true: nothing will refresh it", staleOf(got.Stale))
 		}
 	})
 

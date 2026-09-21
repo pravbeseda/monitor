@@ -41,7 +41,8 @@ type Node struct {
 
 // Subject is a series, plus one per node for its own silence (ADR 0033). Level is nil,
 // and Since zero, when evaluation holds no level for it that this build can read — which
-// is always so for a series nothing watches. Stale is nil when no freshness rule applies.
+// is always so for a series nothing watches. Every subject of a node carries a staleness
+// verdict (ADR 0034).
 type Subject struct {
 	Node    string
 	Metric  string
@@ -49,7 +50,7 @@ type Subject struct {
 	Watched bool
 	Level   *evaluate.Level
 	Since   time.Time
-	Stale   *bool
+	Stale   bool
 	// Unit, Value and TS are the newest reading of the series. The silence subject has
 	// none: its input is the node's last-seen time.
 	Unit  history.Unit
@@ -94,8 +95,7 @@ func Build(targets func(node string) (evaluate.Target, bool), snap storage.Snaps
 			one.Level, one.Since = &level, subject.Since
 		}
 		// The silence subject reads hub receipt time, which is never stale.
-		stale := subject.Metric != evaluate.SilenceMetric && subject.Frozen
-		one.Stale = &stale
+		one.Stale = subject.Metric != evaluate.SilenceMetric && subject.Frozen
 		watched[seriesKey(subject.Node, subject.Metric, subject.Labels)] = one
 	}
 
@@ -129,13 +129,13 @@ func Build(targets func(node string) (evaluate.Target, bool), snap storage.Snaps
 			// A tick freezes the series it judged; everything else — unwatched, or
 			// watched by a threshold this build cannot read — is aged here by the same
 			// rule, so nothing reads as fresh merely because nothing judged it.
-			if !judged || !known || !target.Ages(value.Sensor, reported.LastSeen, now) {
+			if !judged || !known {
 				one.Stale = staleOf(target, known, reported.LastSeen, value, now)
 			}
 			one.Unit, one.Value, one.TS = history.UnitOf(value.Metric), &value.Value, value.TS
 			if isWatched {
 				node.Watched++
-				if one.Stale == nil || !*one.Stale {
+				if !one.Stale {
 					node.Level = worse(node.Level, one.Level)
 				}
 			} else if known {
@@ -160,18 +160,12 @@ func Build(targets func(node string) (evaluate.Target, bool), snap storage.Snaps
 
 // staleOf ages a series nothing watches by the same rule evaluation freezes a subject by.
 // A node the file no longer names is stale whatever its values say: nothing will refresh
-// them. A series whose newest value names no sensor has no freshness rule at all, unless
-// its node is silent, which ages everything under it (docs/specs/state.md#staleness).
-func staleOf(target evaluate.Target, configured bool, lastSeen time.Time, value storage.Value, now time.Time) *bool {
+// them (docs/specs/state.md#staleness).
+func staleOf(target evaluate.Target, configured bool, lastSeen time.Time, value storage.Value, now time.Time) bool {
 	if !configured {
-		stale := true
-		return &stale
+		return true
 	}
-	if !target.Ages(value.Sensor, lastSeen, now) {
-		return nil
-	}
-	stale := target.Frozen(value.Sensor, lastSeen, value.TS, now)
-	return &stale
+	return target.Frozen(value.Sensor, lastSeen, value.TS, now)
 }
 
 // seriesKey identifies a series by the encoding evaluation keys a subject on, so the two

@@ -40,7 +40,7 @@ type subjectJSON struct {
 	Watched bool              `json:"watched"`
 	Level   *string           `json:"level"`
 	Since   *string           `json:"since"`
-	Stale   *bool             `json:"stale"`
+	Stale   bool              `json:"stale"`
 	Unit    *history.Unit     `json:"unit"`
 	Value   *float64          `json:"value"`
 	TS      *string           `json:"ts"`

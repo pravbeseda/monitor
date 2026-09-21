@@ -21,30 +21,34 @@ type Target struct {
 }
 
 // Frozen reports whether a value of a sensor, stamped at ts, is past judging at now. A
-// silent node freezes everything under it, whatever produced it. Otherwise a series whose
-// newest value names no sensor has no freshness rule at all and is never frozen on age;
-// one whose node does not run that sensor is frozen outright, because nothing will
-// refresh it; and the rest age out after three intervals. It is exported because the
+// silent node freezes everything under it, whatever produced it. Otherwise a series is
+// frozen once it is older than three of the interval it is aged by, and outright when the
+// node has no such interval, because nothing will refresh it. It is exported because the
 // state reports the same verdict (docs/specs/state.md#staleness).
 func (t Target) Frozen(sensor string, lastSeen, ts, now time.Time) bool {
 	if t.silent(lastSeen, now) {
 		return true
 	}
-	if sensor == "" {
-		return false
-	}
-	interval, runs := t.Intervals[sensor]
-	if !runs {
+	interval, ages := t.interval(sensor)
+	if !ages {
 		return true
 	}
 	return now.Sub(ts) > StaleFactor*interval
 }
 
-// Ages reports whether a series has a freshness rule at all: a silent node ages
-// everything, and otherwise only a series that names a sensor can be judged stale
-// (docs/specs/state.md#staleness).
-func (t Target) Ages(sensor string, lastSeen, now time.Time) bool {
-	return sensor != "" || t.silent(lastSeen, now)
+// interval is what a series' age is measured against: its own sensor's interval, or, when
+// its newest value names no sensor, the longest interval among the sensors this node runs
+// — nothing else says when that value was due (ADR 0034).
+func (t Target) interval(sensor string) (time.Duration, bool) {
+	if sensor != "" {
+		interval, runs := t.Intervals[sensor]
+		return interval, runs
+	}
+	var longest time.Duration
+	for _, interval := range t.Intervals {
+		longest = max(longest, interval)
+	}
+	return longest, longest > 0
 }
 
 func (t Target) silent(lastSeen, now time.Time) bool {

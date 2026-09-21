@@ -207,7 +207,7 @@ func rowsByNode(current state.State) (map[string][]seriesRow, map[string]bool) {
 			value:  *subject.Value,
 			ts:     subject.TS,
 			level:  subject.Level,
-			stale:  subject.Stale != nil && *subject.Stale,
+			stale:  subject.Stale,
 		})
 	}
 	for _, list := range rows {
