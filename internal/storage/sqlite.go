@@ -101,15 +101,15 @@ var migrations = []string{
 	// measurements rather than written in the file (ADR 0032). The sensor comes with the
 	// measurements that wrote the series (ADR 0033): staleness is three times that
 	// sensor's interval, and nothing else says which sensor a metric comes from. A series
-	// stored before this migration has none, which reads as "no freshness rule applies"
-	// until its agent reports again.
+	// stored before this migration has none, and is aged by the longest interval among the
+	// sensors its node runs until its agent reports again (ADR 0034).
 	//
 	// The series table is rebuilt rather than altered: it is derived from the
 	// measurements, so rebuilding costs nothing, and unlike ADD COLUMN it can be applied
 	// twice — which a database whose schema version was rewound is entitled to. A replay
 	// does cost the sensor names, since the measurements do not carry them; the series
-	// that lose one stop aging until their agent reports again, which is one collection
-	// interval away (docs/specs/evaluation.md#freezing).
+	// that lose one are aged by a coarser bound than their own until their agent reports
+	// again, which is one collection interval away (docs/specs/evaluation.md#freezing).
 	`DROP TABLE IF EXISTS series;
 
 	CREATE TABLE series (

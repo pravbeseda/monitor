@@ -130,7 +130,7 @@ func TestStateWireFormat(t *testing.T) {
 		`"watched":false,"level":null,"since":null,"stale":false,` +
 		`"unit":"percent","value":12,"ts":"2026-08-31T11:45:00.000Z"},` +
 		`{"node":"server-b","metric":"load.one","labels":{},"watched":false,"level":null,"since":null,` +
-		`"stale":null,"unit":"number","value":0.4,"ts":"2026-08-31T11:55:00.000Z"}]}`
+		`"stale":false,"unit":"number","value":0.4,"ts":"2026-08-31T11:55:00.000Z"}]}`
 	if got := strings.TrimSpace(rec.Body.String()); got != want {
 		t.Fatalf("body = %s\nwant   %s", got, want)
 	}

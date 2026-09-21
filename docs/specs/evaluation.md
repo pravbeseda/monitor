@@ -16,7 +16,8 @@
   [0015](../decisions/0015-evaluation-on-a-tick.md),
   [0016](../decisions/0016-leaving-critical-is-instant.md),
   [0032](../decisions/0032-thresholds-are-set-in-the-interface.md),
-  [0033](../decisions/0033-a-subject-is-a-series.md)
+  [0033](../decisions/0033-a-subject-is-a-series.md),
+  [0034](../decisions/0034-a-series-without-a-sensor-still-ages.md)
 
 ## Purpose
 
@@ -89,10 +90,13 @@ shipped unused.
 **Staleness needs an interval, and a measurement names its sensor**
 ([ingest](ingest.md#wire-format)). The series keeps the sensor its newest value named, and
 `stale_after` is 3× the interval that node resolves for that sensor
-([hub-config.md](hub-config.md#resolution)). A series whose newest value names no sensor has
-no staleness at all; a series whose node runs that sensor no longer — resolved
-`enabled: false`, or no interval for it — is frozen outright, because nothing will refresh
-it.
+([hub-config.md](hub-config.md#resolution)). A series whose newest value names no sensor is
+aged by the longest interval among the sensors its node runs, read from the configuration
+the tick reads: nothing else says when its next value was due, and a series nothing ages
+keeps a volume that vanished long ago on the page for ever
+([0034](../decisions/0034-a-series-without-a-sensor-still-ages.md)). A series whose node
+runs that sensor no longer — resolved `enabled: false`, or no interval for it — is frozen
+outright, because nothing will refresh it.
 
 ## The tick
 
@@ -200,7 +204,8 @@ written: a message recorded from fresh values is still owed, and a transition re
 while they were fresh is still part of the day's story.
 
 Age is the tick time minus the measurement's own `ts`, against `stale_after` = 3× the
-interval the node resolves for the series' sensor.
+interval the node resolves for the series' sensor — or, when the series names no sensor,
+3× the longest interval among the sensors that node runs.
 
 | Situation | Result |
 |---|---|
@@ -209,9 +214,13 @@ interval the node resolves for the series' sensor.
 | a subject's newest value is exactly `stale_after` old | evaluated: the bound is inclusive, as it is for a chart's gaps ([history](history.md#gaps)) |
 | a removable volume is unplugged | frozen by the same rule; it neither recovers nor repeats |
 | the node resolves the series' sensor as `enabled: false`, or resolves no interval for it | frozen: nothing will refresh those values |
-| the series' newest value names no sensor | never frozen on age: with no interval, staleness has no meaning, and the value is judged as it stands |
+| the series' newest value names no sensor | `stale_after` is 3× the longest interval among the sensors the node runs: nothing else says when the value was due |
+| the same, its newest value exactly that old | evaluated: the bound is inclusive here too |
+| the same, on a node that runs no sensor at all | frozen: nothing will refresh it |
+| a watched series that names no sensor, once past that bound | frozen like any other: no repeat, no transition and no recovery until it reports again |
 | a series reported again under a different sensor name | `stale_after` follows the newest value's sensor from that tick on; the level is untouched |
-| a series that reported with a sensor and now reports without one | never frozen on age from then on, by the row above it |
+| a series that reported with a sensor and now reports without one | aged by the longest interval from that tick on, by the sensorless rows above |
+| a series that reported without a sensor and now names one | aged by that sensor's interval from that tick on, and thawed by it if the new bound makes its newest value fresh |
 | a stored threshold naming a series that has never reported — a store written by hand | nothing is evaluated for it: there is no value to judge |
 | a volume that reappears under different labels | a new subject, unconfigured until it is given a threshold; the old one freezes |
 | the node reports again | evaluation resumes on the next tick, and a changed level writes one event |
@@ -373,6 +382,7 @@ rows about the file are about the first tick after a restart with a changed file
 | a threshold configured for a series that is already past it | the first tick transitions it like any other: a subject that arrives critical alerts at once |
 | `silence_after` widened while a node is silent-critical | the next tick finds `now − last_seen` inside the new window and recovers it |
 | a sensor interval lowered while the agent still holds the old one | `stale_after` shrinks first, so healthy subjects may freeze for up to one configuration delivery ([ingest](ingest.md#configuration-delivery)) |
+| the node's longest sensor interval changed, or the sensor that held it switched off | every series of that node naming no sensor is aged by the new bound from the next tick on, which may freeze one or thaw one, though nothing about those series changed |
 | a node removed from the file | no subjects for it: its stored levels are left untouched and never evaluated, and no recovery is notified |
 
 ### Startup validation

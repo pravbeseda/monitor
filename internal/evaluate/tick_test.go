@@ -26,10 +26,17 @@ func open(t *testing.T) *storage.SQLite {
 // warning at 10 GB, critical at 4 GB.
 func collect(t *testing.T, db *storage.SQLite, at time.Time, labels map[string]string, free float64) {
 	t.Helper()
+	collectFrom(t, db, "disk", at, labels, free)
+}
+
+// collectFrom is collect naming the sensor behind the measurement: "" is what an agent too
+// old to name it sends, and what a rebuilt series table leaves behind (ADR 0034).
+func collectFrom(t *testing.T, db *storage.SQLite, sensor string, at time.Time, labels map[string]string, free float64) {
+	t.Helper()
 	in := storage.Ingest{
 		Node: "server-b", AgentVersion: "test", ConfigVersion: "test", ReceivedAt: at,
 		Measurements: []storage.Measurement{
-			{Metric: "disk.free_bytes", Sensor: "disk", Labels: labels, Value: free, TS: at},
+			{Metric: "disk.free_bytes", Sensor: sensor, Labels: labels, Value: free, TS: at},
 		},
 	}
 	if err := db.SaveIngest(context.Background(), in); err != nil {

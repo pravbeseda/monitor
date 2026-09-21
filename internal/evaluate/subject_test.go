@@ -141,19 +141,25 @@ func TestFreezing(t *testing.T) {
 
 	t.Run("the series names no sensor", func(t *testing.T) {
 		labels := volume("/")
-		values := []storage.Value{
-			{Metric: "disk.free_bytes", Labels: labels, Value: gb(5), TS: tick.Add(-staleAfter - time.Hour)},
+		sensorless := func(age time.Duration) storage.Snapshot {
+			return storage.Snapshot{
+				Nodes: []storage.NodeState{heard(0, storage.Value{
+					Metric: "disk.free_bytes", Labels: labels, Value: gb(5), TS: tick.Add(-age),
+				})},
+				Thresholds: []storage.Threshold{watched(labels)},
+			}
 		}
-		snap := storage.Snapshot{
-			Nodes:      []storage.NodeState{heard(0, values...)},
-			Thresholds: []storage.Threshold{watched(labels)},
-		}
-		got := find(t, subjectsOf(t, watching(t), snap), "disk.free_bytes", "/")
+
+		got := find(t, subjectsOf(t, watching(t), sensorless(staleAfter)), "disk.free_bytes", "/")
 		if got.Frozen {
-			t.Fatal("a series with no sensor froze on age, though no interval says when it is late")
+			t.Fatal("a value exactly three of the node's longest interval old froze: the bound is inclusive")
 		}
 		if got.Level != evaluate.Warning {
-			t.Fatalf("level = %v, want the stale-looking value judged as it stands", got.Level)
+			t.Fatalf("level = %v, want the fresh value judged as it stands", got.Level)
+		}
+
+		if got := find(t, subjectsOf(t, watching(t), sensorless(staleAfter+time.Second)), "disk.free_bytes", "/"); !got.Frozen {
+			t.Fatal("a series with no sensor stayed evaluated past its node's longest interval")
 		}
 	})
 
@@ -336,20 +342,43 @@ func TestASeriesAgesByTheSensorOfItsNewestValue(t *testing.T) {
 	}
 }
 
-// spec: evaluation.md#freezing — a series that reported with a sensor and now reports
-// without one is never frozen on age from then on.
-func TestASeriesThatLosesItsSensorStopsAging(t *testing.T) {
+// spec: evaluation.md#freezing — a series that names no sensor is aged by the longest
+// interval among the sensors its node runs, whichever sensor holds it; a node running none
+// freezes it outright, and naming a sensor again ages it by that sensor from then on.
+// spec: evaluation.md#configuration-changes — changing which interval is the longest
+// freezes or thaws such a series, though nothing about the series itself changed.
+func TestASeriesWithoutASensorAgesByItsNodesLongestInterval(t *testing.T) {
 	labels := volume("/")
-	value := storage.Value{
-		Metric: "disk.free_bytes", Labels: labels, Value: gb(40), TS: tick.Add(-staleAfter - time.Hour),
-	}
+	// Collected half an hour ago: past three intervals of the five-minute sensor, inside
+	// three of the fifteen-minute one, so only the longest interval keeps it evaluated.
+	value := storage.Value{Metric: "disk.free_bytes", Labels: labels, Value: gb(40), TS: tick.Add(-30 * time.Minute)}
 	snap := storage.Snapshot{
 		Nodes:      []storage.NodeState{heard(0, value)},
 		Thresholds: []storage.Threshold{watched(labels)},
+		States:     []storage.State{stored("disk.free_bytes", labels, evaluate.Warning, tick.Add(-time.Hour))},
 	}
 
-	if got := find(t, subjectsOf(t, watching(t), snap), "disk.free_bytes", "/"); got.Frozen {
-		t.Fatal("a series whose newest value names no sensor froze on age")
+	target := watching(t)
+	target.Intervals = map[string]time.Duration{"disk": interval, "fast": 5 * time.Minute}
+	if got := find(t, subjectsOf(t, target, snap), "disk.free_bytes", "/"); got.Frozen {
+		t.Fatal("a series with no sensor was aged by the node's shortest interval, not its longest")
+	}
+
+	target.Intervals = map[string]time.Duration{"fast": 5 * time.Minute}
+	if got := find(t, subjectsOf(t, target, snap), "disk.free_bytes", "/"); !got.Frozen {
+		t.Fatal("the same series stayed evaluated when the node's longest interval shrank below its age")
+	}
+
+	target.Intervals = map[string]time.Duration{}
+	if got := find(t, subjectsOf(t, target, snap), "disk.free_bytes", "/"); !got.Frozen {
+		t.Fatal("a series on a node running no sensor at all stayed evaluated: nothing will refresh it")
+	}
+
+	value.Sensor = "disk"
+	snap.Nodes = []storage.NodeState{heard(0, value)}
+	target.Intervals = map[string]time.Duration{"disk": interval, "fast": 5 * time.Minute}
+	if got := find(t, subjectsOf(t, target, snap), "disk.free_bytes", "/"); got.Frozen {
+		t.Fatal("the series named its sensor again and still froze by another bound")
 	}
 }
 

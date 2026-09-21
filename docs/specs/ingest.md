@@ -8,7 +8,8 @@
   [0010](../decisions/0010-agent-configuration.md),
   [0022](../decisions/0022-updates-are-pulled.md),
   [0028](../decisions/0028-agents-follow-a-target-the-hub-serves.md),
-  [0033](../decisions/0033-a-subject-is-a-series.md)
+  [0033](../decisions/0033-a-subject-is-a-series.md),
+  [0034](../decisions/0034-a-series-without-a-sensor-still-ages.md)
 
 ## Purpose
 
@@ -65,8 +66,9 @@ Authorization: Bearer <per-node token>
 - a measurement's `sensor` — optional — names the sensor that produced it. The hub keeps
   that name on the series, and it is what staleness is measured against: three times the
   interval the node resolves for that sensor ([evaluation](evaluation.md#freezing)). A
-  measurement that carries none is stored and charted like any other; its series simply
-  has no staleness ([0033](../decisions/0033-a-subject-is-a-series.md)).
+  measurement that carries none is stored and charted like any other, and its series ages
+  by the longest interval among the sensors its node runs
+  ([evaluation](evaluation.md#freezing)).
 - `metric` ids match `[a-z0-9_.]+`, and a `sensor` name matches the same pattern; `value`
   is a finite JSON number; `labels` is a flat string-to-string map.
 - Unknown JSON fields are ignored, so an older hub accepts a newer agent's request.
@@ -135,7 +137,7 @@ One row = one test. Anchors: `spec: ingest.md#<heading>`.
 | measurement with a metric id the hub has never seen | 200 | stored; it is listed and charted like any other series, and has no level until a threshold is set for it ([evaluation](evaluation.md#model)) |
 | measurement carrying `sensor` | 200 | stored, and its series keeps that sensor name, which is what staleness is measured against ([evaluation](evaluation.md#freezing)) |
 | a series reported again with a different `sensor` | 200 | stored; the series keeps the newest value's sensor |
-| measurement with no `sensor` | 200 | stored and charted as any other; its series has no staleness |
+| measurement with no `sensor` | 200 | stored and charted as any other; its series is aged by the longest interval among the sensors its node runs ([evaluation](evaluation.md#freezing)) |
 | `sensor` naming a sensor the node does not run, or one its `manifest` does not list | 200 | stored: ingest checks the name's shape, never its meaning |
 | measurement identical to a stored one (same node, metric, labels, ts to the millisecond) | 200 | duplicate silently skipped |
 | `manifest` differs from the stored one | 200 | stored manifest replaced |
