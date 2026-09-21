@@ -44,8 +44,9 @@ type Measurement struct {
 	TS     string            `json:"ts"`
 	// Sensor names what produced this reading, and is what staleness is measured
 	// against (docs/specs/evaluation.md#freezing). It is absent from an agent too old to
-	// send it, which costs that series its freshness rule and nothing else; a pointer
-	// tells that silence apart from an empty name, which is refused.
+	// send it, which leaves that series aged by the longest interval among the sensors its
+	// node runs rather than by its own (ADR 0034); a pointer tells that silence apart from
+	// an empty name, which is refused.
 	Sensor *string `json:"sensor,omitempty"`
 }
 

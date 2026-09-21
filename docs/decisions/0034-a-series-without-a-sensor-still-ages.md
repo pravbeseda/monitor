@@ -45,8 +45,11 @@ at all, which the node's own cadence answers well enough.
 - No row outlives the thing it describes. A vanished volume leaves the page three of the
   interval it is aged by after its last reading, whether or not its series kept a sensor
   name.
-- A rebuild of the `series` table costs accuracy, not correctness: until each series reports
-  again, it is aged by a bound that is coarser than its own.
+- A rebuild of the `series` table costs accuracy: until each series reports again, it is
+  aged by a bound that is coarser than its own. In one direction it costs more than
+  accuracy — a series frozen because its node runs its sensor no longer becomes sensorless
+  on the rebuild and is aged by a live bound again, so its row can read fresh for up to
+  that bound before it ages off a second time.
 - The consequence [0033](0033-a-subject-is-a-series.md) records — that a measurement from an
   agent too old to name its sensor "only loses staleness" — no longer holds: such a series
   is aged, coarsely, from the moment it is stored.
