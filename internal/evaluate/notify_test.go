@@ -384,7 +384,7 @@ func TestAFrozenCriticalSendsNoRepeat(t *testing.T) {
 // other once past its node's longest interval, so it repeats no more than a stale one.
 func TestAFrozenCriticalThatNamesNoSensorSendsNoRepeat(t *testing.T) {
 	db := open(t)
-	collectSensorless(t, db, tick, volume("/"), gb(3))
+	collectFrom(t, db, "", tick, volume("/"), gb(3))
 	pass(t, evaluator(db, tick, watching(t)))
 
 	due := tick.Add(24 * time.Hour)

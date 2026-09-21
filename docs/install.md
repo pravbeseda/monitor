@@ -396,8 +396,10 @@ entered again nothing alerts. Do it in this order:
 7. **Check `agent_target` is set** in `hub.yaml`, at the top level, per class or per node,
    so every node reaches this release too. An agent older than it does not name the sensor
    behind a measurement, and staleness is measured against that name
-   ([ADR 0033](decisions/0033-a-subject-is-a-series.md)), so a node left behind is charted
-   and judged but never marked stale.
+   ([ADR 0033](decisions/0033-a-subject-is-a-series.md)), so every series of a node left
+   behind is aged by the longest interval among the sensors that node runs rather than by
+   its own ([ADR 0034](decisions/0034-a-series-without-a-sensor-still-ages.md)): marked, or
+   hidden when removable, later than it should be rather than never.
 
 ### Keeping the hub upgraded unattended
 

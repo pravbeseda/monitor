@@ -39,6 +39,12 @@ func watching(forgotten ...string) func(string) (evaluate.Target, bool) {
 	}
 }
 
+// idle configures every node it is asked about as one that runs no sensor at all, so
+// nothing it has ever reported can be refreshed.
+func idle(node string) (evaluate.Target, bool) {
+	return evaluate.Target{Node: node, SilenceAfter: silenceAfter}, true
+}
+
 func volume(mount string) map[string]string {
 	return map[string]string{"mount": mount, "fs": "ext4", "removable": "false"}
 }
@@ -603,9 +609,6 @@ func TestStaleness(t *testing.T) {
 	})
 
 	t.Run("a series naming no sensor on a node that runs no sensor at all", func(t *testing.T) {
-		idle := func(node string) (evaluate.Target, bool) {
-			return evaluate.Target{Node: node, SilenceAfter: silenceAfter}, true
-		}
 		snap := storage.Snapshot{Nodes: []storage.NodeState{
 			heard("server-b", 0, storage.Value{Metric: "load.one", Value: 0.4, TS: now}),
 		}}
@@ -615,10 +618,7 @@ func TestStaleness(t *testing.T) {
 	})
 
 	t.Run("a series whose node resolves no interval for its sensor", func(t *testing.T) {
-		none := func(node string) (evaluate.Target, bool) {
-			return evaluate.Target{Node: node, SilenceAfter: silenceAfter}, true
-		}
-		s := state.Build(none, aged(time.Minute), now)
+		s := state.Build(idle, aged(time.Minute), now)
 		if got := subject(t, s, "server-b", "disk.free_bytes", "/"); staleOf(got.Stale) != "true" {
 			t.Fatalf("stale = %s, want true: nothing will refresh it", staleOf(got.Stale))
 		}
