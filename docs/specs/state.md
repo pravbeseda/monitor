@@ -57,12 +57,12 @@ neither.
 
 **Stale** is evaluation's *frozen* ([evaluation](evaluation.md#freezing)), decided by the
 same code at the instant of the request: a subject is stale when its newest value is older
-than three intervals of the sensor that value names, when its node is silent past its
+than three intervals of the sensor that value names — or, when it names none, three of the
+longest interval among the sensors its node runs — when its node is silent past its
 `silence_after`, or when its node no longer runs that sensor — resolved `enabled: false`, or
 no interval resolved for it, which is where a node the file no longer names ends up too. The
-silence subject is never stale. Only a series whose newest value names no sensor has
-`stale: null`: no freshness rule applies to it at all, and the node rollup below counts it
-as not stale.
+silence subject is never stale. Every subject of a node therefore carries a verdict: `stale`
+is a boolean, never absent.
 
 **A level is recorded or absent.** `null` means no level this build can read is held for the
 subject: nothing is watched there, its values have not yet been found fresh by a tick, or
@@ -107,7 +107,7 @@ GET /api/v1/state
       "watched": false, "level": null, "since": null, "stale": false,
       "unit": "percent", "value": 12, "ts": "2026-09-19T09:45:00.000Z" },
     { "node": "server-b", "metric": "load.one", "labels": {}, "watched": false,
-      "level": null, "since": null, "stale": null, "unit": "number",
+      "level": null, "since": null, "stale": false, "unit": "number",
       "value": 0.4, "ts": "2026-09-19T09:55:00.000Z" }
   ]
 }
@@ -122,7 +122,9 @@ empty. The silence subject carries no value of its own — `unit`, `value` and `
 `null` — because its input is the node's last-seen time, which `nodes` already states.
 `watched` and `unwatched` count that node's series, and at the top level every node's; a
 silence subject is watched and counted in neither. `node` names a node today; a subject that belongs to
-none, which manual input will bring, will carry `node: null` and have no entry in `nodes`.
+none, which manual input will bring, will carry `node: null` and have no entry in `nodes`
+— what ages such a subject is a question for whoever adds it, since every bound here is
+read from a node's configuration.
 
 ## Behaviour
 
@@ -166,7 +168,7 @@ One row = one test. Anchors: `spec: state.md#<heading>`.
 | a value that crossed a threshold after the last tick | the level already stored |
 | the same, after the next tick | the level and `since` that tick stored |
 | a subject given a threshold after the last tick | listed, `watched: true`, `level: null`, `since: null` |
-| a node whose only `critical` subject has `stale: null` — its newest value names no sensor | node `level: critical`: a subject no freshness rule applies to is not stale, and its level counts |
+| a node whose only `critical` subject names no sensor, its newest value not yet past three of the node's longest interval | node `level: critical`: the subject is not stale, and its level counts |
 | a subject stale since it first appeared | `level: null` for as long as it stays stale |
 | a subject whose stored level this build does not know | `level: null`, `since: null` |
 | a node whose watched subjects are `ok` and whose silence subject is `critical` | node `level: critical` |
@@ -183,7 +185,9 @@ One row = one test. Anchors: `spec: state.md#<heading>`.
 | a series whose newest value is exactly three intervals old | `stale: false`: the bound is inclusive |
 | the same a moment later | `stale: true`, `level` and `since` still the ones stored |
 | a node silent past its `silence_after` | each of its subjects `stale: true` but its silence subject, which is `stale: false` |
-| a series whose newest value names no sensor | `stale: null`, however old its value is |
+| a series whose newest value names no sensor, exactly three of its node's longest sensor interval old | `stale: false`: the bound is inclusive here too, and nothing else says when the value was due |
+| the same series a moment later | `stale: true`, so a series no agent will ever name again still ages off the page |
+| a series whose newest value names no sensor, on a node that runs no sensor at all | `stale: true`: nothing will refresh it |
 | a series whose node resolves no interval for its sensor | `stale: true`: nothing will refresh it |
 | a stale volume with `removable: "true"` | listed, `stale: true`; hiding it is `/`'s rule ([history](history.md#page)) |
 | values stamped an hour ahead of the hub's clock | `stale: false` |
@@ -222,7 +226,8 @@ Names and labels are compared byte by byte; labels are rendered as history rende
   silence is in neither.
 - A node's `level` is the most severe `level` of its subjects that are not stale in the same
   response, and the response's `level` the most severe of its nodes'.
-- A subject is stale exactly when evaluation's own freezing code says so at `at`.
+- A subject is stale exactly when evaluation's own freezing code says so at `at`, and every
+  subject of a node carries that verdict: `stale` is never `null`.
 - `/` shows no level, subject or staleness the endpoint would not return at the same instant.
 - Reading the state writes nothing.
 

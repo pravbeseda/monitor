@@ -53,7 +53,8 @@ One decision per file, each stating what was rejected and why. New records start
 | [0030](decisions/0030-the-state-api-reports-the-stored-verdict.md) | The State API reports the verdict evaluation stored | accepted, amended by [0033](decisions/0033-a-subject-is-a-series.md) |
 | [0031](decisions/0031-a-table-of-series.md) | A table of series beside the measurements | accepted, amended by [0033](decisions/0033-a-subject-is-a-series.md) |
 | [0032](decisions/0032-thresholds-are-set-in-the-interface.md) | Thresholds are set in the interface and stored with the data | accepted |
-| [0033](decisions/0033-a-subject-is-a-series.md) | A subject is a series, and a threshold is one comparison per level | accepted |
+| [0033](decisions/0033-a-subject-is-a-series.md) | A subject is a series, and a threshold is one comparison per level | accepted, amended by [0034](decisions/0034-a-series-without-a-sensor-still-ages.md) |
+| [0034](decisions/0034-a-series-without-a-sensor-still-ages.md) | A series that names no sensor ages by its node's longest interval | accepted |
 
 ## Behaviour specs
 

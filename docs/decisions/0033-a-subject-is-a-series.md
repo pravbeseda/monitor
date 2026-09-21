@@ -1,6 +1,7 @@
 # 0033. A subject is a series, and a threshold is one comparison per level
 
-- **Status:** accepted
+- **Status:** accepted; staleness for a series that names no sensor is amended by
+  [0034](0034-a-series-without-a-sensor-still-ages.md)
 - **Date:** 2026-09-20
 - **Source:** supersedes [0012](0012-threshold-model.md); follows
   [0032](0032-thresholds-are-set-in-the-interface.md)

@@ -188,7 +188,11 @@ one.
 | a series with no interval — it names no sensor, or its node resolves none for it | one continuous line, never broken |
 
 Three times the interval is the same age at which [evaluation](evaluation.md) calls a
-subject's values stale; one definition of "this node was not reporting", not two.
+subject's values stale; one definition of "this node was not reporting", not two. A series
+with no interval is the one place the two questions part: a gap is a collection that was
+due and did not arrive, and nothing here says when a point of such a series was due, while
+staleness still has an answer — the node's longest sensor interval
+([state](state.md#staleness)).
 
 ### The page {#page}
 
@@ -208,13 +212,13 @@ subject's values stale; one definition of "this node was not reporting", not two
 | any series on `/` | one row of its own: its metric id, the volume its labels name if they name one, its newest value and the time it was collected |
 | a volume | two rows, one per series, since each is judged on its own ([0033](../decisions/0033-a-subject-is-a-series.md)) |
 | any row | a link to the page that sets what that series is judged by ([thresholds.md](thresholds.md)) |
-| the series of one volume collected at different times | each row its own time, and each left out or marked by its own age: nothing ages a series by another one |
+| the series of one volume collected at different times | each row its own time, and each left out or marked by its own age: no series is aged by another series' newest point |
 | the rows of one node | grouped so that the series of one volume sit together, and ordered by metric inside the group; the grouping is the page's own, since the [State API](state.md#ordering) privileges no label |
-| a row on `/` that the [state](state.md#staleness) calls stale when the page is read — its newest point older than three times the interval the node resolves for its sensor ([gaps](#gaps)), or its node silent past its `silence_after` — and that carries `removable: "true"` | not shown: an unplugged drive or an ejected disk image is not a reading |
+| a row on `/` that the [state](state.md#staleness) calls stale when the page is read — its newest point older than three times the interval its series is aged by, or its node silent past its `silence_after` — and that carries `removable: "true"` | not shown: an unplugged drive or an ejected disk image is not a reading |
 | the same, without `removable: "true"` | shown, its collected time marked, in the reader's language, as holding no fresh data |
 | a row on `/` exactly three intervals old | shown unmarked: the bound is inclusive, as for gaps |
 | that row reporting again | shown as before, unmarked |
-| a series whose newest value names no sensor | shown unmarked however old, while its node is reporting: no freshness rule applies to it ([state](state.md#staleness)) |
+| a series whose newest value names no sensor | aged by the longest interval among the sensors its node runs ([state](state.md#staleness)): marked, or hidden if it is removable, once past that bound |
 | the same series once its node is silent past its `silence_after` | marked with the rest of that node's series: silence is the node's, not the series' |
 | a series whose node runs its sensor no longer — resolved `enabled: false`, or a node the file no longer names | marked as holding no fresh data, or hidden if it is removable: nothing will refresh it |
 | a node silent past its `silence_after`, its series not yet three intervals old | its series hidden or marked already: evaluation freezes a silent node's subjects in the tick it falls silent |
@@ -264,8 +268,11 @@ unit reads naturally.
   window in which [evaluation](evaluation.md#freezing) may freeze it.
 - **A series that names no sensor** — pushed by something other than an agent, or by an
   agent too old to name it — is stored by [ingest](ingest.md) and served here with no
-  interval, so its line is never broken. Its unit still comes from its id, which is where
-  the unit lives until metrics are declared.
+  interval, so its line is never broken, while its freshness is judged by its node's
+  longest sensor interval ([evaluation](evaluation.md#freezing)). A pusher on its own
+  cadence is therefore aged by a bound that is not its own, and naming a sensor in the
+  measurement is how it gets one. Its unit still comes from its id, which is where the unit
+  lives until metrics are declared.
 - **A label filter naming a label no series carries** matches nothing rather than being
   ignored.
 - **A node whose interval was changed** ages by the interval it resolves now, so a line drawn
