@@ -13,7 +13,8 @@
   [0007](../decisions/0007-public-repository.md),
   [0008](../decisions/0008-english-repo-bilingual-ui.md),
   [0018](../decisions/0018-history-through-the-api.md),
-  [0026](../decisions/0026-reader-time-zone-from-the-browser.md)
+  [0026](../decisions/0026-reader-time-zone-from-the-browser.md),
+  [0034](../decisions/0034-a-series-without-a-sensor-still-ages.md)
 
 ## Purpose
 

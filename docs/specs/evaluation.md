@@ -16,7 +16,8 @@
   [0015](../decisions/0015-evaluation-on-a-tick.md),
   [0016](../decisions/0016-leaving-critical-is-instant.md),
   [0032](../decisions/0032-thresholds-are-set-in-the-interface.md),
-  [0033](../decisions/0033-a-subject-is-a-series.md)
+  [0033](../decisions/0033-a-subject-is-a-series.md),
+  [0034](../decisions/0034-a-series-without-a-sensor-still-ages.md)
 
 ## Purpose
 
@@ -216,7 +217,7 @@ interval the node resolves for the series' sensor — or, when the series names 
 | the series' newest value names no sensor | `stale_after` is 3× the longest interval among the sensors the node runs: nothing else says when the value was due |
 | the same, its newest value exactly that old | evaluated: the bound is inclusive here too |
 | the same, on a node that runs no sensor at all | frozen: nothing will refresh it |
-| a watched series that names no sensor, once past that bound | frozen like any other: no repeat, no line in the digest, and no recovery until it reports again |
+| a watched series that names no sensor, once past that bound | frozen like any other: no repeat, no transition and no recovery until it reports again |
 | a series reported again under a different sensor name | `stale_after` follows the newest value's sensor from that tick on; the level is untouched |
 | a series that reported with a sensor and now reports without one | aged by the longest interval from that tick on, by the sensorless rows above |
 | a series that reported without a sensor and now names one | aged by that sensor's interval from that tick on, and thawed by it if the new bound makes its newest value fresh |

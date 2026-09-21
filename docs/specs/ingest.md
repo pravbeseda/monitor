@@ -8,7 +8,8 @@
   [0010](../decisions/0010-agent-configuration.md),
   [0022](../decisions/0022-updates-are-pulled.md),
   [0028](../decisions/0028-agents-follow-a-target-the-hub-serves.md),
-  [0033](../decisions/0033-a-subject-is-a-series.md)
+  [0033](../decisions/0033-a-subject-is-a-series.md),
+  [0034](../decisions/0034-a-series-without-a-sensor-still-ages.md)
 
 ## Purpose
 
@@ -66,7 +67,8 @@ Authorization: Bearer <per-node token>
   that name on the series, and it is what staleness is measured against: three times the
   interval the node resolves for that sensor ([evaluation](evaluation.md#freezing)). A
   measurement that carries none is stored and charted like any other, and its series ages
-  by the slowest interval its node resolves ([evaluation](evaluation.md#freezing)).
+  by the longest interval among the sensors its node runs
+  ([evaluation](evaluation.md#freezing)).
 - `metric` ids match `[a-z0-9_.]+`, and a `sensor` name matches the same pattern; `value`
   is a finite JSON number; `labels` is a flat string-to-string map.
 - Unknown JSON fields are ignored, so an older hub accepts a newer agent's request.

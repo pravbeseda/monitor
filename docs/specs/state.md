@@ -15,7 +15,8 @@
   [0018](../decisions/0018-history-through-the-api.md),
   [0023](../decisions/0023-proxy-holds-the-web-perimeter.md),
   [0030](../decisions/0030-the-state-api-reports-the-stored-verdict.md),
-  [0033](../decisions/0033-a-subject-is-a-series.md)
+  [0033](../decisions/0033-a-subject-is-a-series.md),
+  [0034](../decisions/0034-a-series-without-a-sensor-still-ages.md)
 
 ## Purpose
 

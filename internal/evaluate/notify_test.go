@@ -380,6 +380,20 @@ func TestAFrozenCriticalSendsNoRepeat(t *testing.T) {
 	}
 }
 
+// spec: evaluation.md#freezing — a watched series that names no sensor freezes like any
+// other once past its node's longest interval, so it repeats no more than a stale one.
+func TestAFrozenCriticalThatNamesNoSensorSendsNoRepeat(t *testing.T) {
+	db := open(t)
+	collectSensorless(t, db, tick, volume("/"), gb(3))
+	pass(t, evaluator(db, tick, watching(t)))
+
+	due := tick.Add(24 * time.Hour)
+	beat(t, db, due)
+	if got := delivered(t, db, due, watching(t)); len(got) != 0 {
+		t.Fatalf("a critical series naming no sensor repeated: %+v", got)
+	}
+}
+
 // spec: evaluation.md#notifications — an instant event newer than `last_notified_at` is
 // delivered whatever the level has become since, so a quieter change recorded after it
 // must not bury it.

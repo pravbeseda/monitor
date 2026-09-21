@@ -42,8 +42,8 @@ at all, which the node's own cadence answers well enough.
 
 ## Consequences
 
-- No row outlives the thing it describes. A vanished volume leaves the page three of its
-  node's longest intervals after its last reading, whether or not its series kept a sensor
+- No row outlives the thing it describes. A vanished volume leaves the page three of the
+  interval it is aged by after its last reading, whether or not its series kept a sensor
   name.
 - A rebuild of the `series` table costs accuracy, not correctness: until each series reports
   again, it is aged by a bound that is coarser than its own.

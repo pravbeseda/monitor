@@ -14,9 +14,9 @@ import (
 type Target struct {
 	Node         string
 	SilenceAfter time.Duration
-	// Intervals is the interval each sensor this node runs resolves to. A series whose
-	// sensor is absent — switched off, or named by no layer — is frozen: nothing will
-	// refresh it.
+	// Intervals is the interval each sensor this node runs resolves to; a sensor switched
+	// off has no entry. A series whose sensor is absent is frozen — nothing will refresh it
+	// — and one naming no sensor is aged by the longest entry here (ADR 0034).
 	Intervals map[string]time.Duration
 }
 

@@ -38,6 +38,22 @@ func collect(t *testing.T, db *storage.SQLite, at time.Time, labels map[string]s
 	retune(t, db, labels, num(gb(10)), num(gb(4)))
 }
 
+// collectSensorless is collect for a measurement that names no sensor, as an agent too
+// old to name it sends and as a rebuilt series table leaves every series (ADR 0034).
+func collectSensorless(t *testing.T, db *storage.SQLite, at time.Time, labels map[string]string, free float64) {
+	t.Helper()
+	in := storage.Ingest{
+		Node: "server-b", AgentVersion: "test", ConfigVersion: "test", ReceivedAt: at,
+		Measurements: []storage.Measurement{
+			{Metric: "disk.free_bytes", Labels: labels, Value: free, TS: at},
+		},
+	}
+	if err := db.SaveIngest(context.Background(), in); err != nil {
+		t.Fatalf("SaveIngest: %v", err)
+	}
+	retune(t, db, labels, num(gb(10)), num(gb(4)))
+}
+
 // unwatch clears what one volume is judged by, which is what saving an empty form does.
 func unwatch(t *testing.T, db *storage.SQLite, labels map[string]string) {
 	t.Helper()

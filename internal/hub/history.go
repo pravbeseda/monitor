@@ -148,7 +148,8 @@ func reader(cfg *config.Config, store storage.Storage, now func() time.Time) his
 // intervalOf is the interval a node resolves for a sensor — the same input evaluation
 // ages a subject by, so one definition of silence serves both
 // (docs/specs/history.md#gaps). A series that names no sensor has no interval and no
-// gaps (ADR 0033).
+// gaps: a gap is a collection that was due, and nothing says when its next point was
+// (ADR 0034). Its freshness is a different question, answered by evaluation.
 func intervalOf(cfg *config.Config) history.Interval {
 	return func(node, sensor string) time.Duration {
 		if sensor == "" {
