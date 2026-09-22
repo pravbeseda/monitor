@@ -216,8 +216,8 @@ answers on the host itself: `curl -s localhost:8080/ | head`. When that port is 
 on the host, set `MONITOR_LISTEN` in `hub.env` to another loopback address, for example
 `MONITOR_LISTEN=127.0.0.1:8090`, and restart the service: the logged line names the address
 in force, and the reverse proxy has to be pointed at the same one. The hub binds to loopback only,
-so nothing reaches it from outside until the nginx vhost exists (see
-[What is not covered yet](#what-is-not-covered-yet)).
+so nothing reaches it from outside except through the nginx vhost (see
+[The proxy in front of the hub](#the-proxy-in-front-of-the-hub)).
 
 ## 3. Install a node
 
@@ -579,11 +579,12 @@ That leaves the configuration and the measurements — `/etc/monitor/hub.yaml`,
 `/etc/monitor/hub.env` and `/var/lib/monitor` — standing. Removing them is a separate,
 deliberate step: the database is the whole history.
 
-## What is not covered yet
+## The proxy in front of the hub
 
-The other half of the stage-3 bullet in [poc.md](poc.md) does not exist yet, and nothing
-above works around it: the nginx vhost and TLS in front of the hub, per-node token issuance,
-and authentication on the web page. Until they land, the hub is reachable on its own host
-only, over loopback. What that proxy has to do is written down in
-[nginx-requirements.md](nginx-requirements.md) and applied from the Ansible repository that
-owns the hub host ([ADR 0023](decisions/0023-proxy-holds-the-web-perimeter.md)).
+This guide stops at the hub's loopback port. The nginx vhost that terminates TLS, passes
+ingest through and holds authentication on the web page is not installed from here: it is
+applied from the Ansible repository that owns the hub host
+([ADR 0023](decisions/0023-proxy-holds-the-web-perimeter.md)). What it has to do — including
+guarding the threshold form's write path — is [nginx-requirements.md](nginx-requirements.md).
+Without it the hub answers on its own host only, and nothing outside, the page or a node,
+reaches it.
