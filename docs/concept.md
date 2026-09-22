@@ -58,7 +58,7 @@ Each principle below is recorded in full, with its alternatives, in the linked A
 | Advisors | Per-domain summaries in plain language (an LLM over aggregates). |
 | City | Isometric city: districts are life areas, buildings are metrics. |
 | Organism | Metrics as body systems, with one overall "pulse" number. |
-| Telegram bot | A skin without a screen: alerts, digests, manual input. |
+| Telegram bot | A skin without a screen: alerts, digests, manual input (deferred). |
 
 A skin is a manifest (what it can display) + a mapping (metric → slot, defaulted from
 metric metadata) + a lazy-loaded renderer.
@@ -68,15 +68,20 @@ metric metadata) + a lazy-loaded renderer.
 | Domain | Example metrics | Source |
 |---|---|---|
 | infra | free space, load, uptime, backups | own agents on nodes |
-| finance | invested total, savings, contributions | manual input via bot, CSV statements |
+| finance | invested total, savings, contributions | an external sensor; manual input deferred |
 | health | steps, sleep, weight | Google Fit / Health Connect export |
 
-Manual input is a feature, not a crutch: a weekly ritual, like a turn in a turn-based game.
+Manual input is deferred: the MVP adds no metric a person has to type in, and finance and
+health wait for sources that report on their own
+([log](log/2026-09-22-mvp-scope.md)).
 
 ## Roadmap
 
 1. **POC** — free disk space across a handful of nodes: agent, hub, one web page,
    Telegram alerts. Details: [poc.md](poc.md).
-2. **MVP** — 5–7 metrics from different domains, declarative config, digests.
+2. **MVP** — the machine itself beside its disks: load, memory, uptime and failed services
+   from the agents ([host sensors](specs/host-sensors.md)). Finance and health follow once
+   they have automatic sources; backups have their own design question
+   ([#51](https://github.com/pravbeseda/monitor/issues/51)).
 3. **Semantic engine** — health, anomalies, trends, forecasts, time travel.
 4. **Skins** — mission control first, then advisors, then the visual metaphors.

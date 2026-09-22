@@ -28,14 +28,14 @@ sensors:
 digest: { at: "09:00", timezone: UTC }
 notify: { channel: log, locale: en }
 
+# No class writes a profile: one written here replaces the compiled-in list, and the class
+# would miss every sensor a later release adds to it.
 classes:
   laptop:
-    profile: [disk]
     silence_after: 48h
     sensors:
       disk: { interval: 1h }
   server:
-    profile: [disk]
     silence_after: 10m
 
 nodes:
