@@ -120,7 +120,7 @@ lands in the right place in history.
 
 - What the hub does with the measurements → [ingest](ingest.md).
 - Where the configuration comes from and how it is resolved → [hub-config](hub-config.md).
-- How a sensor reads its values → [disk-sensor](disk-sensor.md).
+- How a sensor reads its values → [disk-sensor](disk-sensor.md), [host-sensors](host-sensors.md).
 - Install, service units and updates → stage 3.
 
 ## Open questions

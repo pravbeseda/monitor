@@ -6,7 +6,6 @@ import (
 	"context"
 	"fmt"
 	"maps"
-	"math"
 	"strconv"
 	"strings"
 	"time"
@@ -95,7 +94,7 @@ func (s *Sensor) Collect(context.Context) ([]sensor.Measurement, error) {
 			"removable": strconv.FormatBool(mount.Removable),
 		}
 		free := float64(usage.AvailBytes)
-		percent := round2(free / float64(usage.TotalBytes) * 100)
+		percent := sensor.Round2(free / float64(usage.TotalBytes) * 100)
 		out = append(out,
 			measurement(metricFreeBytes, labels, free, at),
 			measurement(metricFreePct, labels, percent, at))
@@ -166,8 +165,4 @@ func measurement(metric string, labels map[string]string, value float64, at time
 		Value:  value,
 		TS:     at,
 	}
-}
-
-func round2(value float64) float64 {
-	return math.Round(value*100) / 100
 }

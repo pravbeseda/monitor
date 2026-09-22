@@ -69,6 +69,7 @@ can see ([ADR 0017](decisions/0017-one-spec-and-decision-gates.md)). New specs s
 | [ingest.md](specs/ingest.md) | `/api/v1/ingest` contract: request, response, config delivery; the node's target under `/api/v1/agent/` | approved |
 | [hub-config.md](specs/hub-config.md) | The hub's YAML file: validation, layering, per-node configuration and its version, and each node's agent target | approved |
 | [disk-sensor.md](specs/disk-sensor.md) | The disk sensor: enumeration, filtering and the label contract of its metrics | approved |
+| [host-sensors.md](specs/host-sensors.md) | The load, memory, uptime and failed-units sensors: what each reads on Linux and macOS, and the metrics it reports | approved |
 | [agent.md](specs/agent.md) | The agent: local configuration, tick loop, delivery and configuration application | approved |
 | [evaluation.md](specs/evaluation.md) | Levels, hysteresis, the event log, silence, digests and the notifier boundary | approved |
 | [history.md](specs/history.md) | The history series, `/api/v1/series`, `/api/v1/history` and the drill-down page | approved |
@@ -97,6 +98,7 @@ Reasoning from working sessions, including options that were rejected.
 | [2026-09-19](log/2026-09-19-state-api.md) | State API: why it comes before the MVP, and what the spec reviews changed |
 | [2026-09-20](log/2026-09-20-history-streaming.md) | History holds its answer: reducing points as they stream, and why the series became a table |
 | [2026-09-20](log/2026-09-20-thresholds-in-the-interface.md) | Thresholds move into the interface: why the rule engine was not generalised, and what three reviews changed |
+| [2026-09-22](log/2026-09-22-mvp-scope.md) | MVP scope: why it is infra only, why backups wait, and whose memory figure a Mac reports |
 
 ## Not written yet
 

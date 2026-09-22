@@ -5,6 +5,7 @@ package sensor
 
 import (
 	"context"
+	"math"
 	"time"
 )
 
@@ -23,4 +24,9 @@ type Sensor interface {
 	// Applicable reports whether this machine can produce the reading at all.
 	Applicable() bool
 	Collect(ctx context.Context) ([]Measurement, error)
+}
+
+// Round2 rounds a reading to the two decimals the sensors report ratios and averages in.
+func Round2(value float64) float64 {
+	return math.Round(value*100) / 100
 }

@@ -40,13 +40,15 @@ sensors:
 
 classes:
   laptop:
-    profile: [disk]
+    # A written profile replaces the compiled-in one, so the class misses the sensors
+    # later releases add to it; leave it out to follow them.
+    profile: [disk, load, memory, uptime]
     silence_after: 48h
     agent_target: 1.4.0
     sensors:
       disk: { interval: 1h }
   server:
-    profile: [disk]
+    profile: [disk, load, memory, uptime, systemd]
     silence_after: 10m
 
 nodes:
@@ -61,10 +63,17 @@ nodes:
 ```
 
 **Product defaults** (compiled in, overridable at every layer): `base_tick` 5m, the
-filesystem allow-list and the skip list above, `disk` every 15m, classes `laptop` (profile
-`[disk]`, disk every 1h) and `server` (profile `[disk]`). The skip list names mount points
-no one watches — the system volumes of a Mac and the simulator images — and says nothing
-about any installation.
+filesystem allow-list and the skip list above, `disk` every 15m, the
+[host sensors](host-sensors.md) `load` and `memory` every 5m and `uptime` and `systemd` every
+15m, and classes
+`laptop` (profile `[disk, load, memory, uptime]`, disk every 1h) and `server` (profile
+`[disk, load, memory, uptime, systemd]`). A compiled-in interval never stops the hub
+starting: where it is shorter than the tick a node resolves to, the sensor collects every
+tick instead. A hub upgrades itself unattended
+([0025](../decisions/0025-the-hub-checks-hourly-and-downloads-a-binary-to-install-it.md)),
+so a release that brings a sensor must not turn a tick the file chose into a crash loop.
+The skip list names mount points no one watches — the system volumes of a Mac and the
+simulator images — and says nothing about any installation.
 
 **Deployment settings** (no defaults, absent means a startup error): the `nodes` map, each
 node's `class` and `token_env`. Tokens themselves live in the environment, never in the
@@ -117,7 +126,7 @@ One row = one test. Anchors: `spec: hub-config.md#<heading>`.
 | a node whose `class` is neither compiled in nor in the file | startup error naming node and class |
 | a class the file introduces without `silence_after` | startup error naming the class: a silence window is a deployment setting |
 | a duration that Go cannot parse, or that is zero or negative | startup error naming the key |
-| a sensor interval below the `base_tick` a node resolves to | startup error: a sensor collects above the tick |
+| an interval the file sets below the `base_tick` a node resolves to | startup error naming the sensor: a sensor collects above the tick |
 | `filesystems` present and empty | startup error: no volume would ever be collected |
 | a sensor in a profile with no interval at any layer | startup error naming the sensor, whether or not a node uses that class |
 | `agent_target` at the top level, in `classes.<name>` or in `nodes.<name>`, that is neither `latest` nor one `MAJOR.MINOR.PATCH` — `1.4`, `v1.4.0`, `01.4.0`, a component of ten digits or more, `""`, or present with no value | startup error naming the key and the class or node it is in |
@@ -146,6 +155,10 @@ The node is listed in `nodes`; the layers apply most-specific-last.
 | the class sets `base_tick`, `filesystems` or `skip_mounts` | wins over the top level; a node entry wins over the class |
 | `skip_mounts` set to an empty list | nothing is skipped: an empty list is a value, not an omission |
 | a sensor no layer mentions | absent from the delivered configuration |
+| a node of the compiled-in `server` class, the file setting no `profile` for it | `load` and `memory` every 5m; `disk`, `uptime` and `systemd` every 15m |
+| a node of the compiled-in `laptop` class, the file setting no `profile` for it | `load` and `memory` every 5m, `uptime` every 15m, `disk` every 1h |
+| the file sets `profile: [disk]` for a compiled-in class | only `disk`: a profile in the file replaces the compiled-in one, it does not add to it |
+| the file sets `base_tick: 1h` for `laptop`, and no interval for the host sensors | the hub starts, and `load`, `memory` and `uptime` collect every 1h: a compiled-in interval below the tick is raised to it |
 | top-level `agent_target` | the node's target |
 | the class sets `agent_target` | wins over the top level |
 | the node sets `agent_target` | wins over the class |
@@ -192,7 +205,7 @@ logs both versions when it delivers a new one.
 - No check compares one layer with another. A more specific layer may lower the base tick
   or replace a list, so an intermediate layer is not required to stand alone; the one
   comparison that needs a final tick — a sensor collecting faster than it — is made on the
-  resolved node.
+  resolved node, and refuses only an interval the file wrote.
 - The file is read once, at startup: nothing re-reads it while the hub runs.
 
 ## Edge cases
@@ -207,6 +220,12 @@ logs both versions when it delivers a new one.
   records what the agent could run; the configuration decides what it does run.
 - **A sensor enabled for a node whose manifest lacks it**: it is delivered anyway and the
   agent ignores what it cannot run; the hub does not filter by manifest in stage 1.
+- **A hub upgraded to a release whose compiled-in profiles changed**: every node that takes
+  its profile from code resolves differently, so each is delivered a new
+  [configuration version](#configuration-version) on its next request, and its
+  sensorless series age by a bound that follows its new sensors
+  ([evaluation](evaluation.md#freezing)). A node whose file sets its own `profile` is
+  untouched.
 - **The file edited while the hub runs**: no effect until a restart.
 - **One node held back while its class follows**: it is pinned to the version it runs. No
   value takes a target away at a more specific layer; a node that must not change at all has

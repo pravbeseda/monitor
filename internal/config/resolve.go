@@ -5,6 +5,7 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
+	"slices"
 	"time"
 
 	"github.com/pravbeseda/monitor/internal/evaluate"
@@ -45,7 +46,8 @@ func resolve(f file, name string, entry fileNode) (Node, error) {
 
 	profile := lastList(builtin.Profile, custom.Profile)
 	sensors, err := resolveSensors(profile, baseTick,
-		defaultSensors, builtin.Sensors, f.Sensors, custom.Sensors, entry.Sensors)
+		[]map[string]fileSensor{defaultSensors, builtin.Sensors},
+		[]map[string]fileSensor{f.Sensors, custom.Sensors, entry.Sensors})
 	if err != nil {
 		return Node{}, fmt.Errorf("node %s: %w", name, err)
 	}
@@ -91,19 +93,36 @@ func classLayers(f file, name string) (builtin, custom fileClass, known bool) {
 
 // resolveSensors is sensorSettings plus the one check that needs a final base tick: a
 // sensor cannot collect faster than the tick that carries it. Only a fully resolved node
-// has that tick, since every layer above may lower it.
-func resolveSensors(profile []string, baseTick time.Duration, layers ...map[string]fileSensor) (map[string]Sensor, error) {
-	sensors, err := sensorSettings(profile, layers...)
+// has that tick, since every layer above may lower it. An interval the file wrote below it
+// is refused; a compiled-in one is raised to it, so a release bringing a sensor cannot stop
+// a hub that upgrades itself from starting.
+func resolveSensors(profile []string, baseTick time.Duration, compiled, written []map[string]fileSensor) (map[string]Sensor, error) {
+	sensors, err := sensorSettings(profile, slices.Concat(compiled, written)...)
 	if err != nil {
 		return nil, err
 	}
 	for _, name := range sorted(sensors) {
-		if sensors[name].Interval < baseTick {
-			return nil, fmt.Errorf("sensor %s: interval %v is below the base tick %v",
-				name, sensors[name].Interval, baseTick)
+		settings := sensors[name]
+		if settings.Interval >= baseTick {
+			continue
 		}
+		if intervalWritten(written, name) {
+			return nil, fmt.Errorf("sensor %s: interval %v is below the base tick %v",
+				name, settings.Interval, baseTick)
+		}
+		settings.Interval = baseTick
+		sensors[name] = settings
 	}
 	return sensors, nil
+}
+
+func intervalWritten(layers []map[string]fileSensor, sensor string) bool {
+	for _, layer := range layers {
+		if layer[sensor].Interval != "" {
+			return true
+		}
+	}
+	return false
 }
 
 // sensorSettings flattens the sensor layers, lowest first. A sensor is delivered when its
