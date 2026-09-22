@@ -25,8 +25,8 @@ const (
 
 var defaultSensors = map[string]fileSensor{
 	"disk":    {Interval: "15m"},
-	"load":    {Interval: "15m"},
-	"memory":  {Interval: "15m"},
+	"load":    {Interval: "5m"},
+	"memory":  {Interval: "5m"},
 	"uptime":  {Interval: "15m"},
 	"systemd": {Interval: "15m"},
 }

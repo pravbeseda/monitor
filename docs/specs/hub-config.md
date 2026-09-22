@@ -63,8 +63,9 @@ nodes:
 ```
 
 **Product defaults** (compiled in, overridable at every layer): `base_tick` 5m, the
-filesystem allow-list and the skip list above, every sensor every 15m — `disk` and the
-[host sensors](host-sensors.md) `load`, `memory`, `uptime` and `systemd` — and classes
+filesystem allow-list and the skip list above, `disk` every 15m, the
+[host sensors](host-sensors.md) `load` and `memory` every 5m and `uptime` and `systemd` every
+15m, and classes
 `laptop` (profile `[disk, load, memory, uptime]`, disk every 1h) and `server` (profile
 `[disk, load, memory, uptime, systemd]`). A compiled-in interval never stops the hub
 starting: where it is shorter than the tick a node resolves to, the sensor collects every
@@ -154,8 +155,8 @@ The node is listed in `nodes`; the layers apply most-specific-last.
 | the class sets `base_tick`, `filesystems` or `skip_mounts` | wins over the top level; a node entry wins over the class |
 | `skip_mounts` set to an empty list | nothing is skipped: an empty list is a value, not an omission |
 | a sensor no layer mentions | absent from the delivered configuration |
-| a node of the compiled-in `server` class, the file setting no `profile` for it | `disk`, `load`, `memory`, `uptime` and `systemd`, each every 15m |
-| a node of the compiled-in `laptop` class, the file setting no `profile` for it | `disk` every 1h; `load`, `memory` and `uptime` every 15m |
+| a node of the compiled-in `server` class, the file setting no `profile` for it | `load` and `memory` every 5m; `disk`, `uptime` and `systemd` every 15m |
+| a node of the compiled-in `laptop` class, the file setting no `profile` for it | `load` and `memory` every 5m, `uptime` every 15m, `disk` every 1h |
 | the file sets `profile: [disk]` for a compiled-in class | only `disk`: a profile in the file replaces the compiled-in one, it does not add to it |
 | the file sets `base_tick: 1h` for `laptop`, and no interval for the host sensors | the hub starts, and `load`, `memory` and `uptime` collect every 1h: a compiled-in interval below the tick is raised to it |
 | top-level `agent_target` | the node's target |

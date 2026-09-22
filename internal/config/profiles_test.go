@@ -28,18 +28,18 @@ func intervals(t *testing.T, body string) map[string]time.Duration {
 	return out
 }
 
-// spec: hub-config.md#resolution — the compiled-in profiles run the host sensors every 15m.
+// spec: hub-config.md#resolution — the compiled-in profiles and the host sensors' intervals.
 func TestResolveCompiledInProfiles(t *testing.T) {
 	tests := []struct {
 		class string
 		want  map[string]time.Duration
 	}{
 		{"server", map[string]time.Duration{
-			"disk": 15 * time.Minute, "load": 15 * time.Minute, "memory": 15 * time.Minute,
+			"disk": 15 * time.Minute, "load": 5 * time.Minute, "memory": 5 * time.Minute,
 			"uptime": 15 * time.Minute, "systemd": 15 * time.Minute,
 		}},
 		{"laptop", map[string]time.Duration{
-			"disk": time.Hour, "load": 15 * time.Minute, "memory": 15 * time.Minute,
+			"disk": time.Hour, "load": 5 * time.Minute, "memory": 5 * time.Minute,
 			"uptime": 15 * time.Minute,
 		}},
 	}
