@@ -2,16 +2,18 @@
 
 - **Status:** approved
 - **Owns:** the page that sets what a series is judged by — `GET /thresholds` and the save
-  it accepts — and what may be stored as a threshold. What a stored threshold *means*, and
-  when it produces a level, an event or a message, stays with
-  [evaluation.md](evaluation.md); the shell every page shares, its zone and its refresh stay
+  it accepts — what may be stored as a threshold, and whether the series may be shown as
+  unusual. What a stored threshold *means*, and when it produces a level, an event or a
+  message, stays with [evaluation.md](evaluation.md); what an anomaly is stays with
+  [anomaly.md](anomaly.md); the shell every page shares, its zone and its refresh stay
   with [web.md](web.md); the series a page can be opened for come from
   [history.md](history.md).
 - **Decisions:** [0008](../decisions/0008-english-repo-bilingual-ui.md),
   [0023](../decisions/0023-proxy-holds-the-web-perimeter.md),
   [0029](../decisions/0029-pages-refresh-by-fetching-their-own-address.md),
   [0032](../decisions/0032-thresholds-are-set-in-the-interface.md),
-  [0033](../decisions/0033-a-subject-is-a-series.md)
+  [0033](../decisions/0033-a-subject-is-a-series.md),
+  [0036](../decisions/0036-an-anomaly-is-a-value-outside-its-weeks-band.md)
 
 ## Purpose
 
@@ -19,6 +21,10 @@ Nothing alerts until someone says what "bad" means for one particular series
 ([0032](../decisions/0032-thresholds-are-set-in-the-interface.md)). This is where they say
 it: one page per series, two numbers and a direction, saved into the hub's own store and
 applied by the next evaluation tick without a restart.
+
+The same page is where a series is excluded from anomalies: a series that is unusual by
+nature — a laptop's uptime after a weekend asleep ([anomaly](anomaly.md#edge-cases)) — is
+told once not to be ranked.
 
 The page is deliberately the whole configuration surface for alerting. There is no file to
 edit, no default to inherit and no layer above it: what the form shows is what the hub
@@ -35,6 +41,11 @@ removed.
 **Consistency is per direction.** With `below`, `critical` must be strictly below
 `warning`; with `above`, strictly above it. Equal values would make one of the two levels
 unreachable, so they are refused rather than silently ordered.
+
+**An exclusion belongs to one series too**, and is independent of its threshold: a series
+can be excluded with no threshold, and keeps its exclusion when its threshold is removed.
+An excluded series carries no anomaly ([anomaly](anomaly.md#subjects)); its levels are
+untouched, and it counts as watched or unwatched by its threshold alone.
 
 **A series is addressed the way [history](history.md#selection) addresses one**:
 `?node=…&metric=…&label.<name>=…`, naming every label the series carries, because a
@@ -64,6 +75,8 @@ One row = one test. Anchors: `spec: thresholds.md#<heading>`.
 |---|---|
 | a series with nothing configured | an empty form: direction `below`, both values blank, and a line saying the series has no level until a value is set |
 | a series with a configuration | its direction and values as stored, in the unit the metric implies |
+| any series | a switch saying the series may be shown as unusual, on unless the series is excluded |
+| a series whose stored threshold this build cannot read | the switch as stored: an exclusion is read on its own |
 | any series the hub has values for | the same form, whatever the metric: nothing about it is particular to disks |
 | a series the hub has never stored | `404` as a page: a threshold is set on something that reports |
 | a series of a node the file no longer names | the form as ever, saying the series is not judged while its node is not configured |
@@ -85,12 +98,17 @@ One row = one test. Anchors: `spec: thresholds.md#<heading>`.
 | a `_bytes` value written `10GB` | accepted and stored as 10 000 000 000; the form shows it back as a size |
 | a `_bytes` value written as a bare number | accepted as that many bytes, which is what the field says it is asking for |
 | a `_bytes` value no round size names — 20 123 456 789 | shown back as that number, not rounded to a size: redrawing the form must not rewrite the threshold |
-| a `_pct` value written `12%`, or any value with a unit the metric does not take | refused, naming the field |
+| a `_pct` value written `12%`, or any value with a unit the metric does not take | refused, naming the field; nothing is stored |
 | `critical` not strictly beyond `warning` in the chosen direction | refused, naming both fields; nothing is stored |
 | a direction that is neither `below` nor `above` | refused; nothing is stored |
 | a save for a series the hub has never stored | `404`; nothing is stored |
 | a save whose `Origin` is another site, or a cross-site form post | refused as a page before anything is read, whatever address it names and whether or not that series exists; nothing is stored |
 | a save with no `Origin` at all — an old browser, a hand-made request | refused the same way: the form's own saves always carry one |
+| the switch turned off | the series is excluded: from the next answer on it carries no anomaly, and mission control shows it as unusual no more |
+| the switch turned off, both values blank | the threshold removed and the exclusion stored: the two are separate |
+| the switch turned on again | the exclusion removed: the next answer ranks the series again if it is unusual |
+| the switch turned off in a save refused for its values | nothing stored, the exclusion included; the form shows the switch as the reader left it |
+| a save carrying no value for the switch, or one that is neither on nor off — a form drawn before the switch existed, a hand-made request | refused, naming the switch; nothing is stored: a form is the whole configuration, and a missing switch is not an answer |
 | two saves for one series | the later one is what is stored: a form is a statement of the whole configuration, not a patch |
 | a save reloaded by the browser afterwards | nothing is saved twice: the answer to a save is a redirect, not a page |
 | a save while the proxy no longer accepts the reader's credentials | the proxy refuses it and nothing reaches the hub ([0023](../decisions/0023-proxy-holds-the-web-perimeter.md)) |
@@ -102,13 +120,15 @@ One row = one test. Anchors: `spec: thresholds.md#<heading>`.
 | a threshold set on a series that is already past it | the next tick transitions it, and a critical is announced at once ([evaluation.md](evaluation.md#notifications)) |
 | a threshold set or cleared | no agent is affected and no `config_version` changes ([hub-config.md](hub-config.md#configuration-version)) |
 | a threshold cleared for a subject standing in `critical` | no recovery message: the question was withdrawn, not answered ([evaluation.md](evaluation.md#configuration-changes)) |
+| an exclusion set or cleared | no level, event or message changes, and the series stays watched or unwatched as it was |
 | any save | the hub restarts nothing and rereads no file |
 
 ## Invariants
 
 - The store never holds what the form would refuse: a direction outside `below`/`above`, a
   value that is not finite, or a `critical` that is not strictly beyond its `warning`.
-- A configuration belongs to exactly one series, and a series has at most one.
+- A configuration belongs to exactly one series, and a series has at most one; so does an
+  exclusion.
 - Saving changes what the hub judges by and nothing else: no measurement, no level and no
   event is written by a save.
 - A page never shows a threshold it did not read from the store, so two readers see the
@@ -143,7 +163,7 @@ One row = one test. Anchors: `spec: thresholds.md#<heading>`.
 - Applying one number to many series at once, and copying a configuration between nodes →
   a convenience for later, not the model ([0032](../decisions/0032-thresholds-are-set-in-the-interface.md)).
 - Saying *why* a series has no threshold — a third state between watched and forgotten →
-  later. Until then the counts on `/` and in the digest ([state.md](state.md#page),
+  later. Until then the counts on `/debug` and in the digest ([state.md](state.md#page),
   [evaluation.md](evaluation.md#digest)) are what keeps a forgotten volume visible.
 - Exporting the stored thresholds to a file, or restoring them from one → the database is
   the record, and backing it up is [issue #19](https://github.com/pravbeseda/monitor/issues/19).

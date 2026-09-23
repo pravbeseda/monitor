@@ -195,6 +195,8 @@ Each line is an index into the ADR that owns it.
   day. → 0006, 0016
 - **Evaluation runs on the hub's own tick**, never inside an ingest request: one writer of
   the event log, and silence, digest and repeat are the same pass. → 0015
+- **An anomaly is shown, never notified**: a series' newest value against the band it kept
+  the week before yesterday, computed on read, never stored and never a level. → 0036
 - **Hysteresis is relative**: recovery is the entry comparison negated and shifted by 20%
   of the threshold's magnitude, whatever the unit. → 0013, 0033
 - **Stack**: Go for both binaries, SQLite (`modernc.org/sqlite`, no CGO) behind a `Storage`
@@ -209,6 +211,8 @@ Each line is an index into the ADR that owns it.
 - **A subject is a series and a threshold is one comparison per level**: a direction
   (`below`/`above`) and up to two values, set per series in the interface and stored with
   the data; nothing has a level until someone sets one. → 0032, 0033
+- **Skins are rendered by the hub** — mission control at `/`, the debug table at `/debug` —
+  until a skin needs a client; TypeScript arrives with that one. → 0035
 - The versioned API prefix (`/api/v1/...`) is deliberate — keep it on every new endpoint.
 - The project's value is the normalization and prioritization layer, not storage or
   charting; weigh new low-level work against what off-the-shelf tools already do.

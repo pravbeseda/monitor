@@ -25,7 +25,7 @@ One decision per file, each stating what was rejected and why. New records start
 | [0002](decisions/0002-push-not-pull.md) | Agents push; the server never polls nodes | accepted |
 | [0003](decisions/0003-sensors-are-modules.md) | Sensors are in-process modules of the agent | accepted |
 | [0004](decisions/0004-two-binaries-monorepo.md) | Two artifacts — agent and monolithic hub — in one repository | accepted |
-| [0005](decisions/0005-poc-stack.md) | POC stack: Go, SQLite, server-side HTML | accepted |
+| [0005](decisions/0005-poc-stack.md) | POC stack: Go, SQLite, server-side HTML | accepted, amended by [0035](decisions/0035-mission-control-is-rendered-by-the-hub.md) |
 | [0006](decisions/0006-alerting-rules.md) | Alert on transitions; only critical is instant | accepted, amended by [0032](decisions/0032-thresholds-are-set-in-the-interface.md) |
 | [0007](decisions/0007-public-repository.md) | Public repository from the first commit; nothing personal in it | accepted, amended by [0032](decisions/0032-thresholds-are-set-in-the-interface.md) |
 | [0008](decisions/0008-english-repo-bilingual-ui.md) | The repository is English; the interface is bilingual | accepted |
@@ -50,11 +50,13 @@ One decision per file, each stating what was rejected and why. New records start
 | [0027](decisions/0027-the-hub-installer-reuses-the-binary-in-place.md) | The hub's installer reuses a binary in place that is already its release | accepted |
 | [0028](decisions/0028-agents-follow-a-target-the-hub-serves.md) | Agents follow a target the hub serves under `/api/v1/agent/` | accepted |
 | [0029](decisions/0029-pages-refresh-by-fetching-their-own-address.md) | Pages refresh themselves by fetching their own address | accepted |
-| [0030](decisions/0030-the-state-api-reports-the-stored-verdict.md) | The State API reports the verdict evaluation stored | accepted, amended by [0033](decisions/0033-a-subject-is-a-series.md) |
+| [0030](decisions/0030-the-state-api-reports-the-stored-verdict.md) | The State API reports the verdict evaluation stored | accepted, amended by [0033](decisions/0033-a-subject-is-a-series.md) and [0036](decisions/0036-an-anomaly-is-a-value-outside-its-weeks-band.md) |
 | [0031](decisions/0031-a-table-of-series.md) | A table of series beside the measurements | accepted, amended by [0033](decisions/0033-a-subject-is-a-series.md) |
 | [0032](decisions/0032-thresholds-are-set-in-the-interface.md) | Thresholds are set in the interface and stored with the data | accepted |
 | [0033](decisions/0033-a-subject-is-a-series.md) | A subject is a series, and a threshold is one comparison per level | accepted, amended by [0034](decisions/0034-a-series-without-a-sensor-still-ages.md) |
 | [0034](decisions/0034-a-series-without-a-sensor-still-ages.md) | A series that names no sensor ages by its node's longest interval | accepted |
+| [0035](decisions/0035-mission-control-is-rendered-by-the-hub.md) | Mission control is rendered by the hub; TypeScript waits for a skin that needs a client | accepted |
+| [0036](decisions/0036-an-anomaly-is-a-value-outside-its-weeks-band.md) | An anomaly is a value outside the band its series kept the week before | accepted |
 
 ## Behaviour specs
 
@@ -73,8 +75,10 @@ can see ([ADR 0017](decisions/0017-one-spec-and-decision-gates.md)). New specs s
 | [agent.md](specs/agent.md) | The agent: local configuration, tick loop, delivery and configuration application | approved |
 | [evaluation.md](specs/evaluation.md) | Levels, hysteresis, the event log, silence, digests and the notifier boundary | approved |
 | [history.md](specs/history.md) | The history series, `/api/v1/series`, `/api/v1/history` and the drill-down page | approved |
-| [state.md](specs/state.md) | `/api/v1/state`: subjects, stored levels and staleness, and the levels on `/` | approved |
-| [thresholds.md](specs/thresholds.md) | The page that sets what a series is judged by, and what may be stored as a threshold | approved |
+| [state.md](specs/state.md) | `/api/v1/state`: subjects, stored levels, staleness and anomalies, and the levels on `/debug` | approved |
+| [anomaly.md](specs/anomaly.md) | Each series' norm, how far its newest value lies from it, and the anomaly rank | approved |
+| [mission-control.md](specs/mission-control.md) | `/`, mission control: what needs attention, in what order, and the move of the table to `/debug` | approved |
+| [thresholds.md](specs/thresholds.md) | The page that sets what a series is judged by — what may be stored as a threshold, and whether it may be shown as unusual | approved |
 | [release.md](specs/release.md) | How a merge tags itself, what a tag publishes, how a release is signed, and how an artifact is checked | approved |
 | [installer.md](specs/installer.md) | One command that installs or upgrades a hub or an agent from a signed release, the hub following the version its host names, and an agent following the one the hub names | approved |
 | [deployment.md](specs/deployment.md) | The install layout, the units — the hub's and the agents' update timers among them — and what `install-agent.sh` does to a node | approved |
@@ -99,6 +103,7 @@ Reasoning from working sessions, including options that were rejected.
 | [2026-09-20](log/2026-09-20-history-streaming.md) | History holds its answer: reducing points as they stream, and why the series became a table |
 | [2026-09-20](log/2026-09-20-thresholds-in-the-interface.md) | Thresholds move into the interface: why the rule engine was not generalised, and what three reviews changed |
 | [2026-09-22](log/2026-09-22-mvp-scope.md) | MVP scope: why it is infra only, why backups wait, and whose memory figure a Mac reports |
+| [2026-09-23](log/2026-09-23-mission-control.md) | Mission control: the engine slice before the board, no health number, server-rendered, and which deviation |
 
 ## Not written yet
 

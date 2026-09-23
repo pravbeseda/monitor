@@ -151,7 +151,7 @@ go build -o dist/monitor-agent ./cmd/agent
 ```
 
 A binary built this way reports the development version rather than a release version —
-`./dist/monitor-agent --version` says so, and so does the hub's page `/`, beside the name of
+`./dist/monitor-agent --version` says so, and so does the hub's page `/debug`, beside the name of
 a node running it.
 
 ## 2. Set up the hub host
@@ -277,7 +277,7 @@ sudo tail -f /var/log/monitor-agent.log
 A healthy first minute: the service is active, the log opens with
 `monitor-agent <version>: node server-b reporting to https://hub.example.com`, the first tick
 runs immediately rather than after an interval, and no `tick failed` line repeats. Within a
-base tick the node and its volumes appear on the hub's page.
+base tick the node and its volumes appear on the hub's `/debug` page.
 
 Two failures look different from a service problem and are worth knowing:
 
@@ -386,7 +386,7 @@ entered again nothing alerts. Do it in this order:
    sudo journalctl -u monitor-hub.service -n 20
    ```
 
-6. **Give every volume its levels again**, from the link each series row on the hub's page
+6. **Give every volume its levels again**, from the link each series row on the hub's `/debug` page
    carries ([specs/thresholds.md](specs/thresholds.md)). A volume is **two** series — one in
    bytes, `disk.free_bytes`, one in percent, `disk.free_pct` — configured separately, each
    with a direction (`below`, for free space) and a warning and a critical value; either

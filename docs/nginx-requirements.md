@@ -35,6 +35,7 @@ Its whole HTTP surface:
 | `/api/v1/ingest` | POST | the agent on every node | yes — a per-node bearer token |
 | `/api/v1/agent/target`, and every later path under `/api/v1/agent/` | GET | the update timer on every node | yes — the same per-node bearer token ([ADR 0028](decisions/0028-agents-follow-a-target-the-hub-serves.md)) |
 | `/` | GET | a person in a browser | no |
+| `/debug` | GET | a person in a browser | no |
 | `/history` | GET | a person in a browser | no |
 | `/thresholds` | GET, POST | a person in a browser | no |
 | `/api/v1/series` | GET | a program, a chart renderer | no |

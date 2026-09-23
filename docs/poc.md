@@ -152,7 +152,8 @@ rest are recorded here, which is where they belong.
 
 1. **Language** — Go for the agent and the hub; skins stay TypeScript over the State API.
    → [0005](decisions/0005-poc-stack.md), with the quality gates that made the trade sound
-   in [0011](decisions/0011-quality-gates.md).
+   in [0011](decisions/0011-quality-gates.md). Amended after the POC: skins are rendered by
+   the hub until one needs a client ([0035](decisions/0035-mission-control-is-rendered-by-the-hub.md)).
 2. **Where the hub lives** — on one of the Debian servers, behind the nginx and certificate
    already on that host; the hub binds to localhost. The host name is a deployment setting
    and stays out of this repository ([0007](decisions/0007-public-repository.md)).
