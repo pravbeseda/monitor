@@ -28,6 +28,11 @@
     </fieldset>
     <label>{{ .WarningLabel }} <input type="text" name="warning" value="{{ .Warning }}" inputmode="decimal"> <small>{{ .Unit }}</small></label>
     <label>{{ .CriticalLabel }} <input type="text" name="critical" value="{{ .Critical }}" inputmode="decimal"> <small>{{ .Unit }}</small></label>
+    <fieldset>
+      <legend>{{ .UnusualLabel }}</legend>
+      <label><input type="radio" name="anomalies" value="show" {{ if not .Excluded }}checked{{ end }}> {{ .ShowLabel }}</label>
+      <label><input type="radio" name="anomalies" value="exclude" {{ if .Excluded }}checked{{ end }}> {{ .ExcludeLabel }}</label>
+    </fieldset>
     <div><button type="submit">{{ .SaveLabel }}</button> <a href="{{ .BackURL }}">{{ .BackLabel }}</a></div>
   </form>
 </body>

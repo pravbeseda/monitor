@@ -1,0 +1,44 @@
+<!DOCTYPE html>
+<html lang="{{ .Locale }}">
+<head>
+{{ template "shell" . }}
+  <style>
+    body { font-family: system-ui, sans-serif; margin: 2rem auto; max-width: 48rem; padding: 0 1rem; }
+    h1.headline { font-size: 1.6rem; font-weight: 600; margin-bottom: 1.5rem; }
+    p.notice { color: var(--warn); }
+    ol.items { list-style: none; padding: 0; margin: 0; }
+    li.item { padding: 0.7rem 0.9rem; margin-bottom: 0.5rem; border-left: 3px solid var(--rule); background: var(--grid); }
+    li.item-warning { border-left-color: var(--warn); }
+    li.item-critical { border-left-color: var(--bad); }
+    li.item-unusual { border-left-color: var(--link); }
+    li.item .value { margin-left: 0.6rem; font-variant-numeric: tabular-nums; }
+    li.item small, p.more, nav a { color: var(--muted); font-size: 0.85rem; }
+    li.item small { margin-left: 0.6rem; }
+    a.set { margin-left: 0.6rem; font-size: 0.85rem; color: var(--muted); }
+    nav { margin-top: 2rem; }
+    .level-ok { color: var(--accent); }
+    .level-warning { color: var(--warn); }
+    .level-critical { color: var(--bad); font-weight: 600; }
+  </style>
+</head>
+<body>
+  <h1 class="headline{{ with .HeadlineClass }} {{ . }}{{ end }}">{{ .Headline }}</h1>
+  {{ with .NothingWatched }}<p class="notice">{{ . }}</p>{{ end }}
+  {{ if .Items }}
+    <ol class="items">
+      {{ range .Items }}
+        <li class="item {{ .Class }}">
+          <a href="{{ .Link }}">{{ .Name }}</a>
+          {{ with .Value }}<span class="value">{{ . }}</span>{{ end }}
+          {{ with .Level }}<span class="{{ .Class }}">{{ .Word }}</span>{{ end }}
+          {{ with .Note }}<small>{{ . }}</small>{{ end }}
+          {{ with .Usual }}<small class="usual">{{ . }}</small>{{ end }}
+          {{ with .Thresholds }}<a class="set" href="{{ . }}">{{ $.SetLabel }}</a>{{ end }}
+        </li>
+      {{ end }}
+    </ol>
+  {{ end }}
+  {{ with .More }}<p class="more"><a href="{{ $.DebugURL }}">{{ . }}</a></p>{{ end }}
+  <nav><a href="{{ .DebugURL }}">{{ .AllSeries }}</a></nav>
+</body>
+</html>

@@ -10,6 +10,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/pravbeseda/monitor/internal/anomaly"
 	"github.com/pravbeseda/monitor/internal/evaluate"
 	"github.com/pravbeseda/monitor/internal/hub"
 	"github.com/pravbeseda/monitor/internal/storage"
@@ -23,14 +24,19 @@ type stored struct {
 	states     []storage.NodeState
 	levels     []storage.State
 	thresholds []storage.Threshold
-	err        error
+	excluded   []storage.SeriesRef
+	// points are the stored points of each metric, whatever node or labels are asked for.
+	points map[string][]storage.Point
+	// pointsErr fails every read of points, and only those.
+	pointsErr error
+	err       error
 }
 
 func (s stored) SaveIngest(context.Context, storage.Ingest) error { return nil }
 func (s stored) Close() error                                     { return nil }
 
 func (s stored) Snapshot(context.Context, []string) (storage.Snapshot, error) {
-	return storage.Snapshot{Nodes: s.states, States: s.levels, Thresholds: s.thresholds}, s.err
+	return storage.Snapshot{Nodes: s.states, States: s.levels, Thresholds: s.thresholds, Excluded: s.excluded}, s.err
 }
 
 func (s stored) Series(context.Context, storage.Selection) ([]storage.SeriesNewest, error) {
@@ -41,8 +47,21 @@ func (s stored) Newest(context.Context, storage.Selection, time.Time) ([]storage
 	return nil, s.err
 }
 
-func (s stored) Points(context.Context, storage.SeriesRef, time.Time, time.Time) iter.Seq2[storage.Point, error] {
-	return func(func(storage.Point, error) bool) {}
+func (s stored) Points(_ context.Context, ref storage.SeriesRef, from, to time.Time) iter.Seq2[storage.Point, error] {
+	return func(yield func(storage.Point, error) bool) {
+		if s.pointsErr != nil {
+			yield(storage.Point{}, s.pointsErr)
+			return
+		}
+		for _, point := range s.points[ref.Metric] {
+			if point.TS.Before(from) || point.TS.After(to) {
+				continue
+			}
+			if !yield(point, nil) {
+				return
+			}
+		}
+	}
 }
 
 // The threshold store: nothing is stored unless a test says otherwise. A store that keeps
@@ -51,8 +70,11 @@ func (s stored) ThresholdOf(context.Context, storage.SeriesRef) (storage.Thresho
 	return storage.Threshold{}, false, s.err
 }
 
-func (s stored) SaveThreshold(context.Context, storage.Threshold) error   { return s.err }
-func (s stored) DeleteThreshold(context.Context, storage.SeriesRef) error { return s.err }
+func (s stored) Configure(context.Context, storage.SeriesRef, *storage.Threshold, bool) error {
+	return s.err
+}
+
+func (s stored) Excluded(context.Context, storage.SeriesRef) (bool, error) { return false, s.err }
 
 var laptop = storage.NodeState{
 	Node:     "laptop-a",
@@ -82,7 +104,7 @@ func show(t *testing.T, store hub.Snapshots, target, acceptLanguage string) *htt
 		req.Header.Set("Accept-Language", acceptLanguage)
 	}
 	rec := httptest.NewRecorder()
-	hub.Page(hub.ReadState(store, configured(time.Minute, time.Hour), func() time.Time { return lastSeen })).ServeHTTP(rec, req)
+	hub.Debug(hub.ReadState(store, configured(time.Minute, time.Hour), noNorms{}, func() time.Time { return lastSeen })).ServeHTTP(rec, req)
 	return rec
 }
 
@@ -99,7 +121,7 @@ func configured(interval, silenceAfter time.Duration) func(node string) (evaluat
 }
 
 func TestPageShowsEveryNodeWithItsLatestValues(t *testing.T) {
-	rec := show(t, stored{states: []storage.NodeState{laptop}}, "/", "")
+	rec := show(t, stored{states: []storage.NodeState{laptop}}, "/debug", "")
 
 	if rec.Code != http.StatusOK {
 		t.Fatalf("status = %d, want 200", rec.Code)
@@ -113,7 +135,7 @@ func TestPageShowsEveryNodeWithItsLatestValues(t *testing.T) {
 }
 
 func TestPageShowsTheHubVersionBesideTheTitle(t *testing.T) {
-	rec := show(t, stored{states: []storage.NodeState{laptop}}, "/", "")
+	rec := show(t, stored{states: []storage.NodeState{laptop}}, "/debug", "")
 
 	want := "<h1>Monitor <small>" + version.Current + "</small></h1>"
 	if !strings.Contains(rec.Body.String(), want) {
@@ -126,7 +148,7 @@ func TestPageShowsEachNodesAgentVersionBesideItsName(t *testing.T) {
 	upgraded.AgentVersion = "0.2.0"
 	unknown := storage.NodeState{Node: "server-b", LastSeen: lastSeen}
 
-	body := show(t, stored{states: []storage.NodeState{upgraded, unknown}}, "/", "").Body.String()
+	body := show(t, stored{states: []storage.NodeState{upgraded, unknown}}, "/debug", "").Body.String()
 
 	if want := "<h2>laptop-a <small>0.2.0</small></h2>"; !strings.Contains(body, want) {
 		t.Errorf("page = %q, want the heading %q", body, want)
@@ -166,7 +188,7 @@ func TestPageShowsAMetricWithNoUnitAsAPlainNumber(t *testing.T) {
 		Values:   []storage.Value{{Metric: "coffee.level", Labels: map[string]string{}, Value: 7.5, TS: lastSeen}},
 	}
 
-	rec := show(t, stored{states: []storage.NodeState{state}}, "/", "")
+	rec := show(t, stored{states: []storage.NodeState{state}}, "/debug", "")
 
 	if !strings.Contains(rec.Body.String(), "7.50") {
 		t.Errorf("page = %q, want the raw value shown", rec.Body.String())
@@ -174,7 +196,7 @@ func TestPageShowsAMetricWithNoUnitAsAPlainNumber(t *testing.T) {
 }
 
 func TestPageSaysSoWhenNoNodeHasReported(t *testing.T) {
-	rec := show(t, stored{}, "/", "")
+	rec := show(t, stored{}, "/debug", "")
 
 	if rec.Code != http.StatusOK {
 		t.Fatalf("status = %d, want 200", rec.Code)
@@ -185,24 +207,13 @@ func TestPageSaysSoWhenNoNodeHasReported(t *testing.T) {
 }
 
 func TestPageFailsLoudlyWhenStorageDoes(t *testing.T) {
-	rec := show(t, stored{err: errors.New("database is locked")}, "/", "")
+	rec := show(t, stored{err: errors.New("database is locked")}, "/debug", "")
 
 	if rec.Code != http.StatusInternalServerError {
 		t.Errorf("status = %d, want 500", rec.Code)
 	}
 	if strings.Contains(rec.Body.String(), "database is locked") {
 		t.Errorf("page = %q, want it to keep the internal error to the log", rec.Body.String())
-	}
-}
-
-func TestRootIsMountedOnTheRoutes(t *testing.T) {
-	req := httptest.NewRequest(http.MethodGet, "/", nil)
-	rec := httptest.NewRecorder()
-
-	routes(t).ServeHTTP(rec, req)
-
-	if rec.Code != http.StatusOK {
-		t.Errorf("status = %d, want the page mounted on /", rec.Code)
 	}
 }
 
@@ -249,7 +260,7 @@ func TestPageLeavesOutOrMarksSeriesThatStoppedArriving(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			state := storage.NodeState{Node: "laptop-a", LastSeen: lastSeen, Values: []storage.Value{tc.value}}
 
-			body := show(t, stored{states: []storage.NodeState{state}}, "/", "").Body.String()
+			body := show(t, stored{states: []storage.NodeState{state}}, "/debug", "").Body.String()
 
 			if shown := strings.Contains(body, tc.value.Labels["mount"]); shown != tc.wantShown {
 				t.Errorf("shown = %v, want %v; page = %q", shown, tc.wantShown, body)
@@ -272,7 +283,7 @@ func TestPageAgesSeriesByTheHubsClock(t *testing.T) {
 	silent := storage.NodeState{Node: "laptop-a", LastSeen: anHourAgo, Values: values}
 	heartbeatOnly := storage.NodeState{Node: "server-b", LastSeen: lastSeen, Values: values}
 
-	body := show(t, stored{states: []storage.NodeState{silent, heartbeatOnly}}, "/", "").Body.String()
+	body := show(t, stored{states: []storage.NodeState{silent, heartbeatOnly}}, "/debug", "").Body.String()
 
 	if strings.Contains(body, "/Volumes/stick-a") {
 		t.Errorf("page = %q, want the stick left out under both nodes", body)
@@ -296,7 +307,7 @@ func TestPageMarksAStaleSeriesInTheReadersLanguage(t *testing.T) {
 
 // spec: state.md#staleness — the hub ages a series by the interval its node's configuration
 // resolves, and a node the file no longer names resolves none, so nothing will refresh it.
-func TestRootAgesSeriesByTheConfiguredInterval(t *testing.T) {
+func TestDebugAgesSeriesByTheConfiguredInterval(t *testing.T) {
 	// laptop-a is in the test configuration, in the class whose disk interval is an hour;
 	// server-c is not named there at all.
 	for _, tc := range []struct {
@@ -312,7 +323,7 @@ func TestRootAgesSeriesByTheConfiguredInterval(t *testing.T) {
 		state := storage.NodeState{Node: tc.node, LastSeen: lastSeen, Values: []storage.Value{value}}
 		rec := httptest.NewRecorder()
 		routesWith(t, stored{states: []storage.NodeState{state}}, func() time.Time { return lastSeen }).
-			ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/", nil))
+			ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/debug", nil))
 
 		if marked := strings.Contains(rec.Body.String(), "no fresh data"); marked != tc.wantMarked {
 			t.Errorf("%s at %v: marked = %v, want %v", tc.node, tc.age, marked, tc.wantMarked)
@@ -326,7 +337,7 @@ func TestPageSaysANodeWhoseSeriesAllVanishedHasNothingCurrent(t *testing.T) {
 	stick := diskValue("disk.free_pct", "/Volumes/stick-a", "true", 1, time.Hour)
 	state := storage.NodeState{Node: "laptop-a", LastSeen: lastSeen, Values: []storage.Value{stick}}
 
-	body := show(t, stored{states: []storage.NodeState{state}}, "/", "").Body.String()
+	body := show(t, stored{states: []storage.NodeState{state}}, "/debug", "").Body.String()
 
 	if !strings.Contains(body, "No current measurements") || strings.Contains(body, "No measurements yet") {
 		t.Errorf("page = %q, want it to say nothing is current rather than nothing was measured", body)
@@ -344,7 +355,7 @@ func TestPageFreezesTheRowsOfASilentNode(t *testing.T) {
 	req := httptest.NewRequest(http.MethodGet, "/", nil)
 	rec := httptest.NewRecorder()
 
-	page := hub.Page(hub.ReadState(stored{states: []storage.NodeState{state}}, configured(time.Hour, 30*time.Second), func() time.Time { return lastSeen }))
+	page := hub.Debug(hub.ReadState(stored{states: []storage.NodeState{state}}, configured(time.Hour, 30*time.Second), noNorms{}, func() time.Time { return lastSeen }))
 	page.ServeHTTP(rec, req)
 
 	body := rec.Body.String()
@@ -380,7 +391,7 @@ func TestPageShowsAVolumeAsTwoRows(t *testing.T) {
 	reversed := laptop
 	reversed.Values = []storage.Value{laptop.Values[1], laptop.Values[0]}
 
-	body := show(t, stored{states: []storage.NodeState{reversed}}, "/", "").Body.String()
+	body := show(t, stored{states: []storage.NodeState{reversed}}, "/debug", "").Body.String()
 
 	got := rows(body)
 	if len(got) != 2 {
@@ -420,7 +431,7 @@ func TestPageGroupsAVolumesRowsAndOrdersThemByMetric(t *testing.T) {
 		},
 	}
 
-	got := rows(show(t, stored{states: []storage.NodeState{state}}, "/", "").Body.String())
+	got := rows(show(t, stored{states: []storage.NodeState{state}}, "/debug", "").Body.String())
 
 	if len(got) != 4 {
 		t.Fatalf("%d rows, want one per series; rows = %q", len(got), got)
@@ -458,7 +469,7 @@ func TestPageAgesEachSeriesOfAVolumeOnItsOwn(t *testing.T) {
 				diskValue("disk.free_pct", "/Volumes/drive-a", tc.removable, 34.24, time.Hour),
 			}}
 
-			body := show(t, stored{states: []storage.NodeState{state}}, "/", "").Body.String()
+			body := show(t, stored{states: []storage.NodeState{state}}, "/debug", "").Body.String()
 
 			if got := len(rows(body)); got != tc.wantRows {
 				t.Fatalf("%d rows, want %d; page = %q", got, tc.wantRows, body)
@@ -479,7 +490,7 @@ func TestPageSaysWhenNothingIsWatched(t *testing.T) {
 	const notice = "Nothing here is being judged yet"
 	store := stored{states: []storage.NodeState{laptop}}
 
-	if body := show(t, store, "/", "").Body.String(); !strings.Contains(body, notice) {
+	if body := show(t, store, "/debug", "").Body.String(); !strings.Contains(body, notice) {
 		t.Errorf("page = %q, want %q above the tables", body, notice)
 	}
 	if body := show(t, store, "/?lang=ru", "").Body.String(); !strings.Contains(body, "Здесь пока ничего не оценивается") {
@@ -490,7 +501,7 @@ func TestPageSaysWhenNothingIsWatched(t *testing.T) {
 	watched.thresholds = []storage.Threshold{{Series: storage.SeriesRef{
 		Node: "laptop-a", Metric: "disk.free_bytes", Labels: laptop.Values[0].Labels,
 	}, Direction: storage.Below}}
-	if body := show(t, watched, "/", "").Body.String(); strings.Contains(body, notice) {
+	if body := show(t, watched, "/debug", "").Body.String(); strings.Contains(body, notice) {
 		t.Errorf("page = %q, want no such line once a series is watched", body)
 	}
 }
@@ -505,7 +516,7 @@ func TestPageCountsANodesUnwatchedSeries(t *testing.T) {
 		}, Direction: storage.Below}},
 	}
 
-	body := show(t, store, "/", "").Body.String()
+	body := show(t, store, "/debug", "").Body.String()
 
 	if !strings.Contains(body, "1 series without a threshold") {
 		t.Errorf("page = %q, want the count of unwatched series beside the node", body)
@@ -513,4 +524,11 @@ func TestPageCountsANodesUnwatchedSeries(t *testing.T) {
 	if strings.Contains(body, "2 series without a threshold") {
 		t.Errorf("page = %q, want the watched series left out of the count", body)
 	}
+}
+
+// noNorms is a hub none of whose series has a norm yet: nothing is unusual on it.
+type noNorms struct{}
+
+func (noNorms) For(context.Context, time.Time, []storage.SeriesRef) (map[string]anomaly.Norm, error) {
+	return nil, nil
 }

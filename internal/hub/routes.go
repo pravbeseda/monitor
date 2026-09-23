@@ -5,6 +5,7 @@ import (
 	"net/http"
 	"time"
 
+	"github.com/pravbeseda/monitor/internal/anomaly"
 	"github.com/pravbeseda/monitor/internal/config"
 	"github.com/pravbeseda/monitor/internal/ingest"
 	"github.com/pravbeseda/monitor/internal/storage"
@@ -24,8 +25,9 @@ func Routes(cfg *config.Config, store Store, now func() time.Time) *http.ServeMu
 	mux := http.NewServeMux()
 	mux.Handle("POST /api/v1/ingest", ingest.NewHandler(cfg, store, now))
 	mux.Handle(ingest.AgentPrefix, ingest.NewAgentHandler(cfg))
-	current := ReadState(store, targetOf(cfg), now)
-	mux.Handle("GET /{$}", Page(current))
+	current := ReadState(store, targetOf(cfg), anomaly.NewNorms(store), now)
+	mux.Handle("GET /{$}", Board(current))
+	mux.Handle("GET /debug", Debug(current))
 
 	read := reader(cfg, store, now)
 	mux.Handle("GET /api/v1/series", SeriesAPI(read))

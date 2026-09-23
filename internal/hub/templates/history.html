@@ -19,7 +19,7 @@
   </style>
 </head>
 <body>
-  <nav><a href="/">{{ .Index }}</a></nav>
+  <nav><a href="{{ .TableURL }}">{{ .Table }}</a></nav>
   <h1>{{ if .Heading }}{{ .Heading }}{{ else }}{{ .Title }}{{ end }}</h1>
   {{ if .Latest }}<p class="meta">{{ .LatestLabel }}: {{ .Latest }}</p>{{ end }}
   {{ if .Windows }}

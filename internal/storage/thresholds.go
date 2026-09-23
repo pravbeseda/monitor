@@ -83,14 +83,14 @@ func readThresholds(ctx context.Context, from querier) ([]Threshold, error) {
 	return out, nil
 }
 
-// SaveThreshold stores what a series is judged by, replacing whatever was there: a save
+// saveThreshold stores what a series is judged by, replacing whatever was there: a save
 // states the whole configuration (docs/specs/thresholds.md#saving).
-func (s *SQLite) SaveThreshold(ctx context.Context, th Threshold) error {
+func saveThreshold(ctx context.Context, to execer, th Threshold) error {
 	labels, err := encodeLabels(th.Series.Labels)
 	if err != nil {
 		return fmt.Errorf("threshold of %s: %w", th.Series.Metric, err)
 	}
-	_, err = s.db.ExecContext(ctx, `
+	_, err = to.ExecContext(ctx, `
 		INSERT INTO thresholds (metric, node, labels, direction, warning, critical)
 		VALUES (?, ?, ?, ?, ?, ?)
 		ON CONFLICT (metric, node, labels) DO UPDATE SET
@@ -105,14 +105,14 @@ func (s *SQLite) SaveThreshold(ctx context.Context, th Threshold) error {
 	return nil
 }
 
-// DeleteThreshold stops a series being judged. Removing what is not there is not an
-// error: the form clears a configuration by saving it empty, whatever was stored before.
-func (s *SQLite) DeleteThreshold(ctx context.Context, ref SeriesRef) error {
+// deleteThreshold stops a series being judged. Removing what is not there is not an error:
+// the form clears a configuration by saving it empty, whatever was stored before.
+func deleteThreshold(ctx context.Context, to execer, ref SeriesRef) error {
 	labels, err := encodeLabels(ref.Labels)
 	if err != nil {
 		return fmt.Errorf("threshold of %s: %w", ref.Metric, err)
 	}
-	_, err = s.db.ExecContext(ctx, `
+	_, err = to.ExecContext(ctx, `
 		DELETE FROM thresholds WHERE metric = ? AND node = ? AND labels = ?`,
 		ref.Metric, ref.Node, labels)
 	if err != nil {

@@ -27,7 +27,7 @@ var levelKeys = map[evaluate.Level]string{
 // than as a change.
 func Render(p *i18n.Printer, m evaluate.Message) string {
 	subject := m.Node
-	if named := naming(m.Labels); named != "" {
+	if named := Naming(m.Labels); named != "" {
 		subject += " " + named
 	}
 
@@ -51,11 +51,11 @@ func Render(p *i18n.Printer, m evaluate.Message) string {
 // message about nothing (ADR 0033).
 var decoration = map[string]bool{"fs": true, "removable": true}
 
-// naming is what identifies the series inside its node: a mount point reads as itself,
+// Naming is what identifies the series inside its node: a mount point reads as itself,
 // and any other label as the pair it is. A value carrying a space or an `=` is quoted, or
 // it would read as two labels — `{queue: "payments region=eu"}` is one series and
 // `{queue: payments, region: eu}` is another.
-func naming(labels map[string]string) string {
+func Naming(labels map[string]string) string {
 	named := make([]string, 0, len(labels))
 	for _, key := range slices.Sorted(maps.Keys(labels)) {
 		switch {

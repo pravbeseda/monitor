@@ -8,6 +8,7 @@ import (
 	"sort"
 	"time"
 
+	"github.com/pravbeseda/monitor/internal/anomaly"
 	"github.com/pravbeseda/monitor/internal/evaluate"
 	"github.com/pravbeseda/monitor/internal/history"
 	"github.com/pravbeseda/monitor/internal/storage"
@@ -56,11 +57,16 @@ type Subject struct {
 	Unit  history.Unit
 	Value *float64
 	TS    time.Time
+	// Anomaly is how unlike its norm the newest value is, nil when the subject carries none:
+	// stale, excluded, without a norm, or a node's silence (docs/specs/anomaly.md).
+	Anomaly *anomaly.Anomaly
 }
 
 // Build reads the state out of one snapshot at now. targets resolves a node as evaluation
-// reads it, and false for a node the configuration does not name.
-func Build(targets func(node string) (evaluate.Target, bool), snap storage.Snapshot, now time.Time) State {
+// reads it, and false for a node the configuration does not name. norms holds each series'
+// norm by its subject key; a series absent from it — every series, when the norms could not
+// be read — carries no anomaly (docs/specs/anomaly.md).
+func Build(targets func(node string) (evaluate.Target, bool), snap storage.Snapshot, now time.Time, norms map[string]anomaly.Norm) State {
 	out := State{At: now, Nodes: make([]Node, 0, len(snap.Nodes)), Subjects: []Subject{}}
 
 	resolved := map[string]evaluate.Target{}
@@ -78,6 +84,11 @@ func Build(targets func(node string) (evaluate.Target, bool), snap storage.Snaps
 	set := make(map[string]struct{}, len(snap.Thresholds))
 	for _, threshold := range snap.Thresholds {
 		set[seriesKey(threshold.Series.Node, threshold.Series.Metric, threshold.Series.Labels)] = struct{}{}
+	}
+
+	excluded := make(map[string]struct{}, len(snap.Excluded))
+	for _, ref := range snap.Excluded {
+		excluded[seriesKey(ref.Node, ref.Metric, ref.Labels)] = struct{}{}
 	}
 
 	// Evaluation's own subjects, so the state lists and freezes exactly what a tick would.
@@ -134,6 +145,12 @@ func Build(targets func(node string) (evaluate.Target, bool), snap storage.Snaps
 				one.Stale = staleOf(target, known, reported.LastSeen, value, now)
 			}
 			one.Unit, one.Value, one.TS = history.UnitOf(value.Metric), &value.Value, value.TS
+			if _, isExcluded := excluded[key]; !isExcluded && !one.Stale {
+				if norm, ok := norms[key]; ok {
+					found := norm.Judge(value.Value)
+					one.Anomaly = &found
+				}
+			}
 			if isWatched {
 				node.Watched++
 				if !one.Stale {
@@ -156,6 +173,12 @@ func Build(targets func(node string) (evaluate.Target, bool), snap storage.Snaps
 
 	sort.Slice(out.Nodes, func(i, j int) bool { return out.Nodes[i].Node < out.Nodes[j].Node })
 	sortSubjects(out.Subjects)
+	// Ranks run over the whole answer in the order it lists its subjects.
+	anomalies := make([]*anomaly.Anomaly, len(out.Subjects))
+	for i := range out.Subjects {
+		anomalies[i] = out.Subjects[i].Anomaly
+	}
+	anomaly.Rank(anomalies)
 	return out
 }
 

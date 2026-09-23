@@ -22,7 +22,7 @@ func judging() func(node string) (evaluate.Target, bool) {
 func showJudged(t *testing.T, store hub.Snapshots, target string) string {
 	t.Helper()
 	rec := httptest.NewRecorder()
-	hub.Page(hub.ReadState(store, judging(), func() time.Time { return lastSeen })).
+	hub.Debug(hub.ReadState(store, judging(), noNorms{}, func() time.Time { return lastSeen })).
 		ServeHTTP(rec, httptest.NewRequest(http.MethodGet, target, nil))
 	if rec.Code != http.StatusOK {
 		t.Fatalf("status = %d: %s", rec.Code, rec.Body)
