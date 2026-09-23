@@ -11,8 +11,8 @@ func value(v float64) *float64 { return &v }
 
 func save(t *testing.T, db *SQLite, th Threshold) {
 	t.Helper()
-	if err := db.SaveThreshold(context.Background(), th); err != nil {
-		t.Fatalf("SaveThreshold: %v", err)
+	if err := db.Configure(context.Background(), th.Series, &th, false); err != nil {
+		t.Fatalf("Configure: %v", err)
 	}
 }
 
@@ -62,7 +62,7 @@ func TestThresholdOfUnconfiguredSeries(t *testing.T) {
 
 // spec: thresholds.md#saving — a form is a statement of the whole configuration, not a
 // patch: the later save is what is stored, down to a value it leaves out.
-func TestSaveThresholdReplacesWhatWasThere(t *testing.T) {
+func TestASaveReplacesWhatWasThere(t *testing.T) {
 	db := open(t)
 	ref := bytesRef("server-b", "/")
 	save(t, db, Threshold{Series: ref, Direction: Below, Warning: value(10e9), Critical: value(4e9)})
@@ -79,18 +79,18 @@ func TestSaveThresholdReplacesWhatWasThere(t *testing.T) {
 }
 
 // spec: thresholds.md#saving — clearing both values removes the configuration.
-func TestDeleteThresholdRemovesIt(t *testing.T) {
+func TestClearingAThresholdRemovesIt(t *testing.T) {
 	db := open(t)
 	ref := bytesRef("server-b", "/")
 	save(t, db, Threshold{Series: ref, Direction: Below, Warning: value(10e9)})
-	if err := db.DeleteThreshold(context.Background(), ref); err != nil {
-		t.Fatalf("DeleteThreshold: %v", err)
+	if err := db.Configure(context.Background(), ref, nil, false); err != nil {
+		t.Fatalf("Configure: %v", err)
 	}
 	if _, ok, _ := db.ThresholdOf(context.Background(), ref); ok {
 		t.Fatal("ThresholdOf: the threshold outlived its removal")
 	}
-	if err := db.DeleteThreshold(context.Background(), ref); err != nil {
-		t.Fatalf("DeleteThreshold of nothing: %v", err)
+	if err := db.Configure(context.Background(), ref, nil, false); err != nil {
+		t.Fatalf("clearing nothing: %v", err)
 	}
 }
 

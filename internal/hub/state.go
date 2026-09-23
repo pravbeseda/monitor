@@ -6,6 +6,7 @@ import (
 	"net/http"
 	"time"
 
+	"github.com/pravbeseda/monitor/internal/anomaly"
 	"github.com/pravbeseda/monitor/internal/api"
 	"github.com/pravbeseda/monitor/internal/evaluate"
 	"github.com/pravbeseda/monitor/internal/history"
@@ -44,6 +45,13 @@ type subjectJSON struct {
 	Unit    *history.Unit     `json:"unit"`
 	Value   *float64          `json:"value"`
 	TS      *string           `json:"ts"`
+	Anomaly *anomalyJSON      `json:"anomaly"`
+}
+
+type anomalyJSON struct {
+	Norm  float64  `json:"norm"`
+	Score *float64 `json:"score"`
+	Rank  *int     `json:"rank"`
 }
 
 // Snapshots is what the state needs of persistence, declared where it is consumed. The
@@ -55,15 +63,34 @@ type Snapshots interface {
 // StateReader reads the state at the instant it is called.
 type StateReader func(ctx context.Context) (state.State, error)
 
+// NormReader is where the state finds each series' norm for the hour it is read in.
+type NormReader interface {
+	For(ctx context.Context, now time.Time, refs []storage.SeriesRef) (map[string]anomaly.Norm, error)
+}
+
 // ReadState builds the state from one consistent read of storage, resolving each node as
-// evaluation does, so the two cannot disagree about which subjects exist or are fresh.
-func ReadState(store Snapshots, targets func(node string) (evaluate.Target, bool), now func() time.Time) StateReader {
+// evaluation does, so the two cannot disagree about which subjects exist or are fresh. The
+// norms are read beside it: their period ended a day before, so no write can race them.
+func ReadState(store Snapshots, targets func(node string) (evaluate.Target, bool), norms NormReader, now func() time.Time) StateReader {
 	return func(ctx context.Context) (state.State, error) {
 		snap, err := store.Snapshot(ctx, nil)
 		if err != nil {
 			return state.State{}, err
 		}
-		return state.Build(targets, snap, now()), nil
+		at := now()
+		var refs []storage.SeriesRef
+		for _, node := range snap.Nodes {
+			for _, value := range node.Values {
+				refs = append(refs, storage.SeriesRef{Node: node.Node, Metric: value.Metric, Labels: value.Labels})
+			}
+		}
+		// Norms that cannot be read cost the answer its anomalies, not the answer itself
+		// (docs/specs/anomaly.md#reading).
+		held, err := norms.For(ctx, at, refs)
+		if err != nil {
+			slog.Error("read the norms", "error", err)
+		}
+		return state.Build(targets, snap, at, held), nil
 	}
 }
 
@@ -127,6 +154,12 @@ func encodeState(current state.State) stateJSON {
 		if subject.Value != nil {
 			unit, at := subject.Unit, stamp(subject.TS)
 			one.Unit, one.Value, one.TS = &unit, subject.Value, &at
+		}
+		if found := subject.Anomaly; found != nil {
+			one.Anomaly = &anomalyJSON{Norm: found.Norm, Score: found.Score}
+			if found.Rank > 0 {
+				one.Anomaly.Rank = &found.Rank
+			}
 		}
 		out.Subjects = append(out.Subjects, one)
 	}

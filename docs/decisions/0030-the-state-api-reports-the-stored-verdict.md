@@ -2,7 +2,9 @@
 
 - **Status:** accepted; amended by [0033](0033-a-subject-is-a-series.md) — `subjects` and
   `readings` became one list, because every series is now a subject; never evaluating on
-  read, staleness decided at read, the node rollup and the refusal of `at=` stand
+  read, staleness decided at read, the node rollup and the refusal of `at=` stand; amended by
+  [0036](0036-an-anomaly-is-a-value-outside-its-weeks-band.md) — each series' anomaly is
+  computed on read, and is no level
 - **Date:** 2026-09-19
 - **Source:** [state spec](../specs/state.md), [design notes](../log/2026-09-19-state-api.md)
 

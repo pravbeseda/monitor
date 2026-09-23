@@ -32,8 +32,9 @@ Each principle below is recorded in full, with its alternatives, in the linked A
 2. **A metric costs no code.** A measurement declares itself: its id carries its unit, its
    labels make it a series, and what that series is judged by — a direction and up to two
    values — is set on its own page and stored with the data, never compiled in and never a
-   file to edit. What the agent collects and how often stays configuration; health scoring,
-   anomaly detection and *silence* detection follow from the series and its thresholds.
+   file to edit. What the agent collects and how often stays configuration; health scoring
+   and *silence* detection follow from the series and its thresholds, anomaly detection
+   from the series alone.
    → [ADR 0032](decisions/0032-thresholds-are-set-in-the-interface.md),
    [ADR 0033](decisions/0033-a-subject-is-a-series.md),
    [ADR 0010](decisions/0010-agent-configuration.md)
@@ -53,8 +54,8 @@ Each principle below is recorded in full, with its alternatives, in the linked A
 
 | Skin | What it is |
 |---|---|
-| Debug view | A table of every metric. The first skin; it proves the State API is sufficient and stays as the debugging mode. |
-| Mission control | Dark board, empty while all is well; anomalies surface on their own. The primary view. |
+| Debug view | A table of every metric, at `/debug`. The first skin; it proves the State API is sufficient and stays as the debugging mode. |
+| Mission control | Dark board, empty while all is well; anomalies surface on their own. The primary view, at `/`, rendered by the hub ([ADR 0035](decisions/0035-mission-control-is-rendered-by-the-hub.md)). |
 | Advisors | Per-domain summaries in plain language (an LLM over aggregates). |
 | City | Isometric city: districts are life areas, buildings are metrics. |
 | Organism | Metrics as body systems, with one overall "pulse" number. |
@@ -83,5 +84,7 @@ health wait for sources that report on their own
    from the agents ([host sensors](specs/host-sensors.md)). Finance and health follow once
    they have automatic sources; backups have their own design question
    ([#51](https://github.com/pravbeseda/monitor/issues/51)).
-3. **Semantic engine** — health, anomalies, trends, forecasts, time travel.
+3. **Semantic engine** — health, anomalies, trends, forecasts, time travel. The anomaly
+   rank came first, as the slice mission control reads
+   ([log](log/2026-09-23-mission-control.md)).
 4. **Skins** — mission control first, then advisors, then the visual metaphors.

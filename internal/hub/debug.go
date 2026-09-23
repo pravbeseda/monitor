@@ -2,15 +2,16 @@ package hub
 
 import (
 	"embed"
+	"fmt"
 	"html/template"
 	"log/slog"
 	"net/http"
+	"net/url"
 	"sort"
 	"strings"
-
-	"fmt"
 	"time"
 
+	"github.com/pravbeseda/monitor/internal/anomaly"
 	"github.com/pravbeseda/monitor/internal/evaluate"
 	"github.com/pravbeseda/monitor/internal/i18n"
 	"github.com/pravbeseda/monitor/internal/notify"
@@ -22,11 +23,11 @@ import (
 //go:embed templates/*.html
 var templates embed.FS
 
-var pageTemplate = template.Must(template.ParseFS(templates, "templates/index.html", "templates/shell.html"))
+var debugTemplate = template.Must(template.ParseFS(templates, "templates/debug.html", "templates/shell.html"))
 
-// view is the page as the template sees it: every string is already translated and every
+// debugView is the page as the template sees it: every string is already translated and every
 // number already formatted, so the template holds no logic and no English.
-type view struct {
+type debugView struct {
 	shell
 	Version        string
 	Empty          string
@@ -37,7 +38,10 @@ type view struct {
 	ValueLabel     string
 	LevelLabel     string
 	CollectedLabel string
-	Nodes          []nodeView
+	// Board and BoardURL are the link to mission control (docs/specs/state.md#page).
+	Board    string
+	BoardURL string
+	Nodes    []nodeView
 }
 
 type nodeView struct {
@@ -76,33 +80,33 @@ type rowView struct {
 	Collected  string
 	// Stale is the translated mark of a row that stopped arriving, empty on a fresh one.
 	Stale string
+	// Unusual marks a series that ranks, beside its usual value, so the ones mission
+	// control leaves off past its fifth can be found here (docs/specs/state.md#page).
+	Unusual string
 }
 
-// Page renders the state of every node — the debug view of docs/specs/state.md#page —
+// Debug renders the state of every node — the debug view of docs/specs/state.md#page —
 // leaving out or marking what the state calls stale (docs/specs/history.md#page).
-func Page(read StateReader) http.Handler {
+func Debug(read StateReader) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		values := r.URL.Query()
 		printer := i18n.For(i18n.Negotiate(values.Get("lang"), r.Header.Get("Accept-Language"))).In(zoneOf(r))
 
 		current, err := read(r.Context())
 		if err != nil {
-			slog.Error("read the state", "error", err)
-			// Plain text rather than a page, but a failure is still live state.
-			w.Header().Set("Cache-Control", "no-store")
-			http.Error(w, printer.T("error.storage"), http.StatusInternalServerError)
+			storageFailure(w, printer, err)
 			return
 		}
 
 		shellHeaders(w)
-		if err := pageTemplate.Execute(w, index(printer, current, language(values))); err != nil {
+		if err := debugTemplate.Execute(w, debugOf(printer, current, language(values))); err != nil {
 			slog.Error("render the page", "error", err)
 		}
 	})
 }
 
-func index(printer *i18n.Printer, current state.State, lang string) view {
-	out := view{
+func debugOf(printer *i18n.Printer, current state.State, lang string) debugView {
+	out := debugView{
 		shell:          shellOf(printer, "page.title"),
 		Version:        version.Current,
 		Empty:          printer.T("page.empty"),
@@ -112,6 +116,8 @@ func index(printer *i18n.Printer, current state.State, lang string) view {
 		ValueLabel:     printer.T("table.free"),
 		LevelLabel:     printer.T("table.level"),
 		CollectedLabel: printer.T("table.collected"),
+		Board:          printer.T("board.title"),
+		BoardURL:       pageLink("/", lang),
 		Nodes:          make([]nodeView, 0, len(current.Nodes)),
 	}
 	// A hub that watches nothing must say so: it looks exactly like one where nothing is
@@ -119,7 +125,7 @@ func index(printer *i18n.Printer, current state.State, lang string) view {
 	if current.Watched == 0 {
 		out.NothingWatched = printer.T("page.nothing_watched")
 	}
-	rows, silent := rowsByNode(current)
+	rows, silent := rowsByNode(current), silentNodes(current)
 	for _, reported := range current.Nodes {
 		node := nodeView{
 			Name:     reported.Node,
@@ -136,7 +142,7 @@ func index(printer *i18n.Printer, current state.State, lang string) view {
 			node.Unwatched = fmt.Sprintf(printer.T("node.unwatched"), reported.Unwatched)
 		}
 		for _, row := range rows[reported.Node] {
-			if row.stale && row.labels["removable"] == "true" {
+			if unplugged(row.stale, row.labels) {
 				continue
 			}
 			node.Rows = append(node.Rows, rowOf(printer, reported.Node, row, lang))
@@ -166,6 +172,9 @@ func rowOf(printer *i18n.Printer, node string, row seriesRow, lang string) rowVi
 	if row.stale {
 		out.Stale = printer.T("value.stale")
 	}
+	if row.anomaly != nil && row.anomaly.Rank > 0 {
+		out.Unusual = fmt.Sprintf(printer.T("value.unusual"), format(printer, row.metric, row.anomaly.Norm))
+	}
 	return out
 }
 
@@ -178,48 +187,73 @@ func levelOf(printer *i18n.Printer, level *evaluate.Level) *levelView {
 
 // seriesRow is one series before it is translated.
 type seriesRow struct {
-	metric string
-	labels map[string]string
-	value  float64
-	ts     time.Time
-	level  *evaluate.Level
-	stale  bool
+	metric  string
+	labels  map[string]string
+	value   float64
+	ts      time.Time
+	level   *evaluate.Level
+	stale   bool
+	anomaly *anomaly.Anomaly
 }
 
-// rowsByNode is each node's rows — one per series — grouped so that the series of one
-// volume sit together and ordered by metric inside the group, and which nodes the state
-// holds silent. The grouping is the page's own: the state privileges no label
-// (docs/specs/state.md#ordering).
-func rowsByNode(current state.State) (map[string][]seriesRow, map[string]bool) {
+// rowsByNode is each node's rows, one per series, in the order seriesBefore gives them.
+func rowsByNode(current state.State) map[string][]seriesRow {
 	rows := map[string][]seriesRow{}
-	silent := map[string]bool{}
 	for _, subject := range current.Subjects {
-		if subject.Metric == evaluate.SilenceMetric {
-			silent[subject.Node] = subject.Level != nil && *subject.Level == evaluate.Critical
-			continue
-		}
 		if subject.Value == nil {
 			continue
 		}
 		rows[subject.Node] = append(rows[subject.Node], seriesRow{
-			metric: subject.Metric,
-			labels: subject.Labels,
-			value:  *subject.Value,
-			ts:     subject.TS,
-			level:  subject.Level,
-			stale:  subject.Stale,
+			metric:  subject.Metric,
+			labels:  subject.Labels,
+			value:   *subject.Value,
+			ts:      subject.TS,
+			level:   subject.Level,
+			stale:   subject.Stale,
+			anomaly: subject.Anomaly,
 		})
 	}
 	for _, list := range rows {
 		sort.SliceStable(list, func(i, j int) bool {
-			a, b := list[i], list[j]
-			if first, second := storage.LabelKey(a.labels), storage.LabelKey(b.labels); first != second {
-				return first < second
-			}
-			return a.metric < b.metric
+			return seriesBefore(list[i].labels, list[i].metric, list[j].labels, list[j].metric)
 		})
 	}
-	return rows, silent
+	return rows
+}
+
+// seriesBefore orders the series of one node the way every page lists them: the series of
+// one volume together, by metric inside the group. The grouping is the pages' own: the
+// state privileges no label (docs/specs/state.md#ordering).
+func seriesBefore(aLabels map[string]string, aMetric string, bLabels map[string]string, bMetric string) bool {
+	if first, second := storage.LabelKey(aLabels), storage.LabelKey(bLabels); first != second {
+		return first < second
+	}
+	return aMetric < bMetric
+}
+
+// silentNodes is which nodes the state holds silent: their silence subject is critical.
+func silentNodes(current state.State) map[string]bool {
+	silent := map[string]bool{}
+	for _, subject := range current.Subjects {
+		if subject.Metric == evaluate.SilenceMetric {
+			silent[subject.Node] = subject.Level != nil && *subject.Level == evaluate.Critical
+		}
+	}
+	return silent
+}
+
+// unplugged is a removable volume that stopped arriving: no page shows it as a reading
+// (docs/specs/history.md#page).
+func unplugged(stale bool, labels map[string]string) bool {
+	return stale && labels["removable"] == "true"
+}
+
+// storageFailure answers a page whose state cannot be read: plain text rather than a page,
+// but a failure is still live state.
+func storageFailure(w http.ResponseWriter, printer *i18n.Printer, err error) {
+	slog.Error("read the state", "error", err)
+	w.Header().Set("Cache-Control", "no-store")
+	http.Error(w, printer.T("error.storage"), http.StatusInternalServerError)
 }
 
 // volume names the thing a series is about, from the labels the sensor set.
@@ -241,4 +275,12 @@ func volume(printer *i18n.Printer, labels map[string]string) string {
 // renders one (docs/specs/history.md#wire-format).
 func format(printer *i18n.Printer, metric string, value float64) string {
 	return notify.Value(printer, metric, value)
+}
+
+// pageLink addresses a page that takes no query of its own, in the reader's language.
+func pageLink(path, lang string) string {
+	if lang == "" {
+		return path
+	}
+	return path + "?" + url.Values{"lang": {lang}}.Encode()
 }

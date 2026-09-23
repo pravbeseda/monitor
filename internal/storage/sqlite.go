@@ -169,12 +169,28 @@ var migrations = []string{
 
 	CREATE INDEX events_at ON events (at);
 	CREATE INDEX events_subject ON events (node, metric, labels, at DESC);`,
+
+	// A series the reader excluded from anomalies (ADR 0036). It is kept apart from its
+	// threshold: a series may be excluded with none, and keeps the exclusion when its
+	// threshold is cleared.
+	`CREATE TABLE IF NOT EXISTS anomaly_exclusions (
+		metric TEXT NOT NULL,
+		node   TEXT NOT NULL,
+		labels TEXT NOT NULL,
+		PRIMARY KEY (metric, node, labels)
+	) WITHOUT ROWID;`,
 }
 
 // querier is what a database handle and a transaction both offer, so one read runs either
 // on its own or inside the snapshot a tick takes.
 type querier interface {
 	QueryContext(ctx context.Context, query string, args ...any) (*sql.Rows, error)
+}
+
+// execer is what a transaction offers for a write, so a save that states several things at
+// once runs each of them inside it.
+type execer interface {
+	ExecContext(ctx context.Context, query string, args ...any) (sql.Result, error)
 }
 
 // SQLite is the Storage implementation the hub runs on.

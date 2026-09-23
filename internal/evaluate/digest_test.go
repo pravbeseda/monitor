@@ -191,13 +191,14 @@ func TestOneDigestForEveryNodeOrderedByNodeThenMount(t *testing.T) {
 	}); err != nil {
 		t.Fatalf("SaveIngest: %v", err)
 	}
-	if err := db.SaveThreshold(context.Background(), storage.Threshold{
+	th := storage.Threshold{
 		Series:    storage.SeriesRef{Node: "laptop-a", Metric: "disk.free_bytes", Labels: volume("/")},
 		Direction: storage.Below,
 		Warning:   num(gb(10)),
 		Critical:  num(gb(4)),
-	}); err != nil {
-		t.Fatalf("SaveThreshold: %v", err)
+	}
+	if err := db.Configure(context.Background(), th.Series, &th, false); err != nil {
+		t.Fatalf("Configure: %v", err)
 	}
 
 	channel := &recorder{}

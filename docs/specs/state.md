@@ -3,9 +3,9 @@
 - **Status:** approved
 - **Owns:** `GET /api/v1/state` in `internal/hub` — which subjects exist now, the level last
   recorded for each, whether the values behind it are fresh, and the newest value itself —
-  and the levels the index page `/` shows. The level itself is written by
+  and the levels the debug view `/debug` shows. The level itself is written by
   [evaluation](evaluation.md) alone and the threshold that produced it is set on
-  [its own page](thresholds.md); which rows `/` shows, hides or marks, in what order and
+  [its own page](thresholds.md); which rows `/debug` shows, hides or marks, in what order and
   with which links stays with [history](history.md#page), reading freshness from here; every
   user-facing string comes from `internal/i18n`.
 - **Decisions:** [0001](../decisions/0001-semantic-core-and-skins.md),
@@ -16,7 +16,9 @@
   [0023](../decisions/0023-proxy-holds-the-web-perimeter.md),
   [0030](../decisions/0030-the-state-api-reports-the-stored-verdict.md),
   [0033](../decisions/0033-a-subject-is-a-series.md),
-  [0034](../decisions/0034-a-series-without-a-sensor-still-ages.md)
+  [0034](../decisions/0034-a-series-without-a-sensor-still-ages.md),
+  [0035](../decisions/0035-mission-control-is-rendered-by-the-hub.md),
+  [0036](../decisions/0036-an-anomaly-is-a-value-outside-its-weeks-band.md)
 
 ## Purpose
 
@@ -25,13 +27,19 @@ one input every skin renders from ([0001](../decisions/0001-semantic-core-and-sk
 carries meaning, never presentation: a level, how long it has held, whether the value behind
 it is fresh, and the value itself. No colour, size or slot of any skin appears in it.
 
-It judges nothing. The level it reports is the one evaluation last stored
-([0015](../decisions/0015-evaluation-on-a-tick.md)); reading the state never evaluates and
-never writes. The index page `/` is its first consumer, the debug view: it shows every
-subject with its level, and nothing the endpoint would not return.
+It judges no level. The level it reports is the one evaluation last stored
+([0015](../decisions/0015-evaluation-on-a-tick.md)); reading the state never evaluates a
+level and never writes. Besides staleness, the one thing it computes on read is each
+series' anomaly
+([0036](../decisions/0036-an-anomaly-is-a-value-outside-its-weeks-band.md)), which is no
+level and leads to no event. The debug view `/debug` is its first consumer: it shows every subject with its
+level, and nothing the endpoint would not return. Mission control at `/` is its second
+([mission-control.md](mission-control.md)).
 
-Health 0–100, trend, anomaly rank and forecasts belong to the semantic engine and are
-absent; they arrive as new fields, which a consumer that does not know them ignores.
+Each series also carries its anomaly — how far its newest value lies from its own norm —
+which [anomaly.md](anomaly.md) owns. Health 0–100, trend and forecasts belong to the
+semantic engine and are absent; they arrive as new fields, which a consumer that does not
+know them ignores.
 
 ## Model
 
@@ -97,19 +105,22 @@ GET /api/v1/state
   "subjects": [
     { "node": "server-b", "metric": "silence", "labels": {}, "watched": true,
       "level": "ok", "since": "2026-09-01T08:00:00.000Z", "stale": false,
-      "unit": null, "value": null, "ts": null },
+      "unit": null, "value": null, "ts": null, "anomaly": null },
     { "node": "server-b", "metric": "disk.free_bytes",
       "labels": { "mount": "/data", "fs": "ext4", "removable": "false" },
       "watched": true, "level": "warning", "since": "2026-09-18T22:10:00.000Z",
       "stale": false, "unit": "bytes", "value": 9000000000,
-      "ts": "2026-09-19T09:45:00.000Z" },
+      "ts": "2026-09-19T09:45:00.000Z",
+      "anomaly": { "norm": 11000000000, "score": -0.9, "rank": null } },
     { "node": "server-b", "metric": "disk.free_pct",
       "labels": { "mount": "/data", "fs": "ext4", "removable": "false" },
       "watched": false, "level": null, "since": null, "stale": false,
-      "unit": "percent", "value": 12, "ts": "2026-09-19T09:45:00.000Z" },
-    { "node": "server-b", "metric": "load.one", "labels": {}, "watched": false,
+      "unit": "percent", "value": 12, "ts": "2026-09-19T09:45:00.000Z",
+      "anomaly": { "norm": 14, "score": -0.8, "rank": null } },
+    { "node": "server-b", "metric": "load.avg_5m", "labels": {}, "watched": false,
       "level": null, "since": null, "stale": false, "unit": "number",
-      "value": 0.4, "ts": "2026-09-19T09:55:00.000Z" }
+      "value": 3.1, "ts": "2026-09-19T09:55:00.000Z",
+      "anomaly": { "norm": 0.4, "score": 7.5, "rank": 1 } }
   ]
 }
 ```
@@ -119,7 +130,8 @@ request was handled, the instant staleness is decided at. `unit` is read from th
 exactly as [history](history.md#wire-format) reads it. `level` is `ok`, `warning`,
 `critical` or `null`, and `since` is `null` exactly when `level` is. A consumer treats a
 level or a unit it does not know as opaque. Lists and label maps are never `null`, only
-empty. The silence subject carries no value of its own — `unit`, `value` and `ts` are
+empty. `anomaly` is an object or `null`, shaped and computed as
+[anomaly.md](anomaly.md#wire-format) says. The silence subject carries no value of its own — `unit`, `value` and `ts` are
 `null` — because its input is the node's last-seen time, which `nodes` already states.
 `watched` and `unwatched` count that node's series, and at the top level every node's; a
 silence subject is watched and counted in neither. `node` names a node today; a subject that belongs to
@@ -140,7 +152,7 @@ One row = one test. Anchors: `spec: state.md#<heading>`.
 | `?at=` empty, or any other query parameter | 400 |
 | `POST /api/v1/state` | 405 |
 | the stored state cannot be read | 500 |
-| two requests with nothing reported or evaluated between them, and no staleness verdict changing | bodies equal but for `at` |
+| two requests inside one hour with nothing reported or evaluated between them, and no staleness verdict changing | bodies equal but for `at`: an anomaly's norm moves only with the hour ([anomaly](anomaly.md#reading)) |
 
 ### Listing {#listing}
 
@@ -190,7 +202,7 @@ One row = one test. Anchors: `spec: state.md#<heading>`.
 | the same series a moment later | `stale: true`, so a series no agent will ever name again still ages off the page |
 | a series whose newest value names no sensor, on a node that runs no sensor at all | `stale: true`: nothing will refresh it |
 | a series whose node resolves no interval for its sensor | `stale: true`: nothing will refresh it |
-| a stale volume with `removable: "true"` | listed, `stale: true`; hiding it is `/`'s rule ([history](history.md#page)) |
+| a stale volume with `removable: "true"` | listed, `stale: true`; hiding it is `/debug`'s rule ([history](history.md#page)) |
 | values stamped an hour ahead of the hub's clock | `stale: false` |
 
 ### Ordering {#ordering}
@@ -201,13 +213,13 @@ Names and labels are compared byte by byte; labels are rendered as history rende
 | List | Order |
 |---|---|
 | `nodes` | by node |
-| `subjects` | by node, then metric, then labels; a node's silence subject comes first. No label is privileged: the core does not know `mount` is about disks ([0033](../decisions/0033-a-subject-is-a-series.md)), and grouping a volume's two rows together is `/`'s own rendering ([history](history.md#page)) |
+| `subjects` | by node, then metric, then labels; a node's silence subject comes first. No label is privileged: the core does not know `mount` is about disks ([0033](../decisions/0033-a-subject-is-a-series.md)), and grouping a volume's two rows together is `/debug`'s own rendering ([history](history.md#page)) |
 
 ### The debug view {#page}
 
 | Request | What the reader sees |
 |---|---|
-| `/` | beside every series row, its level in the reader's language |
+| `/debug` | beside every series row, its level in the reader's language |
 | a hub where nothing is watched | a line above the tables, in the reader's language, saying that nothing here is being judged and where to set a threshold |
 | a node some of whose series are unwatched | how many, beside the node's name |
 | series at `ok`, `warning` and `critical` | each of the three marked differently from the other two |
@@ -216,7 +228,10 @@ Names and labels are compared byte by byte; labels are rendered as history rende
 | a node whose level is `ok` or `null` | nothing beside its name |
 | a node whose silence subject is `critical` | the node marked silent in the reader's language, beside its last-seen time |
 | a stale series still shown | its level beside the "no fresh data" mark |
-| `/?lang=ru` | every level word and the silent mark in Russian |
+| a series with an anomaly rank | marked as unusual in the reader's language, with its usual value — the norm — in its unit, so the series mission control leaves off past its fifth anomaly can be found ([mission-control.md](mission-control.md#order)) |
+| a series with an anomaly and no rank | no mark: its value is within its usual band |
+| `/debug` | a link to `/`, mission control |
+| `/debug?lang=ru` | every level word and the silent mark in Russian |
 
 ## Invariants
 
@@ -229,7 +244,7 @@ Names and labels are compared byte by byte; labels are rendered as history rende
   response, and the response's `level` the most severe of its nodes'.
 - A subject is stale exactly when evaluation's own freezing code says so at `at`, and every
   subject of a node carries that verdict: `stale` is never `null`.
-- `/` shows no level, subject or staleness the endpoint would not return at the same instant.
+- `/debug` shows no level, subject or staleness the endpoint would not return at the same instant.
 - Reading the state writes nothing.
 
 ## Edge cases
@@ -251,7 +266,8 @@ Names and labels are compared byte by byte; labels are rendered as history rende
   points is its own design; the parameter is refused until then.
 - **The event stream** (SSE or WebSocket) that [0001](../decisions/0001-semantic-core-and-skins.md)
   names as a shared service, and the stable subject identifier it will need.
-- **Health, trend, anomaly rank, forecasts, a numeric severity** — the semantic engine.
+- **Health, trend, forecasts, a numeric severity** — the semantic engine. The anomaly is
+  [anomaly.md](anomaly.md)'s.
 - **The threshold itself on the wire** — what a subject is judged by is read and written on
   [its own page](thresholds.md); the State API reports the verdict, not the rule behind it
   ([0030](../decisions/0030-the-state-api-reports-the-stored-verdict.md)).

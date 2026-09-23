@@ -86,6 +86,9 @@ type Snapshot struct {
 	// Thresholds is what every watched subject is judged by, read in the same view: an
 	// edit saved while a tick runs belongs to the next tick (ADR 0032).
 	Thresholds []Threshold
+	// Excluded is every series the reader excluded from anomalies (ADR 0036), ordered as
+	// subjects are.
+	Excluded []SeriesRef
 	// Newest is the latest transition of every subject that entered or left one of the
 	// levels the caller named as owed. A later transition of a quieter kind must not hide
 	// it: a send that failed is owed whatever the subject has become since.
@@ -114,6 +117,9 @@ func (s *SQLite) Snapshot(ctx context.Context, owed []string) (Snapshot, error) 
 		return Snapshot{}, err
 	}
 	if out.Thresholds, err = readThresholds(ctx, tx); err != nil {
+		return Snapshot{}, err
+	}
+	if out.Excluded, err = readExclusions(ctx, tx); err != nil {
 		return Snapshot{}, err
 	}
 	return out, nil

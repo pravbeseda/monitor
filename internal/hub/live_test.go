@@ -34,7 +34,8 @@ func TestEveryPageKeepsItselfCurrent(t *testing.T) {
 		store  hub.Store
 		target string
 	}{
-		"index":             {stored{states: []storage.NodeState{laptop}}, "/"},
+		"mission control":   {stored{states: []storage.NodeState{laptop}}, "/"},
+		"debug":             {stored{states: []storage.NodeState{laptop}}, "/debug"},
 		"chart":             {served{series: []seriesPoints{volume()}}, oneVolume},
 		"refusal":           {served{}, "/history?metric=disk.free_pct&nonsense=1"},
 		"failure as a page": {served{err: errors.New("database is locked")}, oneVolume},

@@ -49,8 +49,8 @@ func collectFrom(t *testing.T, db *storage.SQLite, sensor string, at time.Time, 
 func unwatch(t *testing.T, db *storage.SQLite, labels map[string]string) {
 	t.Helper()
 	ref := storage.SeriesRef{Node: "server-b", Metric: "disk.free_bytes", Labels: labels}
-	if err := db.DeleteThreshold(context.Background(), ref); err != nil {
-		t.Fatalf("DeleteThreshold: %v", err)
+	if err := db.Configure(context.Background(), ref, nil, false); err != nil {
+		t.Fatalf("Configure: %v", err)
 	}
 }
 
@@ -63,8 +63,8 @@ func retune(t *testing.T, db *storage.SQLite, labels map[string]string, warning,
 		Warning:   warning,
 		Critical:  critical,
 	}
-	if err := db.SaveThreshold(context.Background(), th); err != nil {
-		t.Fatalf("SaveThreshold: %v", err)
+	if err := db.Configure(context.Background(), th.Series, &th, false); err != nil {
+		t.Fatalf("Configure: %v", err)
 	}
 }
 

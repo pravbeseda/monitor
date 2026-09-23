@@ -17,7 +17,8 @@ var historyTemplate = template.Must(template.ParseFS(templates, "templates/histo
 // every number formatted, no logic left.
 type historyView struct {
 	shell
-	Index       string
+	Table       string
+	TableURL    string
 	Heading     string
 	LatestLabel string
 	Latest      string
@@ -52,12 +53,12 @@ func HistoryPage(reader history.Reader) http.Handler {
 
 		query, err := history.ParseQuery(values, "lang")
 		if err != nil {
-			refuse(w, printer, err)
+			refuse(w, printer, language(values), err)
 			return
 		}
 		result, err := reader.Read(r.Context(), query)
 		if err != nil {
-			refuse(w, printer, err)
+			refuse(w, printer, language(values), err)
 			return
 		}
 		render(w, http.StatusOK, historyPage(printer, query, result, language(values), values.Get("window")))
@@ -67,7 +68,8 @@ func HistoryPage(reader history.Reader) http.Handler {
 func historyPage(printer *i18n.Printer, query history.Query, result history.Result, lang, window string) historyView {
 	out := historyView{
 		shell:       shellOf(printer, "history.title"),
-		Index:       printer.T("history.index"),
+		Table:       printer.T("page.all_series"),
+		TableURL:    pageLink("/debug", lang),
 		LatestLabel: printer.T("history.latest"),
 		WindowLabel: printer.T("history.window"),
 	}
@@ -144,10 +146,11 @@ func language(values url.Values) string {
 
 // refuse answers a query the page will not draw. The status is the endpoint's; the text is
 // the reader's language, which is the one difference between the two surfaces (ADR 0008).
-func refuse(w http.ResponseWriter, printer *i18n.Printer, err error) {
+func refuse(w http.ResponseWriter, printer *i18n.Printer, lang string, err error) {
 	page := historyView{
-		shell: shellOf(printer, "history.title"),
-		Index: printer.T("history.index"),
+		shell:    shellOf(printer, "history.title"),
+		Table:    printer.T("page.all_series"),
+		TableURL: pageLink("/debug", lang),
 	}
 	var refusal history.Refusal
 	if errors.As(err, &refusal) {

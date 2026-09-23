@@ -1,6 +1,7 @@
 # 0005. POC stack: Go, SQLite, server-side HTML
 
-- **Status:** accepted
+- **Status:** accepted; amended by [0035](0035-mission-control-is-rendered-by-the-hub.md) —
+  skins stay server-rendered in the hub until one needs a client
 - **Date:** 2026-08-28
 - **Source:** [POC](../poc.md)
 

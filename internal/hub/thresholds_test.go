@@ -28,13 +28,17 @@ type judged struct {
 	stored
 	series []storage.SeriesNewest
 	held   map[string]storage.Threshold
+	// excluded holds the series excluded from anomalies.
+	excluded map[string]bool
+	// exclusionErr fails the read of whether a series is excluded.
+	exclusionErr error
 	// unreadable fails the read of one series' threshold while the series itself still
 	// lists: what is stored for it is there and cannot be understood.
 	unreadable error
 }
 
 func holding(series ...storage.SeriesRef) judged {
-	out := judged{held: map[string]storage.Threshold{}}
+	out := judged{held: map[string]storage.Threshold{}, excluded: map[string]bool{}}
 	for _, ref := range series {
 		out.series = append(out.series, storage.SeriesNewest{SeriesRef: ref})
 	}
@@ -63,14 +67,22 @@ func (j judged) ThresholdOf(_ context.Context, ref storage.SeriesRef) (storage.T
 	return th, ok, nil
 }
 
-func (j judged) SaveThreshold(_ context.Context, th storage.Threshold) error {
-	j.held[key(th.Series)] = th
+func (j judged) Configure(_ context.Context, ref storage.SeriesRef, th *storage.Threshold, exclude bool) error {
+	if th == nil {
+		delete(j.held, key(ref))
+	} else {
+		j.held[key(ref)] = *th
+	}
+	if exclude {
+		j.excluded[key(ref)] = true
+	} else {
+		delete(j.excluded, key(ref))
+	}
 	return nil
 }
 
-func (j judged) DeleteThreshold(_ context.Context, ref storage.SeriesRef) error {
-	delete(j.held, key(ref))
-	return nil
+func (j judged) Excluded(_ context.Context, ref storage.SeriesRef) (bool, error) {
+	return j.excluded[key(ref)], j.exclusionErr
 }
 
 // openForm reads the page of one series.
@@ -98,12 +110,20 @@ func saveForm(t *testing.T, store judged, target string, form url.Values, origin
 	return rec
 }
 
+// form is a save that leaves the series shown when it is unusual, as the form is drawn for
+// a series nobody excluded.
 func form(direction, warning, critical string) url.Values {
 	return url.Values{
 		"direction": {direction},
 		"warning":   {warning},
 		"critical":  {critical},
+		"anomalies": {"show"},
 	}
+}
+
+func excluding(values url.Values) url.Values {
+	values.Set("anomalies", "exclude")
+	return values
 }
 
 // inputs is every <input> the page drew, each as the text of its attributes.
@@ -496,7 +516,7 @@ func TestThresholdSaveTakesAPercentage(t *testing.T) {
 	store := holding(pctSeries)
 
 	rec := saveForm(t, store, pctAddress, url.Values{
-		"direction": {"below"}, "warning": {"12.5"}, "critical": {"5"},
+		"direction": {"below"}, "warning": {"12.5"}, "critical": {"5"}, "anomalies": {"show"},
 	}, "")
 
 	if rec.Code != http.StatusSeeOther {
@@ -538,7 +558,7 @@ func TestTheRussianFormShowsASizeItWouldAccept(t *testing.T) {
 		t.Fatalf("warning = %q, want the stored number itself", shown)
 	}
 	rec := saveForm(t, store, dataAddress+"&lang=ru", url.Values{
-		"direction": {"below"}, "warning": {shown},
+		"direction": {"below"}, "warning": {shown}, "anomalies": {"show"},
 	}, "")
 	if rec.Code != http.StatusSeeOther {
 		t.Fatalf("saving what the page showed = %d, want 303: %s", rec.Code, rec.Body)
@@ -553,7 +573,7 @@ func TestTheRussianFormShowsASizeItWouldAccept(t *testing.T) {
 func TestThresholdSaveRefusesASizeThatOverflows(t *testing.T) {
 	store := holding(dataSeries)
 
-	rec := saveForm(t, store, dataAddress, url.Values{"direction": {"below"}, "warning": {"1e300GB"}}, "")
+	rec := saveForm(t, store, dataAddress, url.Values{"direction": {"below"}, "warning": {"1e300GB"}, "anomalies": {"show"}}, "")
 
 	if rec.Code != http.StatusBadRequest {
 		t.Fatalf("status = %d, want 400: %s", rec.Code, rec.Body)
@@ -591,7 +611,7 @@ func TestThresholdPageIsNotRefreshed(t *testing.T) {
 		t.Fatalf("the form page declares itself live: %s", body)
 	}
 
-	rec := saveForm(t, store, dataAddress, url.Values{"direction": {"below"}, "warning": {"nonsense"}}, "")
+	rec := saveForm(t, store, dataAddress, url.Values{"direction": {"below"}, "warning": {"nonsense"}, "anomalies": {"show"}}, "")
 	if rec.Code != http.StatusBadRequest {
 		t.Fatalf("status = %d, want 400", rec.Code)
 	}
@@ -614,5 +634,108 @@ func TestACrossOriginSaveIsRefusedBeforeTheSeriesIsRead(t *testing.T) {
 	}
 	if len(store.held) != 0 {
 		t.Fatalf("stored %+v, want nothing", store.held)
+	}
+}
+
+// spec: thresholds.md#form — any series offers the switch, on unless the series is excluded,
+// and an unreadable threshold does not hide the exclusion stored beside it.
+func TestThresholdFormShowsTheSwitch(t *testing.T) {
+	store := holding(dataSeries)
+	_, body := openForm(t, store, dataAddress)
+	if !checked(body, "show") || checked(body, "exclude") {
+		t.Errorf("page = %q, want the switch on", body)
+	}
+
+	store.excluded[key(dataSeries)] = true
+	store.held[key(dataSeries)] = storage.Threshold{Series: dataSeries, Direction: "sideways"}
+	_, body = openForm(t, store, dataAddress)
+	if !checked(body, "exclude") || checked(body, "show") {
+		t.Errorf("page = %q, want the switch off as stored", body)
+	}
+}
+
+// spec: thresholds.md#saving — the switch turned off excludes the series, and on again
+// clears it; with both values blank the threshold goes and the exclusion stays.
+func TestThresholdSaveStoresTheSwitch(t *testing.T) {
+	store := holding(dataSeries)
+	warning := 20e9
+	store.held[key(dataSeries)] = storage.Threshold{Series: dataSeries, Direction: storage.Below, Warning: &warning}
+
+	if rec := saveForm(t, store, dataAddress, excluding(form("below", "", "")), ""); rec.Code != http.StatusSeeOther {
+		t.Fatalf("status = %d: %s", rec.Code, rec.Body)
+	}
+	if _, stored := store.held[key(dataSeries)]; stored || !store.excluded[key(dataSeries)] {
+		t.Fatalf("held %v, excluded %v; want the threshold gone and the exclusion stored", store.held, store.excluded)
+	}
+
+	if rec := saveForm(t, store, dataAddress, form("below", "", ""), ""); rec.Code != http.StatusSeeOther {
+		t.Fatalf("status = %d: %s", rec.Code, rec.Body)
+	}
+	if store.excluded[key(dataSeries)] {
+		t.Fatal("still excluded after the switch was turned on")
+	}
+}
+
+// spec: thresholds.md#saving — the switch turned off in a save refused for its values
+// stores nothing, and the form shows the switch as the reader left it.
+func TestARefusedSaveKeepsTheSwitchAsTyped(t *testing.T) {
+	store := holding(dataSeries)
+	rec := saveForm(t, store, dataAddress, excluding(form("below", "10GB", "20GB")), "")
+	if rec.Code != http.StatusBadRequest {
+		t.Fatalf("status = %d, want 400", rec.Code)
+	}
+	if len(store.held) != 0 || len(store.excluded) != 0 {
+		t.Fatalf("held %v, excluded %v; want nothing stored", store.held, store.excluded)
+	}
+	if body := rec.Body.String(); !checked(body, "exclude") {
+		t.Errorf("page = %q, want the switch off as typed", body)
+	}
+}
+
+// spec: thresholds.md#saving — a save carrying no value for the switch is refused.
+func TestASaveWithoutTheSwitchIsRefused(t *testing.T) {
+	for _, value := range []string{"", "maybe"} {
+		store := holding(dataSeries)
+		values := form("below", "20GB", "10GB")
+		if value == "" {
+			values.Del("anomalies")
+		} else {
+			values.Set("anomalies", value)
+		}
+		rec := saveForm(t, store, dataAddress, values, "")
+		if rec.Code != http.StatusBadRequest {
+			t.Errorf("switch %q answered %d, want 400", value, rec.Code)
+		}
+		if len(store.held) != 0 || len(store.excluded) != 0 {
+			t.Errorf("switch %q stored %v and %v, want nothing", value, store.held, store.excluded)
+		}
+		if !strings.Contains(rec.Body.String(), "whether this series may be shown as unusual") {
+			t.Errorf("switch %q: the refusal does not name the switch", value)
+		}
+	}
+}
+
+// spec: thresholds.md#form — the switch in the reader's language.
+func TestThresholdSwitchSpeaksTheReadersLanguage(t *testing.T) {
+	for target, wants := range map[string][]string{
+		dataAddress:              {"When this series is unusual", "show it on mission control", "never show it as unusual"},
+		dataAddress + "&lang=ru": {"Когда серия необычна", "показывать в центре управления", "никогда не показывать как необычную"},
+	} {
+		_, body := openForm(t, holding(dataSeries), target)
+		for _, want := range wants {
+			if !strings.Contains(body, want) {
+				t.Errorf("GET %s does not say %q", target, want)
+			}
+		}
+	}
+}
+
+// An exclusion that cannot be read fails the form the way a threshold that cannot be read
+// does.
+func TestThresholdFormFailsWhenTheExclusionCannotBeRead(t *testing.T) {
+	store := holding(dataSeries)
+	store.exclusionErr = errFailed
+	if status, body := openForm(t, store, dataAddress); status != http.StatusInternalServerError {
+		t.Fatalf("status = %d, want 500: %s", status, body)
 	}
 }

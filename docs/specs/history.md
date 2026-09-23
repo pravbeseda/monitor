@@ -3,7 +3,7 @@
 - **Status:** approved
 - **Owns:** `internal/history` (series: selection, window, reduction, gaps) and its consumers
   in `internal/hub` — `GET /api/v1/series`, `GET /api/v1/history` and the drill-down page
-  `GET /history`, plus the link the index page `/` grows to reach it and which series `/`
+  `GET /history`, plus the link the debug view `/debug` grows to reach it and which series `/debug`
   hides or marks as no longer arriving, by the staleness [state](state.md#staleness) reports.
   Reading stored points stays with `internal/storage`; the expected interval of a series
   comes from the resolved configuration `internal/config` already computes; every
@@ -25,7 +25,7 @@ drill-down page draws one series. Every renderer reads the same series
 endpoint would not.
 
 It does not decide meaning: no level, no threshold and no anomaly appears here, those stay
-with [evaluation](evaluation.md). Nothing here judges a value good or bad, and the reduction
+with [evaluation](evaluation.md) and [anomaly](anomaly.md). Nothing here judges a value good or bad, and the reduction
 below is deliberately direction-free for that reason. Reading history never writes.
 
 ## Model
@@ -53,7 +53,7 @@ reaches back by a duration written as a whole number and a unit, `^[0-9]+[mhd]$`
 to between one minute and 365 days inclusive. A written `from`/`to` range and `at=` time
 travel belong to a later stage and are deliberately absent. When the newest selected point
 is stamped after now, that point is the end of the window instead: an agent whose clock runs
-ahead produces a value [evaluation](evaluation.md) judges and `/` displays, and the chart
+ahead produces a value [evaluation](evaluation.md) judges and `/debug` displays, and the chart
 shows what they acted on. That reach is bounded by the window's own length, because the
 window is shared by every series in one answer: a single node stamped a century out would
 otherwise carry every other series off the chart, permanently.
@@ -170,7 +170,7 @@ than a lie.
 | 1000 or fewer | all of them, as stored; `reduced` is false |
 | more than 1000 | the window is cut into 500 equal buckets, `[start, end)` and the last closed at `to`; each bucket that holds points contributes its lowest and its highest point, in timestamp order, and once when they are the same point; `reduced` is true |
 | more than 1000, with a bucket holding no points | that bucket contributes nothing; no value is invented for it |
-| more than 1000 | the newest point of the window is returned whatever bucketing does, so the chart's right edge and `/` show the same value |
+| more than 1000 | the newest point of the window is returned whatever bucketing does, so the chart's right edge and `/debug` show the same value |
 
 Both extremes are kept because which of them matters is a property of the metric, and this
 subsystem decides no such thing: a rule that kept the minimum would hide the peak of the
@@ -209,15 +209,15 @@ staleness still has an answer — the node's longest sensor interval
 | a series with one point in the window | that point drawn on its own, no line |
 | a series with a two-day silence inside a seven-day window | the line broken across the gap, not drawn straight through it |
 | a query the endpoint refuses, or a read that fails | the same status the endpoint answers, as a translated page |
-| a value on `/` | a link to the history page of its series, carrying the node, the metric and every label |
-| any series on `/` | one row of its own: its metric id, the volume its labels name if they name one, its newest value and the time it was collected |
+| a value on `/debug` | a link to the history page of its series, carrying the node, the metric and every label |
+| any series on `/debug` | one row of its own: its metric id, the volume its labels name if they name one, its newest value and the time it was collected |
 | a volume | two rows, one per series, since each is judged on its own ([0033](../decisions/0033-a-subject-is-a-series.md)) |
 | any row | a link to the page that sets what that series is judged by ([thresholds.md](thresholds.md)) |
 | the series of one volume collected at different times | each row its own time, and each left out or marked by its own age: no series is aged by another series' newest point |
 | the rows of one node | grouped so that the series of one volume sit together, and ordered by metric inside the group; the grouping is the page's own, since the [State API](state.md#ordering) privileges no label |
-| a row on `/` that the [state](state.md#staleness) calls stale when the page is read — its newest point older than three times the interval its series is aged by, or its node silent past its `silence_after` — and that carries `removable: "true"` | not shown: an unplugged drive or an ejected disk image is not a reading |
+| a row on `/debug` that the [state](state.md#staleness) calls stale when the page is read — its newest point older than three times the interval its series is aged by, or its node silent past its `silence_after` — and that carries `removable: "true"` | not shown: an unplugged drive or an ejected disk image is not a reading |
 | the same, without `removable: "true"` | shown, its collected time marked, in the reader's language, as holding no fresh data |
-| a row on `/` exactly three intervals old | shown unmarked: the bound is inclusive, as for gaps |
+| a row on `/debug` exactly three intervals old | shown unmarked: the bound is inclusive, as for gaps |
 | that row reporting again | shown as before, unmarked |
 | a series whose newest value names no sensor | aged by the longest interval among the sensors its node runs ([state](state.md#staleness)): marked, or hidden if it is removable, once past that bound |
 | the same series once its node is silent past its `silence_after` | marked with the rest of that node's series: silence is the node's, not the series' |
@@ -225,6 +225,7 @@ staleness still has an answer — the node's longest sensor interval
 | a node silent past its `silence_after`, its series not yet three intervals old | its series hidden or marked already: evaluation freezes a silent node's subjects in the tick it falls silent |
 | a node whose every series is left out | "no current measurements" in place of its table, rather than the "no measurements yet" of a node that never sent one |
 | a node still reporting but sending no measurements — its mount table unreadable | its series age like any other and are hidden or marked once past the bound |
+| any chart page | a link to `/debug`, the table of every series |
 | `&lang=ru` | axis labels, dates, byte sizes and percentages in Russian |
 | any time on the page, and every axis label | the reader's time zone, named once on the chart ([web.md](web.md#zone)); which day a tick is labelled with follows that zone, where the ticks sit does not |
 
@@ -251,15 +252,15 @@ unit reads naturally.
 - **A node that has never reported** selects no series; that is a 200 with an empty list, not
   an error. Nothing matched is an answer.
 - **A volume that disappeared** — an unplugged removable disk — keeps its stored points and
-  keeps being returned while they are inside the window. Only `/` leaves it out
+  keeps being returned while they are inside the window. Only `/debug` leaves it out
   ([the page](#page)); the endpoints and the drill-down still reach it.
 - **A row is hidden or marked by [evaluation](evaluation.md#freezing)'s own freezing rule** —
   node silence, or a value older than three intervals, on the hub's clock — applied by the
-  same code, so `/` and evaluation cannot disagree about which series are fresh. A laptop
+  same code, so `/debug` and evaluation cannot disagree about which series are fresh. A laptop
   asleep overnight therefore shows its internal volume marked and its external drive gone
   until it reports again. An agent clock running behind by more than the bound hides and
   marks what evaluation freezes, and points stamped ahead by a clock since corrected stay
-  shown until real time passes them. `/` reads that verdict from the
+  shown until real time passes them. `/debug` reads that verdict from the
   [State API](state.md#staleness) rather than applying the rule itself. Each series ages on
   its own, so one row of a volume can be marked while the other is not.
 - **A removable volume plugged back under another mount point** is a new series; the old one

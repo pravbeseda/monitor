@@ -6,8 +6,9 @@
   carries all three: `internal/hub/shell.go`,
   `internal/hub/templates/shell.html` and the printer's zone in `internal/i18n`. Formatting
   itself stays with `internal/i18n`; what a page *contains* stays with that page's own spec
-  ([history.md](history.md) for `/history` and for the values on `/`, [state.md](state.md)
-  for the levels on `/`, [thresholds.md](thresholds.md) for `/thresholds`); the reader's language
+  ([history.md](history.md) for `/history` and for the values on `/debug`, [state.md](state.md)
+  for the levels on `/debug`, [mission-control.md](mission-control.md) for `/`,
+  [thresholds.md](thresholds.md) for `/thresholds`); the reader's language
   is settled by [0008](../decisions/0008-english-repo-bilingual-ui.md) and needs nothing
   here. The JSON API is not a reader: nothing here touches it.
 - **Decisions:** [0005](../decisions/0005-poc-stack.md),
@@ -73,7 +74,7 @@ tell which of them they are.
 | the tab is in the background | nothing is fetched; brought back to the front, the page shows the current state as soon as the hub answers |
 | a page brought back by the back or forward button | the same: current as soon as the hub answers |
 | the hub or the proxy does not answer within 15 seconds, answers with a failure, or answers with something that is not a hub page | the page as it was, under a notice in the reader's language that it is not being refreshed; the notice leaves with the first refresh that succeeds |
-| the hub cannot read its data | the same notice over the page as it was, on the index and on a chart alike: the last good rendering outlives a failure |
+| the hub cannot read its data | the same notice over the page as it was, on mission control, on `/debug` and on a chart alike: the last good rendering outlives a failure |
 | the proxy stops accepting the reader's credentials | the browser asks for them, as a reload would; refused, the page stays under the notice and is not refreshed again until the reader reloads it |
 | the hub answers with a refusal of the page's query | that refusal, as a fresh load of the address would show it |
 | the address carries a query — a chart window, a language | the refreshed page is what reloading that address would show: the same window, the same language |
@@ -147,7 +148,7 @@ tested.
   is in flight, so a hub under load gets one request per open page, never a queue of them.
 - **Leaving the page** while a refresh is in flight is not a failure: the notice does not go
   up on the way out, nor on a page the browser restores later.
-- **A storage failure on the index** is plain text rather than a page, as it was before any
+- **A storage failure on `/` or `/debug`** is plain text rather than a page, as it was before any
   of this, so it carries no shell and leaves the reader's zone unlearnt until the hub answers
   again. It is not cached either way.
 - **Two readers in different zones** are two browsers. Nothing is shared between them, and

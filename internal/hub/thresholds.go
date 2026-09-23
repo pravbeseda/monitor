@@ -21,12 +21,15 @@ var thresholdTemplate = template.Must(template.ParseFS(templates,
 	"templates/thresholds.html", "templates/shell.html"))
 
 // ThresholdStore is what the page needs of persistence: the series it may be opened for,
-// and what one of them is judged by (docs/specs/thresholds.md).
+// what one of them is judged by, and whether it is excluded from anomalies
+// (docs/specs/thresholds.md).
 type ThresholdStore interface {
 	Series(ctx context.Context, sel storage.Selection) ([]storage.SeriesNewest, error)
 	ThresholdOf(ctx context.Context, ref storage.SeriesRef) (storage.Threshold, bool, error)
-	SaveThreshold(ctx context.Context, th storage.Threshold) error
-	DeleteThreshold(ctx context.Context, ref storage.SeriesRef) error
+	Excluded(ctx context.Context, ref storage.SeriesRef) (bool, error)
+	// Configure stores what the form states in one step: the threshold, nil to clear it,
+	// and whether the series is excluded from anomalies.
+	Configure(ctx context.Context, ref storage.SeriesRef, th *storage.Threshold, exclude bool) error
 }
 
 // thresholdView is the form as the template sees it: every string translated, every value
@@ -38,6 +41,7 @@ type thresholdView struct {
 	Unit       string
 	Action     string
 	Below      bool
+	Excluded   bool
 	Warning    string
 	Critical   string
 	Error      string
@@ -50,6 +54,9 @@ type thresholdView struct {
 	AboveLabel     string
 	WarningLabel   string
 	CriticalLabel  string
+	UnusualLabel   string
+	ShowLabel      string
+	ExcludeLabel   string
 	SaveLabel      string
 	BackLabel      string
 	BackURL        string
@@ -105,6 +112,13 @@ func showForm(ctx context.Context, w http.ResponseWriter, store ThresholdStore,
 	if !configured {
 		view.Detached = printer.T("threshold.detached")
 	}
+	excluded, err := store.Excluded(ctx, ref)
+	if err != nil {
+		slog.Error("read an exclusion", "node", ref.Node, "metric", ref.Metric, "error", err)
+		http.Error(w, printer.T("error.storage"), http.StatusInternalServerError)
+		return
+	}
+	view.Excluded = excluded
 	th, watched, err := store.ThresholdOf(ctx, ref)
 	switch {
 	case err != nil:
@@ -142,6 +156,14 @@ func save(w http.ResponseWriter, r *http.Request, store ThresholdStore,
 		refuseForm(w, printer, ref, lang, r, "threshold.bad_direction")
 		return
 	}
+	// A form is the whole configuration, so a save that says nothing about the switch —
+	// a form drawn before it existed — is not taken as either answer.
+	anomalies := r.PostForm.Get("anomalies")
+	exclude := anomalies == "exclude"
+	if !exclude && anomalies != "show" {
+		refuseForm(w, printer, ref, lang, r, "threshold.bad_switch")
+		return
+	}
 
 	warning, err := parseValue(ref.Metric, r.PostForm.Get("warning"))
 	if err != nil {
@@ -158,18 +180,14 @@ func save(w http.ResponseWriter, r *http.Request, store ThresholdStore,
 		return
 	}
 
-	if warning == nil && critical == nil {
-		// Clearing both values withdraws the question: the subject loses its level with
-		// no event and no recovery (docs/specs/evaluation.md#configuration-changes).
-		if err := store.DeleteThreshold(r.Context(), ref); err != nil {
-			slog.Error("clear a threshold", "node", ref.Node, "metric", ref.Metric, "error", err)
-			http.Error(w, printer.T("error.storage"), http.StatusInternalServerError)
-			return
-		}
-	} else if err := store.SaveThreshold(r.Context(), storage.Threshold{
-		Series: ref, Direction: direction, Warning: warning, Critical: critical,
-	}); err != nil {
-		slog.Error("save a threshold", "node", ref.Node, "metric", ref.Metric, "error", err)
+	// Clearing both values withdraws the question: the subject loses its level with no
+	// event and no recovery (docs/specs/evaluation.md#configuration-changes).
+	var th *storage.Threshold
+	if warning != nil || critical != nil {
+		th = &storage.Threshold{Series: ref, Direction: direction, Warning: warning, Critical: critical}
+	}
+	if err := store.Configure(r.Context(), ref, th, exclude); err != nil {
+		slog.Error("save a configuration", "node", ref.Node, "metric", ref.Metric, "error", err)
 		http.Error(w, printer.T("error.storage"), http.StatusInternalServerError)
 		return
 	}
@@ -183,6 +201,7 @@ func refuseForm(w http.ResponseWriter, printer *i18n.Printer, ref storage.Series
 ) {
 	view := emptyForm(printer, ref, lang)
 	view.Below = r.PostForm.Get("direction") != string(storage.Above)
+	view.Excluded = r.PostForm.Get("anomalies") == "exclude"
 	view.Warning, view.Critical = r.PostForm.Get("warning"), r.PostForm.Get("critical")
 	view.Error = printer.T(reason)
 	w.WriteHeader(http.StatusBadRequest)
@@ -202,6 +221,9 @@ func emptyForm(printer *i18n.Printer, ref storage.SeriesRef, lang string) thresh
 		AboveLabel:     printer.T("threshold.above"),
 		WarningLabel:   printer.T("level.warning"),
 		CriticalLabel:  printer.T("level.critical"),
+		UnusualLabel:   printer.T("threshold.unusual"),
+		ShowLabel:      printer.T("threshold.unusual_show"),
+		ExcludeLabel:   printer.T("threshold.unusual_exclude"),
 		SaveLabel:      printer.T("threshold.save"),
 		BackLabel:      printer.T("threshold.back"),
 		BackURL:        historyLink(ref.Node, ref.Metric, ref.Labels, lang, ""),

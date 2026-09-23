@@ -12,7 +12,7 @@
     table { border-collapse: collapse; width: 100%; }
     th, td { text-align: left; padding: 0.3rem 0.6rem; border-bottom: 1px solid var(--rule); }
     th { font-weight: 600; font-size: 0.85rem; color: var(--muted); }
-    small.stale { color: var(--warn); }
+    small.stale, small.unusual { color: var(--warn); }
     small.unwatched, a.set { color: var(--muted); font-size: 0.85rem; }
     p.notice { color: var(--warn); }
     .level-ok { color: var(--accent); }
@@ -22,6 +22,7 @@
 </head>
 <body>
   <h1>{{ .Title }} <small>{{ .Version }}</small></h1>
+  <nav><a href="{{ .BoardURL }}">{{ .Board }}</a></nav>
   {{ if not .Nodes }}
     <p>{{ .Empty }}</p>
   {{ end }}
@@ -48,7 +49,7 @@
                 <td>{{ .Volume }}</td>
                 <td><a href="{{ .History }}">{{ .Value }}</a></td>
                 <td>{{ with .Level }}<span class="{{ .Class }}">{{ .Word }}</span>{{ else }}—{{ end }} <a class="set" href="{{ .Thresholds }}">{{ .SetLabel }}</a></td>
-                <td>{{ .Collected }}{{ with .Stale }} <small class="stale">{{ . }}</small>{{ end }}</td>
+                <td>{{ .Collected }}{{ with .Stale }} <small class="stale">{{ . }}</small>{{ end }}{{ with .Unusual }} <small class="unusual">{{ . }}</small>{{ end }}</td>
               </tr>
             {{ end }}
           </tbody>

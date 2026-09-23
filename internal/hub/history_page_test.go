@@ -127,9 +127,9 @@ func TestHistoryPageRefusesAMalformedQuery(t *testing.T) {
 	}
 }
 
-// spec: history.md#page — every value on the index page links to its own history.
-func TestIndexPageLinksEachValueToItsHistory(t *testing.T) {
-	recorder := show(t, stored{states: []storage.NodeState{laptop}}, "/", "")
+// spec: history.md#page — every value on /debug links to its own history.
+func TestDebugLinksEachValueToItsHistory(t *testing.T) {
+	recorder := show(t, stored{states: []storage.NodeState{laptop}}, "/debug", "")
 
 	body := recorder.Body.String()
 	for _, want := range []string{

@@ -100,7 +100,7 @@ func recordedSilence(node string, level evaluate.Level, since time.Time) storage
 
 func build(t *testing.T, snap storage.Snapshot, forgotten ...string) state.State {
 	t.Helper()
-	return state.Build(watching(forgotten...), snap, now)
+	return state.Build(watching(forgotten...), snap, now, nil)
 }
 
 func subject(t *testing.T, s state.State, node, metric, mount string) state.Subject {
@@ -307,7 +307,7 @@ func TestListing(t *testing.T) {
 			Thresholds: []storage.Threshold{watch("server-b", "disk.free_bytes", volume("/"))},
 			States:     []storage.State{recorded("server-b", "disk.free_bytes", volume("/"), evaluate.Critical, now.Add(-time.Hour))},
 		}
-		s := state.Build(disabled, snap, now)
+		s := state.Build(disabled, snap, now, nil)
 		got := subject(t, s, "server-b", "disk.free_bytes", "/")
 		if staleOf(got.Stale) != "true" || levelOf(got.Level) != "critical" {
 			t.Fatalf("subject = stale %s level %s, want it stale and keeping what was stored",
@@ -612,13 +612,13 @@ func TestStaleness(t *testing.T) {
 		snap := storage.Snapshot{Nodes: []storage.NodeState{
 			heard("server-b", 0, storage.Value{Metric: "load.one", Value: 0.4, TS: now}),
 		}}
-		if got := subject(t, state.Build(idle, snap, now), "server-b", "load.one", ""); staleOf(got.Stale) != "true" {
+		if got := subject(t, state.Build(idle, snap, now, nil), "server-b", "load.one", ""); staleOf(got.Stale) != "true" {
 			t.Fatalf("stale = %s, want true: nothing will refresh it", staleOf(got.Stale))
 		}
 	})
 
 	t.Run("a series whose node resolves no interval for its sensor", func(t *testing.T) {
-		s := state.Build(idle, aged(time.Minute), now)
+		s := state.Build(idle, aged(time.Minute), now, nil)
 		if got := subject(t, s, "server-b", "disk.free_bytes", "/"); staleOf(got.Stale) != "true" {
 			t.Fatalf("stale = %s, want true: nothing will refresh it", staleOf(got.Stale))
 		}
@@ -699,15 +699,16 @@ func TestLevelsFollowTheTick(t *testing.T) {
 	if err := db.SaveIngest(ctx, storage.Ingest{Node: "server-b", ReceivedAt: now, Measurements: measured}); err != nil {
 		t.Fatalf("SaveIngest: %v", err)
 	}
-	if err := db.SaveThreshold(ctx, watch("server-b", "disk.free_bytes", volume("/"))); err != nil {
-		t.Fatalf("SaveThreshold: %v", err)
+	th := watch("server-b", "disk.free_bytes", volume("/"))
+	if err := db.Configure(ctx, th.Series, &th, false); err != nil {
+		t.Fatalf("Configure: %v", err)
 	}
 	read := func() state.Subject {
 		snap, err := db.Snapshot(ctx, nil)
 		if err != nil {
 			t.Fatalf("Snapshot: %v", err)
 		}
-		return subject(t, state.Build(watching(), snap, now), "server-b", "disk.free_bytes", "/")
+		return subject(t, state.Build(watching(), snap, now, nil), "server-b", "disk.free_bytes", "/")
 	}
 	if got := read(); !got.Watched || got.Level != nil {
 		t.Fatalf("before any tick watched %v level %s, want it watched and unjudged", got.Watched, levelOf(got.Level))

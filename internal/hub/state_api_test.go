@@ -85,7 +85,7 @@ func reporting() stored {
 			Values: []storage.Value{
 				{Metric: "disk.free_bytes", Sensor: "disk", Labels: dataVolume, Value: 9e9, TS: collected.Add(-15 * time.Minute)},
 				{Metric: "disk.free_pct", Sensor: "disk", Labels: dataVolume, Value: 12, TS: collected.Add(-15 * time.Minute)},
-				{Metric: "load.one", Value: 0.4, TS: collected.Add(-5 * time.Minute)},
+				{Metric: "load.avg_5m", Value: 3.1, TS: collected.Add(-5 * time.Minute)},
 			},
 		}},
 		levels: []storage.State{
@@ -107,11 +107,28 @@ func reporting() stored {
 			Warning:   &warning,
 			Critical:  &critical,
 		}},
+		points: map[string][]storage.Point{"load.avg_5m": usualLoad()},
 	}
 }
 
-// spec: state.md#wire-format — every field as the example spells it, null where a value is
-// absent, and one list holding every series beside each node's silence.
+// usualLoad is a week of load whose norm is 0.4 and whose band reaches 0.76 above it, so
+// the 3.1 reported above scores 7.5 (docs/specs/anomaly.md#wire-format).
+func usualLoad() []storage.Point {
+	values := append(make([]float64, 0, 100), 0.76, 0.9)
+	for len(values) < 100 {
+		values = append(values, 0.4)
+	}
+	first := collected.Add(-7 * 24 * time.Hour)
+	out := make([]storage.Point, len(values))
+	for i, v := range values {
+		out[i] = storage.Point{TS: first.Add(time.Duration(i) * time.Hour), Value: v}
+	}
+	return out
+}
+
+// spec: state.md#wire-format — every field the example names, null where a value is absent,
+// and one list holding every series beside each node's silence. An anomaly object with no
+// rank or no score is TestAnAnomalyWithoutARankOrAScore's.
 func TestStateWireFormat(t *testing.T) {
 	rec := getState(t, reporting(), "/api/v1/state", at)
 	if rec.Code != http.StatusOK {
@@ -122,15 +139,16 @@ func TestStateWireFormat(t *testing.T) {
 		`"last_seen":"2026-08-31T11:59:00.000Z","level":"warning","watched":1,"unwatched":2}],` +
 		`"subjects":[` +
 		`{"node":"server-b","metric":"silence","labels":{},"watched":true,"level":"ok",` +
-		`"since":"2026-08-01T12:00:00.000Z","stale":false,"unit":null,"value":null,"ts":null},` +
+		`"since":"2026-08-01T12:00:00.000Z","stale":false,"unit":null,"value":null,"ts":null,"anomaly":null},` +
 		`{"node":"server-b","metric":"disk.free_bytes","labels":{"fs":"ext4","mount":"/data","removable":"false"},` +
 		`"watched":true,"level":"warning","since":"2026-08-30T22:00:00.000Z","stale":false,` +
-		`"unit":"bytes","value":9000000000,"ts":"2026-08-31T11:45:00.000Z"},` +
+		`"unit":"bytes","value":9000000000,"ts":"2026-08-31T11:45:00.000Z","anomaly":null},` +
 		`{"node":"server-b","metric":"disk.free_pct","labels":{"fs":"ext4","mount":"/data","removable":"false"},` +
 		`"watched":false,"level":null,"since":null,"stale":false,` +
-		`"unit":"percent","value":12,"ts":"2026-08-31T11:45:00.000Z"},` +
-		`{"node":"server-b","metric":"load.one","labels":{},"watched":false,"level":null,"since":null,` +
-		`"stale":false,"unit":"number","value":0.4,"ts":"2026-08-31T11:55:00.000Z"}]}`
+		`"unit":"percent","value":12,"ts":"2026-08-31T11:45:00.000Z","anomaly":null},` +
+		`{"node":"server-b","metric":"load.avg_5m","labels":{},"watched":false,"level":null,"since":null,` +
+		`"stale":false,"unit":"number","value":3.1,"ts":"2026-08-31T11:55:00.000Z",` +
+		`"anomaly":{"norm":0.4,"score":7.5,"rank":1}}]}`
 	if got := strings.TrimSpace(rec.Body.String()); got != want {
 		t.Fatalf("body = %s\nwant   %s", got, want)
 	}
@@ -179,7 +197,7 @@ func TestStateMergesEverySeriesIntoOneList(t *testing.T) {
 	for _, one := range body.Subjects {
 		listed = append(listed, one.Metric)
 	}
-	want := []string{"silence", "disk.free_bytes", "disk.free_pct", "load.one"}
+	want := []string{"silence", "disk.free_bytes", "disk.free_pct", "load.avg_5m"}
 	if strings.Join(listed, ",") != strings.Join(want, ",") {
 		t.Fatalf("subjects = %v, want %v", listed, want)
 	}
@@ -230,8 +248,8 @@ func TestStateLeavesOutANodeThatNeverReported(t *testing.T) {
 	}
 }
 
-// spec: state.md#endpoint — two requests with nothing changed between them differ only by
-// `at`.
+// spec: state.md#endpoint — two requests inside one hour with nothing changed between them
+// differ only by `at`.
 func TestStateIsStable(t *testing.T) {
 	later := func() time.Time { return collected.Add(time.Second) }
 	first := getState(t, reporting(), "/api/v1/state", at).Body.String()
@@ -247,5 +265,34 @@ func TestStateIsStable(t *testing.T) {
 	}
 	if strip(first) != strip(second) {
 		t.Fatalf("bodies differ beyond at:\n%s\n%s", first, second)
+	}
+}
+
+// spec: anomaly.md#reading — the stored points cannot be read for a norm: the rest of the
+// state answered as ever, every anomaly null.
+func TestStateWithoutNormsStillAnswers(t *testing.T) {
+	store := reporting()
+	store.pointsErr = errFailed
+	rec := getState(t, store, "/api/v1/state", at)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status = %d: %s", rec.Code, rec.Body)
+	}
+	var body struct {
+		Subjects []struct {
+			Metric  string
+			Level   *string
+			Anomaly *json.RawMessage
+		}
+	}
+	if err := json.Unmarshal(rec.Body.Bytes(), &body); err != nil {
+		t.Fatal(err)
+	}
+	for _, one := range body.Subjects {
+		if one.Anomaly != nil {
+			t.Errorf("%s anomaly = %s, want null", one.Metric, *one.Anomaly)
+		}
+		if one.Metric == "disk.free_bytes" && (one.Level == nil || *one.Level != "warning") {
+			t.Errorf("disk.free_bytes level = %v, want warning", one.Level)
+		}
 	}
 }

@@ -32,14 +32,14 @@ func getFrom(t *testing.T, store hub.Store, target, zone string) *httptest.Respo
 	return rec
 }
 
-func indexFrom(t *testing.T, zone string) *httptest.ResponseRecorder {
+func debugFrom(t *testing.T, zone string) *httptest.ResponseRecorder {
 	t.Helper()
-	return getFrom(t, stored{states: []storage.NodeState{laptop}}, "/", zone)
+	return getFrom(t, stored{states: []storage.NodeState{laptop}}, "/debug", zone)
 }
 
 // spec: web.md#zone — a browser that has reported its zone reads every time in it.
 func TestPageReadsTimesInTheReportedZone(t *testing.T) {
-	body := indexFrom(t, "Europe/Moscow").Body.String()
+	body := debugFrom(t, "Europe/Moscow").Body.String()
 
 	if want := "2026-08-28 13:05 MSK"; !strings.Contains(body, want) {
 		t.Errorf("page does not show %q", want)
@@ -66,7 +66,7 @@ func TestPageFallsBackToUTCForAZoneItWillNotAccept(t *testing.T) {
 
 	for name, zone := range tests {
 		t.Run(name, func(t *testing.T) {
-			rec := indexFrom(t, zone)
+			rec := debugFrom(t, zone)
 			if rec.Code != http.StatusOK {
 				t.Fatalf("status = %d, want 200", rec.Code)
 			}
@@ -80,7 +80,7 @@ func TestPageFallsBackToUTCForAZoneItWillNotAccept(t *testing.T) {
 // spec: web.md#zone — a browser already in UTC reads UTC. It gets there through the refusal
 // of its flat name rather than past it, which is the same page either way.
 func TestPageReadsUTCForABrowserInUTC(t *testing.T) {
-	if want := "2026-08-28 10:05 UTC"; !strings.Contains(indexFrom(t, "UTC").Body.String(), want) {
+	if want := "2026-08-28 10:05 UTC"; !strings.Contains(debugFrom(t, "UTC").Body.String(), want) {
 		t.Errorf("page does not show %q", want)
 	}
 }
@@ -100,7 +100,11 @@ func TestAPIStaysInUTCForAReaderWithAZone(t *testing.T) {
 // carrying its own would be the one that is silently UTC, or the one a cache keeps.
 func TestEveryPageCarriesTheShell(t *testing.T) {
 	store := served{series: []seriesPoints{volume()}}
-	pages := map[string]hub.Store{"/": stored{states: []storage.NodeState{laptop}}, oneVolume: store}
+	pages := map[string]hub.Store{
+		"/":       stored{states: []storage.NodeState{laptop}},
+		"/debug":  stored{states: []storage.NodeState{laptop}},
+		oneVolume: store,
+	}
 
 	for target, page := range pages {
 		t.Run(target, func(t *testing.T) {
@@ -132,6 +136,7 @@ func TestEveryPageCarriesTheShell(t *testing.T) {
 func TestEveryPageCarriesItsIcon(t *testing.T) {
 	pages := map[string]hub.Store{
 		"/":       stored{states: []storage.NodeState{laptop}},
+		"/debug":  stored{states: []storage.NodeState{laptop}},
 		oneVolume: served{series: []seriesPoints{volume()}},
 		"/history?metric=disk.free_pct&nonsense=1": served{},
 	}

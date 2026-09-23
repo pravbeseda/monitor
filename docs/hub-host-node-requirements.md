@@ -207,7 +207,7 @@ sudo journalctl -u monitor-agent.service --since -15min | grep -c 'tick failed' 
 sudo stat -c '%U %a' /etc/monitor /etc/monitor/agent.env         # root 755, root 600
 ```
 
-Then in the browser, `https://hub.example.com/`: the node's last-seen time is fresh within
+Then in the browser, `https://hub.example.com/debug`: the node's last-seen time is fresh within
 one base tick (5 minutes) of the play. Its volumes appear a bootstrap tick after the agent
 starts — the first push carries no measurements. Every play restarts the agent, and a
 restarted agent collects again only on its second tick, so right after a play their collected
