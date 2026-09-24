@@ -211,8 +211,9 @@ Each line is an index into the ADR that owns it.
 - **A subject is a series and a threshold is one comparison per level**: a direction
   (`below`/`above`) and up to two values, set per series in the interface and stored with
   the data; nothing has a level until someone sets one. → 0032, 0033
-- **Skins are rendered by the hub** — mission control at `/`, the debug table at `/debug` —
-  until a skin needs a client; TypeScript arrives with that one. → 0035
+- **Skins are rendered by the hub** — mission control at `/board`, the timeline at
+  `/timeline`, the debug table at `/debug` — until a skin needs a client; TypeScript arrives
+  with that one. They sit side by side as tabs, and `/` opens the one last clicked. → 0035, 0037
 - The versioned API prefix (`/api/v1/...`) is deliberate — keep it on every new endpoint.
 - The project's value is the normalization and prioritization layer, not storage or
   charting; weigh new low-level work against what off-the-shelf tools already do.

@@ -55,12 +55,15 @@ Each principle below is recorded in full, with its alternatives, in the linked A
 | Skin | What it is |
 |---|---|
 | Debug view | A table of every metric, at `/debug`. The first skin; it proves the State API is sufficient and stays as the debugging mode. |
-| Mission control | Dark board, empty while all is well; anomalies surface on their own. The primary view, at `/`, rendered by the hub ([ADR 0035](decisions/0035-mission-control-is-rendered-by-the-hub.md)). |
+| Mission control | Dark board, empty while all is well; anomalies surface on their own. The primary view, at `/board`, rendered by the hub ([ADR 0035](decisions/0035-mission-control-is-rendered-by-the-hub.md)). |
+| Timeline | What needs attention now, each node's last 24 hours, and the levels that changed, at `/timeline` ([spec](specs/timeline.md)). |
 | Advisors | Per-domain summaries in plain language (an LLM over aggregates). |
 | City | Isometric city: districts are life areas, buildings are metrics. |
 | Organism | Metrics as body systems, with one overall "pulse" number. |
 | Telegram bot | A skin without a screen: alerts, digests, manual input (deferred). |
 
+Skins sit side by side as tabs, and `/` opens the one last chosen
+([ADR 0037](decisions/0037-skins-are-tabs-and-the-root-opens-the-last-one.md)).
 A skin is a manifest (what it can display) + a mapping (metric → slot, defaulted from
 metric metadata) + a lazy-loaded renderer.
 

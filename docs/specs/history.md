@@ -225,7 +225,7 @@ staleness still has an answer — the node's longest sensor interval
 | a node silent past its `silence_after`, its series not yet three intervals old | its series hidden or marked already: evaluation freezes a silent node's subjects in the tick it falls silent |
 | a node whose every series is left out | "no current measurements" in place of its table, rather than the "no measurements yet" of a node that never sent one |
 | a node still reporting but sending no measurements — its mount table unreadable | its series age like any other and are hidden or marked once past the bound |
-| any chart page | a link to `/debug`, the table of every series |
+| any chart page | the tabs ([web](web.md#skins)), the table of every series among them |
 | `&lang=ru` | axis labels, dates, byte sizes and percentages in Russian |
 | any time on the page, and every axis label | the reader's time zone, named once on the chart ([web.md](web.md#zone)); which day a tick is labelled with follows that zone, where the ticks sit does not |
 

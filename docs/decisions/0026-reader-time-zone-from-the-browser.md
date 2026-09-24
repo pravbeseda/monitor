@@ -1,6 +1,6 @@
 # 0026. The reader's time zone comes from the browser in a cookie; pages stay server-rendered
 
-- **Status:** accepted
+- **Status:** accepted, amended by [0037](0037-skins-are-tabs-and-the-root-opens-the-last-one.md)
 - **Amends:** the "no cookie" clause of [0023](0023-proxy-holds-the-web-perimeter.md) — one
   cookie is now in play, written by the page and read by the hub, carrying the reader's time
   zone and nothing else. The perimeter decision itself stands untouched.

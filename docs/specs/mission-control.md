@@ -1,7 +1,7 @@
 # Spec: Mission control
 
 - **Status:** approved
-- **Owns:** the page `GET /` in `internal/hub` — mission control, the hub's primary view —
+- **Owns:** the page `GET /board` in `internal/hub` — mission control, the hub's primary view —
   which items it shows, in what order and with which links; and the address `/debug`, where
   the table of every series now lives. What that table contains stays with
   [state](state.md#page) and [history](history.md#page); what a level, a staleness or an
@@ -13,7 +13,8 @@
   [0008](../decisions/0008-english-repo-bilingual-ui.md),
   [0029](../decisions/0029-pages-refresh-by-fetching-their-own-address.md),
   [0035](../decisions/0035-mission-control-is-rendered-by-the-hub.md),
-  [0036](../decisions/0036-an-anomaly-is-a-value-outside-its-weeks-band.md)
+  [0036](../decisions/0036-an-anomaly-is-a-value-outside-its-weeks-band.md),
+  [0037](../decisions/0037-skins-are-tabs-and-the-root-opens-the-last-one.md)
 
 ## Purpose
 
@@ -75,11 +76,11 @@ first line that applies is the one shown:
 
 | State | Headline |
 |---|---|
-| no node has reported | no node has reported yet |
+| no node has reported | "No node has reported yet" |
 | the state's `level` is `critical` or `warning` | that level's word, marked as that level |
-| `level` is `null`, or nothing is watched | nothing is judged yet |
-| there are items | nothing past a threshold |
-| otherwise | all is well |
+| `level` is `null`, or nothing is watched | "Nothing is judged yet" |
+| there are items | "Nothing past a threshold" |
+| otherwise | "All is well" |
 
 Below the headline, whenever the state counts nothing watched and lists any node — one the
 configuration no longer names included — the notice
@@ -131,25 +132,25 @@ the English catalogue's; every one of them has its Russian.
 
 | State | Headline |
 |---|---|
-| an empty hub | "no node has reported yet" |
+| an empty hub | "No node has reported yet" |
 | one series `critical` | "critical", marked as critical |
 | one series `warning`, nothing critical | "warning", marked as warning |
 | nothing watched, one node silent | "critical", and the nothing-judged notice below it |
-| nothing watched, every node reporting, one anomaly | "nothing is judged yet", the nothing-judged notice, and the anomaly |
-| nothing watched, every node reporting, no item | "nothing is judged yet" and the nothing-judged notice: a hub that judges nothing must not read as well |
-| every node configured-out | "nothing is judged yet" |
-| the only node reported for the first time, before the next tick | "nothing is judged yet" |
-| everything `ok` and one anomaly | "nothing past a threshold", and the anomaly below it |
-| everything `ok` and a watched series with no fresh data | "nothing past a threshold", and that item below it |
-| everything `ok`, nothing else | "all is well" |
+| nothing watched, every node reporting, one anomaly | "Nothing is judged yet", the nothing-judged notice, and the anomaly |
+| nothing watched, every node reporting, no item | "Nothing is judged yet" and the nothing-judged notice: a hub that judges nothing must not read as well |
+| every node configured-out | "Nothing is judged yet" |
+| the only node reported for the first time, before the next tick | "Nothing is judged yet" |
+| everything `ok` and one anomaly | "Nothing past a threshold", and the anomaly below it |
+| everything `ok` and a watched series with no fresh data | "Nothing past a threshold", and that item below it |
+| everything `ok`, nothing else | "All is well" |
 
 ### The page {#page}
 
 | Request | What the reader sees |
 |---|---|
-| `/` | mission control, and a link to `/debug` reading "all series" |
-| `/debug` | the debug view of [state](state.md#page) and [history](history.md#page), and a link to `/` |
-| `/?lang=ru`, `/debug?lang=ru` | every word on the page in Russian, the language kept on every link |
+| `/board` | mission control, under the tabs ([web](web.md#skins)) |
+| `/debug` | the debug view of [state](state.md#page) and [history](history.md#page), under the tabs |
+| `/board?lang=ru`, `/debug?lang=ru` | every word on the page in Russian, the language kept on every link |
 | any time on the page | in the reader's zone ([web](web.md#zone)) |
 | any value and any usual value | formatted in the unit its metric id declares, as `/debug` formats it |
 | a new anomaly, a level change or a node falling silent while the page is open | on the page within 30 seconds, without a reload ([web](web.md#live)) |
@@ -193,7 +194,8 @@ the English catalogue's; every one of them has its Russian.
   its reason does.
 - **A count of unwatched series on the board** — every hub has some, so it would never
   leave; `/debug` counts them per node, and anomalies judge them meanwhile.
-- **Other skins** — advisors, the city, the organism, the Telegram bot as a skin.
+- **Other skins** — the [timeline](timeline.md); advisors, the city, the organism, the
+  Telegram bot as a skin.
 
 ## Open questions
 

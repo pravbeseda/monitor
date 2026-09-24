@@ -33,7 +33,7 @@ level and never writes. Besides staleness, the one thing it computes on read is 
 series' anomaly
 ([0036](../decisions/0036-an-anomaly-is-a-value-outside-its-weeks-band.md)), which is no
 level and leads to no event. The debug view `/debug` is its first consumer: it shows every subject with its
-level, and nothing the endpoint would not return. Mission control at `/` is its second
+level, and nothing the endpoint would not return. Mission control at `/board` is its second
 ([mission-control.md](mission-control.md)).
 
 Each series also carries its anomaly — how far its newest value lies from its own norm —
@@ -230,7 +230,7 @@ Names and labels are compared byte by byte; labels are rendered as history rende
 | a stale series still shown | its level beside the "no fresh data" mark |
 | a series with an anomaly rank | marked as unusual in the reader's language, with its usual value — the norm — in its unit, so the series mission control leaves off past its fifth anomaly can be found ([mission-control.md](mission-control.md#order)) |
 | a series with an anomaly and no rank | no mark: its value is within its usual band |
-| `/debug` | a link to `/`, mission control |
+| `/debug` | the tabs, mission control among them ([web](web.md#skins)) |
 | `/debug?lang=ru` | every level word and the silent mark in Russian |
 
 ## Invariants
