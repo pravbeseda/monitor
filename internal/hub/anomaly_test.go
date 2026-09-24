@@ -91,7 +91,7 @@ func TestOneHourOneNorm(t *testing.T) {
 // spec: mission-control.md#invariants — the board shows an anomaly the State API ranks, read
 // from stored points through the same state.
 func TestTheBoardShowsWhatTheStateRanks(t *testing.T) {
-	rec := getState(t, loadAt(3.1), "/", at)
+	rec := getState(t, loadAt(3.1), "/board", at)
 	containsAll(t, "the anomaly item", oneOf(t, rec.Body.String(), "load.avg_5m"), "3.10", "usually 0.40")
 }
 
@@ -144,7 +144,7 @@ func TestExcludingASeriesTakesItOffTheBoard(t *testing.T) {
 			t.Errorf("after %s the anomaly is %v", step.anomalies, got)
 		}
 		board := httptest.NewRecorder()
-		routes.ServeHTTP(board, httptest.NewRequest(http.MethodGet, "/", nil))
+		routes.ServeHTTP(board, httptest.NewRequest(http.MethodGet, "/board", nil))
 		if shown := strings.Contains(board.Body.String(), "load.avg_5m"); shown != step.onBoard {
 			t.Errorf("after %s the board shows the series: %v", step.anomalies, shown)
 		}

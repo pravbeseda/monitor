@@ -19,6 +19,15 @@ var dayLayouts = map[Locale]string{
 	Russian: "02.01",
 }
 
+// monthNames are in the form a date takes after its day: Russian puts the month in the
+// genitive, "21 сентября".
+var monthNames = map[Locale][12]string{
+	English: {"January", "February", "March", "April", "May", "June", "July", "August",
+		"September", "October", "November", "December"},
+	Russian: {"января", "февраля", "марта", "апреля", "мая", "июня", "июля", "августа",
+		"сентября", "октября", "ноября", "декабря"},
+}
+
 var timeLayouts = map[Locale]string{
 	English: "2006-01-02 15:04 MST",
 	Russian: "02.01.2006 15:04 MST",
@@ -76,6 +85,26 @@ func (p *Printer) Clock(at time.Time) string { return p.at(at).Format("15:04") }
 // Day labels a chart axis spanning days, in the order each language writes a date.
 func (p *Printer) Day(at time.Time) string {
 	return p.at(at).Format(dayLayouts[p.locale])
+}
+
+// Date heads the day an instant fell on, as a reader counts days from now in the printer's
+// zone: today, yesterday, or the day and month, with the year when it is another one.
+func (p *Printer) Date(at, now time.Time) string {
+	y, m, d := p.at(at).Date()
+	ty, tm, td := p.at(now).Date()
+	// Days are compared on the calendar: a clock time moved back a day can fall in a gap a
+	// daylight-saving change left, and land on the day before.
+	day := time.Date(y, m, d, 0, 0, 0, 0, time.UTC)
+	switch day.Sub(time.Date(ty, tm, td, 0, 0, 0, 0, time.UTC)) {
+	case 0:
+		return p.T("day.today")
+	case -24 * time.Hour:
+		return p.T("day.yesterday")
+	}
+	if y != ty {
+		return fmt.Sprintf("%d %s %d", d, monthNames[p.locale][m-1], y)
+	}
+	return fmt.Sprintf("%d %s", d, monthNames[p.locale][m-1])
 }
 
 // Zone names the zone the labels around it are read in, for the one place a page states it

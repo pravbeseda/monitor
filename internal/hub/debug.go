@@ -38,10 +38,7 @@ type debugView struct {
 	ValueLabel     string
 	LevelLabel     string
 	CollectedLabel string
-	// Board and BoardURL are the link to mission control (docs/specs/state.md#page).
-	Board    string
-	BoardURL string
-	Nodes    []nodeView
+	Nodes          []nodeView
 }
 
 type nodeView struct {
@@ -107,7 +104,7 @@ func Debug(read StateReader) http.Handler {
 
 func debugOf(printer *i18n.Printer, current state.State, lang string) debugView {
 	out := debugView{
-		shell:          shellOf(printer, "page.title"),
+		shell:          shellOf(printer, "page.title", "debug", lang),
 		Version:        version.Current,
 		Empty:          printer.T("page.empty"),
 		LastSeenLabel:  printer.T("node.last_seen"),
@@ -116,8 +113,6 @@ func debugOf(printer *i18n.Printer, current state.State, lang string) debugView 
 		ValueLabel:     printer.T("table.free"),
 		LevelLabel:     printer.T("table.level"),
 		CollectedLabel: printer.T("table.collected"),
-		Board:          printer.T("board.title"),
-		BoardURL:       pageLink("/", lang),
 		Nodes:          make([]nodeView, 0, len(current.Nodes)),
 	}
 	// A hub that watches nothing must say so: it looks exactly like one where nothing is

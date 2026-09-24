@@ -6,8 +6,8 @@
     body { font-family: system-ui, sans-serif; margin: 2rem auto; max-width: 60rem; }
     h1 { font-size: 1.4rem; }
     p.meta { color: var(--muted); margin-top: 0; font-size: 0.9rem; }
-    nav { margin: 0 0 1rem; font-size: 0.9rem; }
-    nav a { margin-right: 0.6rem; }
+    nav.windows { margin: 0 0 1rem; font-size: 0.9rem; }
+    nav.windows a { margin-right: 0.6rem; }
     svg { width: 100%; height: auto; }
     .axis { stroke: var(--faint); stroke-width: 1; }
     .grid { stroke: var(--grid); stroke-width: 1; }
@@ -19,11 +19,11 @@
   </style>
 </head>
 <body>
-  <nav><a href="{{ .TableURL }}">{{ .Table }}</a></nav>
+  {{ template "tabs" . }}
   <h1>{{ if .Heading }}{{ .Heading }}{{ else }}{{ .Title }}{{ end }}</h1>
   {{ if .Latest }}<p class="meta">{{ .LatestLabel }}: {{ .Latest }}</p>{{ end }}
   {{ if .Windows }}
-    <nav>
+    <nav class="windows">
       {{ .WindowLabel }}:
       {{ range .Windows }}
         {{ if .Current }}<strong>{{ .Label }}</strong>{{ else }}<a href="{{ .URL }}">{{ .Label }}</a>{{ end }}

@@ -64,14 +64,15 @@ func TestDebugMarksAnUnusualSeriesInRussian(t *testing.T) {
 	}
 }
 
-// spec: state.md#page — /debug links to mission control, keeping the language.
-func TestDebugLinksToMissionControl(t *testing.T) {
+// spec: state.md#page — /debug carries the tabs, mission control among them, keeping the
+// language.
+func TestDebugCarriesTheTabs(t *testing.T) {
 	for target, want := range map[string]string{
-		"/debug":         `href="/"`,
-		"/debug?lang=ru": `href="/?lang=ru"`,
+		"/debug":         "/board",
+		"/debug?lang=ru": "/board?lang=ru",
 	} {
-		if body := showDebug(t, unusualRoot(), target); !strings.Contains(body, want) {
-			t.Errorf("GET %s carries no %s", target, want)
+		if tabs := tabsOf(t, showDebug(t, unusualRoot(), target)); len(tabs) == 0 || tabs[0].href != want {
+			t.Errorf("GET %s tabs = %v, want mission control's first at %s", target, tabs, want)
 		}
 	}
 }
@@ -84,7 +85,8 @@ func TestTheTableLivesAtDebug(t *testing.T) {
 	}
 }
 
-// spec: history.md#page — any chart page links to /debug, keeping the language.
+// spec: history.md#page — any chart page carries the tabs, the table among them, keeping
+// the language.
 func TestHistoryPageLinksToTheTable(t *testing.T) {
 	for target, want := range map[string]string{
 		oneVolume:              `href="/debug"`,

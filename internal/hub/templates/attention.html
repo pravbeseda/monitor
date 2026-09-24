@@ -1,0 +1,32 @@
+{{ define "attention-style" }}
+    h1.headline { font-size: 1.6rem; font-weight: 600; margin-bottom: 1.5rem; }
+    ol.items { list-style: none; padding: 0; margin: 0; }
+    li.item { padding: 0.7rem 0.9rem; margin-bottom: 0.5rem; border-left: 3px solid var(--rule); background: var(--grid); }
+    li.item-warning { border-left-color: var(--warn); }
+    li.item-critical { border-left-color: var(--bad); }
+    li.item-unusual { border-left-color: var(--link); }
+    li.item .value { margin-left: 0.6rem; font-variant-numeric: tabular-nums; }
+    li.item small, p.more { color: var(--muted); font-size: 0.85rem; }
+    li.item small { margin-left: 0.6rem; }
+    a.set { margin-left: 0.6rem; font-size: 0.85rem; color: var(--muted); }
+{{ end }}
+
+{{ define "attention" }}
+  <h1 class="headline{{ with .HeadlineClass }} {{ . }}{{ end }}">{{ .Headline }}</h1>
+  {{ with .NothingWatched }}<p class="notice">{{ . }}</p>{{ end }}
+  {{ if .Items }}
+    <ol class="items">
+      {{ range .Items }}
+        <li class="item {{ .Class }}">
+          <a href="{{ .Link }}">{{ .Name }}</a>
+          {{ with .Value }}<span class="value">{{ . }}</span>{{ end }}
+          {{ with .Level }}<span class="{{ .Class }}">{{ .Word }}</span>{{ end }}
+          {{ with .Note }}<small>{{ . }}</small>{{ end }}
+          {{ with .Usual }}<small class="usual">{{ . }}</small>{{ end }}
+          {{ with .Thresholds }}<a class="set" href="{{ . }}">{{ $.SetLabel }}</a>{{ end }}
+        </li>
+      {{ end }}
+    </ol>
+  {{ end }}
+  {{ with .More }}<p class="more"><a href="{{ $.DebugURL }}">{{ . }}</a></p>{{ end }}
+{{ end }}

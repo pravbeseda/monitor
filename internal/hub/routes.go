@@ -17,6 +17,7 @@ type Store interface {
 	storage.Storage
 	Snapshots
 	ThresholdStore
+	EventLog
 }
 
 // Routes mounts every endpoint the hub serves. The version prefix is part of the
@@ -26,7 +27,9 @@ func Routes(cfg *config.Config, store Store, now func() time.Time) *http.ServeMu
 	mux.Handle("POST /api/v1/ingest", ingest.NewHandler(cfg, store, now))
 	mux.Handle(ingest.AgentPrefix, ingest.NewAgentHandler(cfg))
 	current := ReadState(store, targetOf(cfg), anomaly.NewNorms(store), now)
-	mux.Handle("GET /{$}", Board(current))
+	mux.Handle("GET /{$}", Root())
+	mux.Handle("GET /board", Board(current))
+	mux.Handle("GET /timeline", Timeline(current, store, targetOf(cfg)))
 	mux.Handle("GET /debug", Debug(current))
 
 	read := reader(cfg, store, now)

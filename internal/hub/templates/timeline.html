@@ -1,0 +1,72 @@
+<!DOCTYPE html>
+<html lang="{{ .Locale }}">
+<head>
+{{ template "shell" . }}
+  <style>
+    body { font-family: system-ui, sans-serif; margin: 2rem auto; max-width: 72rem; padding: 0 1rem; }
+    {{- template "attention-style" }}
+    .columns { display: grid; grid-template-columns: minmax(16rem, 22rem) 1fr; gap: 1.5rem; align-items: start; }
+    @media (max-width: 52rem) { .columns { grid-template-columns: 1fr; } }
+    h2 { font-size: 0.8rem; text-transform: uppercase; letter-spacing: 0.06em; color: var(--muted); font-weight: 600; margin: 0 0 0.8rem; }
+    section.panel { background: var(--grid); border: 1px solid var(--rule); border-radius: 10px; padding: 1rem; margin-bottom: 1.5rem; overflow-x: auto; }
+    section.now h1.headline { font-size: 1.3rem; margin-top: 0; }
+    section.now li.item { background: var(--bg); }
+    .lane, .hours { display: grid; grid-template-columns: 6.5rem 1fr; gap: 0.6rem; align-items: center; margin-bottom: 0.35rem; min-width: 30rem; }
+    .lane .node { font-size: 0.85rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .cells, .hours .ticks { display: grid; grid-template-columns: repeat(24, 1fr); gap: 2px; }
+    .cells { height: 1.1rem; }
+    .hour { font-size: 0.7rem; color: var(--faint); font-variant-numeric: tabular-nums; }
+    i.cell { display: block; border-radius: 2px; min-height: 0.8rem; }
+    i.cell-ok { background: color-mix(in srgb, var(--accent) 55%, transparent); }
+    i.cell-warning { background: var(--warn); }
+    i.cell-critical { background: var(--bad); }
+    i.cell-silent { background: repeating-linear-gradient(45deg, var(--bad) 0 3px, transparent 3px 6px); }
+    i.cell-reporting { background: color-mix(in srgb, var(--muted) 35%, transparent); }
+    i.cell-no-data { border: 1px solid var(--rule); background: transparent; }
+    ul.legend { display: flex; flex-wrap: wrap; gap: 0.4rem 1rem; list-style: none; padding: 0; margin: 0.8rem 0 0; font-size: 0.8rem; color: var(--muted); }
+    ul.legend li { display: flex; align-items: center; gap: 0.4rem; }
+    ul.legend i.cell { width: 0.9rem; height: 0.9rem; min-height: 0; }
+    h3.day { font-size: 0.8rem; color: var(--faint); font-weight: 500; margin: 1rem 0 0.2rem; }
+    ol.changes { list-style: none; padding: 0; margin: 0; }
+    li.change { display: grid; grid-template-columns: 3rem 0.8rem 1fr; gap: 0.6rem; align-items: baseline; padding: 0.35rem 0; border-top: 1px solid var(--rule); }
+    li.change .when { color: var(--muted); font-variant-numeric: tabular-nums; text-align: right; }
+    i.dot { width: 0.6rem; height: 0.6rem; border-radius: 50%; display: inline-block; }
+    i.dot-ok { background: var(--accent); }
+    i.dot-warning { background: var(--warn); }
+    i.dot-critical { background: var(--bad); }
+    li.change .node, li.change .move, li.change .value { color: var(--muted); }
+    li.change .value { font-variant-numeric: tabular-nums; }
+    p.quiet { color: var(--muted); }
+  </style>
+</head>
+<body>
+  {{ template "tabs" . }}
+  <div class="columns">
+    <section class="panel now">
+      <h2>{{ .NowLabel }}</h2>
+      {{ template "attention" . }}
+    </section>
+    <div>
+      <section class="panel">
+        <h2>{{ .LanesLabel }}</h2>
+        {{ range .Lanes }}<div class="lane"><span class="node">{{ .Node }}</span><div class="cells">{{ range .Cells }}<i class="cell cell-{{ .Class }}" title="{{ .Title }}"></i>{{ end }}</div></div>
+        {{ end }}
+        <div class="hours"><span></span><div class="ticks">{{ range .Hours }}<span class="hour">{{ . }}</span>{{ end }}</div></div>
+        <ul class="legend">{{ range .Legend }}<li><i class="cell cell-{{ .Class }}"></i>{{ .Word }}</li>{{ end }}</ul>
+      </section>
+      <section class="panel">
+        <h2>{{ .ChangesLabel }}</h2>
+        {{ range .Days }}
+          <h3 class="day">{{ .Label }}</h3>
+          <ol class="changes">
+            {{ range .Changes }}<li class="change"><span class="when">{{ .Time }}</span><i class="dot dot-{{ .Class }}"></i><span><span class="node">{{ .Node }}</span> · <a href="{{ .Link }}">{{ .Name }}</a>{{ with .Move }} <span class="move">{{ . }}</span>{{ end }}{{ with .Value }} <span class="value">{{ . }}</span>{{ end }}</span></li>
+            {{ end }}
+          </ol>
+        {{ else }}
+          <p class="quiet">{{ .NoChanges }}</p>
+        {{ end }}
+      </section>
+    </div>
+  </div>
+</body>
+</html>

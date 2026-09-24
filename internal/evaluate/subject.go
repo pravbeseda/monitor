@@ -51,6 +51,18 @@ func (t Target) interval(sensor string) (time.Duration, bool) {
 	return longest, longest > 0
 }
 
+// Lasting is how long a value of a sensor stays fresh once it is stamped: three of the
+// interval the configuration gives that sensor now, or of the node's longest when it gives
+// none. It is Frozen's bound without its rule that a sensor switched off is stale outright,
+// which is about now and not about the past (ADR 0038).
+func (t Target) Lasting(sensor string) time.Duration {
+	interval, runs := t.interval(sensor)
+	if !runs {
+		interval, _ = t.interval("")
+	}
+	return StaleFactor * interval
+}
+
 func (t Target) silent(lastSeen, now time.Time) bool {
 	return now.Sub(lastSeen) > t.SilenceAfter
 }

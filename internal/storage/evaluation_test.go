@@ -626,3 +626,45 @@ func TestNewestEventsWithoutAnOwedLevelReturnsNothing(t *testing.T) {
 		t.Fatalf("no owed level returned %d events, want none", len(newest))
 	}
 }
+
+// spec: timeline.md#changes — the newest transitions of the named nodes, newest first, the
+// reverse of a tick's order inside one instant, counted after the other nodes are left out.
+func TestRecentEventsOfTheNamedNodes(t *testing.T) {
+	db := open(t)
+	ctx := context.Background()
+	other := Subject{Node: "server-z", Metric: "disk", Labels: map[string]string{"mount": "/"}}
+	silence := Subject{Node: "laptop-a", Metric: "silence"}
+
+	for i := range 3 {
+		if err := db.ApplyTransition(ctx, transition(other, tickOne.Add(time.Duration(10+i)*time.Minute), "ok", "warning")); err != nil {
+			t.Fatalf("ApplyTransition: %v", err)
+		}
+	}
+	for _, change := range []Transition{
+		transition(volume("/"), tickOne, "ok", "warning"),
+		transition(silence, tickTwo, "ok", "critical"),
+		transition(volume("/data"), tickTwo, "ok", "critical"),
+		transition(volume("/"), tickTwo.Add(time.Minute), "warning", "ok"),
+	} {
+		if err := db.ApplyTransition(ctx, change); err != nil {
+			t.Fatalf("ApplyTransition: %v", err)
+		}
+	}
+
+	events, err := db.RecentEvents(ctx, []string{"server-b", "laptop-a"}, 3)
+	if err != nil {
+		t.Fatalf("RecentEvents: %v", err)
+	}
+	var got []string
+	for _, event := range events {
+		got = append(got, fmt.Sprintf("%s %s %s->%s", event.Node, event.Labels["mount"], event.From, event.To))
+	}
+	want := []string{"server-b / warning->ok", "server-b /data ok->critical", "laptop-a  ok->critical"}
+	if !reflect.DeepEqual(got, want) {
+		t.Errorf("recent events = %q, want %q", got, want)
+	}
+
+	if none, err := db.RecentEvents(ctx, nil, 50); err != nil || len(none) != 0 {
+		t.Errorf("RecentEvents of no node = %v, %v; want nothing", none, err)
+	}
+}

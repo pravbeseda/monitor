@@ -532,3 +532,12 @@ type noNorms struct{}
 func (noNorms) For(context.Context, time.Time, []storage.SeriesRef) (map[string]anomaly.Norm, error) {
 	return nil, nil
 }
+
+// The event log: empty unless a test keeps one (timeline_test.go).
+func (s stored) EventsBetween(context.Context, time.Time, time.Time) ([]storage.Transition, error) {
+	return nil, s.err
+}
+
+func (s stored) RecentEvents(context.Context, []string, int) ([]storage.Transition, error) {
+	return nil, s.err
+}

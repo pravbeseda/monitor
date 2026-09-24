@@ -411,14 +411,19 @@ func linksTo(t *testing.T, item, page, node, metric, mount string) {
 
 var hrefPattern = regexp.MustCompile(`href="([^"]*)"`)
 
-// spec: mission-control.md#page — a link to /debug, and every word in the reader's
-// language with the language kept on every link.
+// spec: mission-control.md#page — the tabs lead to /debug, and every word is in the
+// reader's language with the language kept on every link.
 func TestTheBoardLinksToEverySeriesInTheReadersLanguage(t *testing.T) {
 	current := stateOf(silenceOf("server-b", evaluate.OK), ranked(free("server-b", "/", 1e9), 1))
-	containsAll(t, "the board", showBoard(t, current, "/"), `<a href="/debug">All series</a>`)
+	if tabs := tabsOf(t, showBoard(t, current, "/board")); len(tabs) != 3 || tabs[2].href != "/debug" || tabs[2].label != "All series" {
+		t.Errorf("tabs = %v, want the table's last", tabs)
+	}
 
-	body := showBoard(t, current, "/?lang=ru")
-	containsAll(t, "the Russian board", body, `<a href="/debug?lang=ru">Все серии</a>`, "обычно 40,0", "Пока ничего не оценивается")
+	body := showBoard(t, current, "/board?lang=ru")
+	if tabs := tabsOf(t, body); len(tabs) != 3 || tabs[2].href != "/debug?lang=ru" || tabs[2].label != "Все серии" {
+		t.Errorf("Russian tabs = %v, want the table's last", tabs)
+	}
+	containsAll(t, "the Russian board", body, "обычно 40,0", "Пока ничего не оценивается")
 	for _, found := range hrefPattern.FindAllStringSubmatch(body, -1) {
 		if !strings.HasPrefix(found[1], "/") {
 			continue // the shell's icon, not a link
@@ -456,10 +461,10 @@ func TestTheBoardFailsAsTheTableDoes(t *testing.T) {
 	}
 }
 
-// spec: mission-control.md#page — mission control is the hub's primary view.
-func TestMissionControlLivesAtTheRoot(t *testing.T) {
-	rec := getState(t, stored{}, "/", func() time.Time { return lastSeen })
+// spec: mission-control.md#page — mission control lives at /board.
+func TestMissionControlLivesAtBoard(t *testing.T) {
+	rec := getState(t, stored{}, "/board", func() time.Time { return lastSeen })
 	if rec.Code != http.StatusOK || !strings.Contains(rec.Body.String(), `<h1 class="headline`) {
-		t.Fatalf("GET / = %d, want mission control: %s", rec.Code, rec.Body)
+		t.Fatalf("GET /board = %d, want mission control: %s", rec.Code, rec.Body)
 	}
 }

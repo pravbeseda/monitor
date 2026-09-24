@@ -14,6 +14,7 @@
   </style>
 </head>
 <body>
+  {{ template "tabs" . }}
   <h1>{{ .Title }}</h1>
   <p class="meta">{{ .Series }}{{ with .Volume }} · {{ . }}{{ end }}</p>
   {{ with .Error }}<p class="error">{{ . }}</p>{{ end }}

@@ -14,7 +14,7 @@ import (
 	"github.com/pravbeseda/monitor/internal/state"
 )
 
-var boardTemplate = template.Must(template.ParseFS(templates, "templates/board.html", "templates/shell.html"))
+var boardTemplate = template.Must(template.ParseFS(templates, "templates/board.html", "templates/attention.html", "templates/shell.html"))
 
 // shownAnomalies is how many anomaly items the board shows before a line counts the rest.
 const shownAnomalies = 5
@@ -22,12 +22,17 @@ const shownAnomalies = 5
 // boardView is mission control as the template sees it: every string translated.
 type boardView struct {
 	shell
+	attentionView
+}
+
+// attentionView is what needs attention now, as mission control and the timeline both show
+// it (templates/attention.html).
+type attentionView struct {
 	Headline       string
 	HeadlineClass  string
 	NothingWatched string
 	Items          []itemView
 	More           string
-	AllSeries      string
 	DebugURL       string
 	SetLabel       string
 }
@@ -85,11 +90,13 @@ type item struct {
 func (i item) silence() bool { return i.subject.Metric == evaluate.SilenceMetric }
 
 func boardOf(printer *i18n.Printer, current state.State, lang string) boardView {
-	out := boardView{
-		shell:     shellOf(printer, "board.title"),
-		AllSeries: printer.T("page.all_series"),
-		DebugURL:  pageLink("/debug", lang),
-		SetLabel:  printer.T("table.set"),
+	return boardView{shell: shellOf(printer, "board.title", "board", lang), attentionView: attentionOf(printer, current, lang)}
+}
+
+func attentionOf(printer *i18n.Printer, current state.State, lang string) attentionView {
+	out := attentionView{
+		DebugURL: pageLink("/debug", lang),
+		SetLabel: printer.T("table.set"),
 	}
 	found := itemsOf(current)
 	anomalies := 0
