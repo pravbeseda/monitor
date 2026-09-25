@@ -76,7 +76,8 @@ the series named as mission control names it ([mission-control](mission-control.
 level it left and the level it entered as the catalogue's level words, and the value that
 produced it, formatted in its unit as `/debug` formats it. A node's silence reads "fell
 silent" on entering `critical`, followed by how long the node had not reported — its
-`silence_after`, written as the language writes a duration ("no report for 15.0 min") — and
+`silence_after` as the configuration resolves it today, since the log does not record the
+one in force, written as the language writes a duration ("no report for 15.0 min") — and
 "reporting again" on leaving it. The instant of a silence is when
 the hub noticed it, one `silence_after` after the node's last report, which is why "now"
 names an earlier time for the same silence. Changes are listed newest first, the newest 50

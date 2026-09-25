@@ -173,7 +173,8 @@ func (v *timelineView) addLanes(ctx context.Context, printer *i18n.Printer, stor
 	if err != nil {
 		return err
 	}
-	events, err := store.EventsBetween(ctx, starts[0], endOfTime)
+	// The log is read after its from, and the window begins at its first instant.
+	events, err := store.EventsBetween(ctx, starts[0].Add(-time.Nanosecond), endOfTime)
 	if err != nil {
 		return err
 	}
