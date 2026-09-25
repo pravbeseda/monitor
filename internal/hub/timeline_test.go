@@ -366,20 +366,6 @@ func TestTheTimelineFailsAsMissionControlDoes(t *testing.T) {
 
 // spec: timeline.md#model — a tick that lands while the page is being read shows no level
 // shorter than it was: the change it wrote still closes the span before it.
-func TestAChangeAtTheWindowsFirstInstantIsShown(t *testing.T) {
-	root := map[string]string{"mount": "/", "fs": "apfs", "removable": "false"}
-	volume := storage.Subject{Node: "laptop-a", Metric: "disk.free_pct", Labels: root}
-	store := timelineStore(reportingNode("laptop-a"))
-	// Entered at the first cell's first instant, then forgotten: only the change remains.
-	store.events = []storage.Transition{
-		{Subject: volume, At: lastSeen.Add(-23*time.Hour - 5*time.Minute), From: "ok", To: "critical", FromSince: lastSeen.Add(-30 * time.Hour)},
-	}
-	_, cells := lanesOf(showTimeline(t, store, "/timeline"))
-	if got := cells["laptop-a"][0][0]; got != "critical" {
-		t.Errorf("the 11:00 cell = %q, want critical", got)
-	}
-}
-
 func TestATickDuringTheReadKeepsTheLevelBeforeIt(t *testing.T) {
 	root := map[string]string{"mount": "/", "fs": "apfs", "removable": "false"}
 	volume := storage.Subject{Node: "laptop-a", Metric: "disk.free_pct", Labels: root}
@@ -397,5 +383,21 @@ func TestATickDuringTheReadKeepsTheLevelBeforeIt(t *testing.T) {
 	// 08:05 warning, held until the tick after the page's instant: 08:00 to 10:00.
 	if want := strings.Repeat("ok ", 21) + "warning warning warning"; strings.Join(got, " ") != want {
 		t.Errorf("laptop-a = %v", got)
+	}
+}
+
+// spec: timeline.md#model — a level whose threshold was removed shows in the hour it began,
+// the window's first instant included.
+func TestAChangeAtTheWindowsFirstInstantIsShown(t *testing.T) {
+	root := map[string]string{"mount": "/", "fs": "apfs", "removable": "false"}
+	volume := storage.Subject{Node: "laptop-a", Metric: "disk.free_pct", Labels: root}
+	store := timelineStore(reportingNode("laptop-a"))
+	// Entered at the first cell's first instant, then forgotten: only the change remains.
+	store.events = []storage.Transition{
+		{Subject: volume, At: lastSeen.Add(-23*time.Hour - 5*time.Minute), From: "ok", To: "critical", FromSince: lastSeen.Add(-30 * time.Hour)},
+	}
+	_, cells := lanesOf(showTimeline(t, store, "/timeline"))
+	if got := cells["laptop-a"][0][0]; got != "critical" {
+		t.Errorf("the 11:00 cell = %q, want critical", got)
 	}
 }
