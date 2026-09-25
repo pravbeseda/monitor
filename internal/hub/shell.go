@@ -18,6 +18,42 @@ import (
 // and the two would trade the page forever (ADR 0026).
 const zoneCookie = "tz"
 
+// skinCookie is what a click on a tab stores. Like the zone, it is written by the page and
+// only read here (ADR 0037).
+const skinCookie = "skin"
+
+// skin is one way of showing the whole hub, in the order its tab stands.
+type skin struct {
+	name, path, labelKey string
+}
+
+var skins = []skin{
+	{name: "board", path: "/board", labelKey: "board.title"},
+	{name: "timeline", path: "/timeline", labelKey: "timeline.title"},
+	{name: "debug", path: "/debug", labelKey: "page.all_series"},
+}
+
+// Root sends the reader to the skin their last tab click chose, or to mission control
+// (spec: web.md#skins). The answer depends on the cookie, so no cache may keep it.
+func Root() http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		target := skins[0].path
+		if cookie, err := r.Cookie(skinCookie); err == nil {
+			for _, one := range skins {
+				if one.name == cookie.Value {
+					target = one.path
+				}
+			}
+		}
+		if r.URL.RawQuery != "" {
+			target += "?" + r.URL.RawQuery
+		}
+		w.Header().Set("Cache-Control", "no-store")
+		w.Header().Set("Vary", "Cookie")
+		http.Redirect(w, r, target, http.StatusFound)
+	})
+}
+
 // maxZoneName bounds the name before it reaches the zone database.
 const maxZoneName = 64
 
@@ -65,10 +101,10 @@ func shellHeaders(w http.ResponseWriter) {
 	head.Set("Vary", "Cookie, Accept-Language")
 }
 
-// shell is what every page's head carries (templates/shell.html). Rendering names what the
-// head was built from, so the refresh script reloads a page whole rather than pair an old
-// head with a new body; StalledNotice is what it shows when the page is not being
-// refreshed (spec: web.md#live).
+// shell is what every page carries around its content (templates/shell.html): the head,
+// and the tabs at the top of the body. Rendering names what the head was built from, so
+// the refresh script reloads a page whole rather than pair an old head with a new body;
+// StalledNotice is what it shows when the page is not being refreshed (spec: web.md#live).
 type shell struct {
 	Locale        i18n.Locale
 	Title         string
@@ -78,20 +114,40 @@ type shell struct {
 	// nothing on it changes on its own, and a refresh would replace what the reader is
 	// typing, or the refusal they are reading (spec: web.md#live, thresholds.md#form).
 	Live bool
+	Tabs []tabView
 }
 
-func shellOf(printer *i18n.Printer, titleKey string) shell {
-	out := still(printer, titleKey)
+// tabView is one skin's tab. Skin is what a click on it stores in the browser.
+type tabView struct {
+	Skin  string
+	Label string
+	URL   string
+	Open  bool
+}
+
+// shellOf is the shell of a page that keeps itself current. open names the skin the page
+// is, or is empty on a page that is none of them.
+func shellOf(printer *i18n.Printer, titleKey, open, lang string) shell {
+	out := still(printer, titleKey, open, lang)
 	out.Live = true
 	return out
 }
 
 // still is the shell of a page that is not refreshed.
-func still(printer *i18n.Printer, titleKey string) shell {
-	return shell{
+func still(printer *i18n.Printer, titleKey, open, lang string) shell {
+	out := shell{
 		Locale:        printer.Locale(),
 		Title:         printer.T(titleKey),
 		Rendering:     version.Current + " " + string(printer.Locale()),
 		StalledNotice: printer.T("page.stalled"),
 	}
+	for _, one := range skins {
+		out.Tabs = append(out.Tabs, tabView{
+			Skin:  one.name,
+			Label: printer.T(one.labelKey),
+			URL:   pageLink(one.path, lang),
+			Open:  one.name == open,
+		})
+	}
+	return out
 }

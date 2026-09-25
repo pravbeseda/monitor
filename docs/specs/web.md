@@ -7,7 +7,8 @@
   `internal/hub/templates/shell.html` and the printer's zone in `internal/i18n`. Formatting
   itself stays with `internal/i18n`; what a page *contains* stays with that page's own spec
   ([history.md](history.md) for `/history` and for the values on `/debug`, [state.md](state.md)
-  for the levels on `/debug`, [mission-control.md](mission-control.md) for `/`,
+  for the levels on `/debug`, [mission-control.md](mission-control.md) for `/board`,
+  [timeline.md](timeline.md) for `/timeline`,
   [thresholds.md](thresholds.md) for `/thresholds`); the reader's language
   is settled by [0008](../decisions/0008-english-repo-bilingual-ui.md) and needs nothing
   here. The JSON API is not a reader: nothing here touches it.
@@ -16,7 +17,8 @@
   [0018](../decisions/0018-history-through-the-api.md),
   [0023](../decisions/0023-proxy-holds-the-web-perimeter.md),
   [0026](../decisions/0026-reader-time-zone-from-the-browser.md),
-  [0029](../decisions/0029-pages-refresh-by-fetching-their-own-address.md)
+  [0029](../decisions/0029-pages-refresh-by-fetching-their-own-address.md),
+  [0037](../decisions/0037-skins-are-tabs-and-the-root-opens-the-last-one.md)
 
 ## Purpose
 
@@ -62,6 +64,34 @@ tell which of them they are.
 | the same address opened again after the browser has learned its zone | the reader's zone, never the earlier answer served again |
 | a refusal or a failure rendered as a page | the same zone handling as any other page: a first visit that fails still leaves the reader in their own zone afterwards |
 | any HTML page of the hub, in a browser tab | the monitor's own icon, a green pulse line on the dark page colour, carried inside the page so it costs no request of its own |
+
+### Skins and their tabs {#skins}
+
+A skin is a page that shows the whole hub its own way
+([0037](../decisions/0037-skins-are-tabs-and-the-root-opens-the-last-one.md)): mission control
+at `/board`, the timeline at `/timeline`, the table of every series at `/debug`, in that
+order, their tabs reading "Mission control", "Timeline" and "All series" ("Центр управления",
+"Лента", "Все серии").
+
+The choice is the tab the reader last clicked, stored by the page in the browser the way the
+zone is ([zone](#zone)); the hub only reads it.
+
+| Request | What the reader sees |
+|---|---|
+| any HTML page of the hub | a row of tabs at the top, one per skin, each linking to its address with the page's language |
+| a skin's own address | that skin, its tab marked as the open one |
+| `/history` or `/thresholds` | the tabs, none marked |
+| `/` from a browser that never clicked a tab | a redirect to `/board` |
+| a click on the timeline's tab, then `/` | a redirect to `/timeline` |
+| `/?lang=ru` | a redirect to the remembered skin with `?lang=ru` |
+| a click on the timeline's tab, then the table's, then `/` | a redirect to `/debug`: the last tab clicked wins |
+| a click on the timeline's tab, then a link to `/debug` from a page, then `/` | a redirect to `/timeline`: only a tab is a choice |
+| `/debug` opened from a bookmark after a click on the timeline's tab, then `/` | a redirect to `/timeline` |
+| open pages keeping themselves current or reloading after an upgrade ([live](#live)) | the remembered skin unchanged, however many are open |
+| a remembered skin this hub no longer has | a redirect to `/board` |
+| scripting turned off, or a browser that stores nothing | `/` redirects to `/board` every time |
+| a click on a tab | on any HTML page of the hub, a script that stores that tab's skin for a year and for the whole site, as a secure cookie over HTTPS, as the zone is stored |
+| the redirect, `GET` or `HEAD` | `302 Found`, `Cache-Control: no-store` and `Vary: Cookie`: the answer depends on who asks, and a cache never keeps it |
 
 ### Keeping an open page current {#live}
 
@@ -148,7 +178,10 @@ tested.
   is in flight, so a hub under load gets one request per open page, never a queue of them.
 - **Leaving the page** while a refresh is in flight is not a failure: the notice does not go
   up on the way out, nor on a page the browser restores later.
-- **A storage failure on `/` or `/debug`** is plain text rather than a page, as it was before any
+- **A page open at `/` across the upgrade that moved mission control** fetches `/` and is
+  answered with a redirect, so it says it is not refreshed until the reader reloads it
+  once; from then on it is at `/board`.
+- **A storage failure on a skin** is plain text rather than a page, as it was before any
   of this, so it carries no shell and leaves the reader's zone unlearnt until the hub answers
   again. It is not cached either way.
 - **Two readers in different zones** are two browsers. Nothing is shared between them, and

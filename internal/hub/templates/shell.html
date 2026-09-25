@@ -21,10 +21,30 @@
     }
     body { background: var(--bg); color: var(--fg); }
     a { color: var(--link); }
+    nav.tabs { display: flex; flex-wrap: wrap; gap: 0.3rem; margin: 0 0 1.5rem; border-bottom: 1px solid var(--rule); }
+    nav.tabs a.tab { padding: 0.4rem 0.8rem; color: var(--muted); text-decoration: none; border-bottom: 2px solid transparent; margin-bottom: -1px; }
+    nav.tabs a.tab:hover { color: var(--fg); }
+    nav.tabs a.tab[aria-current="page"] { color: var(--fg); border-bottom-color: var(--accent); }
+    p.notice { color: var(--warn); }
+    .level-ok { color: var(--accent); }
+    .level-warning { color: var(--warn); }
+    .level-critical { color: var(--bad); font-weight: 600; }
   </style>
   {{ if .Live }}<meta name="monitor-live" content="{{ .StalledNotice }}" data-rendering="{{ .Rendering }}">{{ end }}
   <script>
     (function () {
+      // A click on a tab is the reader choosing a skin, which `/` opens from then on; the
+      // page stores it and the hub only reads it, as with the zone (ADR 0037). Listening on
+      // the document outlives the body a refresh swaps in.
+      document.addEventListener("click", function (event) {
+        var tab = event.target.closest && event.target.closest("a.tab[data-skin]");
+        if (!tab) return;
+        try {
+          document.cookie = "skin=" + tab.getAttribute("data-skin") + "; path=/; max-age=31536000; samesite=lax" +
+            (location.protocol === "https:" ? "; secure" : "");
+        } catch (e) {}
+      });
+
       // The reader's time zone is the one thing the server cannot know (ADR 0026): state it,
       // then fetch the page again in it. The cookie is read back first, so a browser that
       // will not store it keeps the UTC page instead of fetching forever. reload() keeps the
@@ -137,4 +157,8 @@
       }
     })();
   </script>
+{{ end }}
+
+{{ define "tabs" }}
+  <nav class="tabs">{{ range .Tabs }}<a class="tab" href="{{ .URL }}" data-skin="{{ .Skin }}"{{ if .Open }} aria-current="page"{{ end }}>{{ .Label }}</a>{{ end }}</nav>
 {{ end }}

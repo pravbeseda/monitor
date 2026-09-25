@@ -302,6 +302,23 @@ func (s *SQLite) EventsBetween(ctx context.Context, from, to time.Time) ([]Trans
 		formatTime(from), formatTime(to))
 }
 
+// RecentEvents returns the newest transitions of the named nodes, at most limit of them,
+// newest first; inside one instant, the one recorded last comes first.
+func (s *SQLite) RecentEvents(ctx context.Context, nodes []string, limit int) ([]Transition, error) {
+	if len(nodes) == 0 {
+		return nil, nil
+	}
+	args := make([]any, 0, len(nodes)+1)
+	for _, node := range nodes {
+		args = append(args, node)
+	}
+	args = append(args, limit)
+	placeholders := strings.TrimSuffix(strings.Repeat("?, ", len(nodes)), ", ")
+	return readEvents(ctx, s.db, `
+		SELECT id, at, node, metric, labels, from_level, to_level, from_since, readings
+		FROM events WHERE node IN (`+placeholders+`) ORDER BY at DESC, id DESC LIMIT ?`, args...)
+}
+
 func readEvents(ctx context.Context, from querier, query string, args ...any) ([]Transition, error) {
 	rows, err := from.QueryContext(ctx, query, args...)
 	if err != nil {

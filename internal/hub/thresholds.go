@@ -210,7 +210,7 @@ func refuseForm(w http.ResponseWriter, printer *i18n.Printer, ref storage.Series
 
 func emptyForm(printer *i18n.Printer, ref storage.SeriesRef, lang string) thresholdView {
 	return thresholdView{
-		shell:          still(printer, "threshold.title"),
+		shell:          still(printer, "threshold.title", "", lang),
 		Series:         ref.Node + " · " + ref.Metric,
 		Volume:         volume(printer, ref.Labels),
 		Unit:           printer.T("unit." + string(history.UnitOf(ref.Metric))),

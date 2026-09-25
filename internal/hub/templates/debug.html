@@ -14,15 +14,11 @@
     th { font-weight: 600; font-size: 0.85rem; color: var(--muted); }
     small.stale, small.unusual { color: var(--warn); }
     small.unwatched, a.set { color: var(--muted); font-size: 0.85rem; }
-    p.notice { color: var(--warn); }
-    .level-ok { color: var(--accent); }
-    .level-warning { color: var(--warn); }
-    .level-critical { color: var(--bad); font-weight: 600; }
   </style>
 </head>
 <body>
+  {{ template "tabs" . }}
   <h1>{{ .Title }} <small>{{ .Version }}</small></h1>
-  <nav><a href="{{ .BoardURL }}">{{ .Board }}</a></nav>
   {{ if not .Nodes }}
     <p>{{ .Empty }}</p>
   {{ end }}

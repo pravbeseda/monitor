@@ -34,7 +34,8 @@ func TestEveryPageKeepsItselfCurrent(t *testing.T) {
 		store  hub.Store
 		target string
 	}{
-		"mission control":   {stored{states: []storage.NodeState{laptop}}, "/"},
+		"mission control":   {stored{states: []storage.NodeState{laptop}}, "/board"},
+		"timeline":          {stored{states: []storage.NodeState{laptop}}, "/timeline"},
 		"debug":             {stored{states: []storage.NodeState{laptop}}, "/debug"},
 		"chart":             {served{series: []seriesPoints{volume()}}, oneVolume},
 		"refusal":           {served{}, "/history?metric=disk.free_pct&nonsense=1"},
@@ -75,7 +76,7 @@ func TestEveryPageKeepsItselfCurrent(t *testing.T) {
 // spec: web.md#live — a page whose address names its language refreshes in that language,
 // whatever the browser asks for, so a refresh never reloads it into another one.
 func TestTheMarkerFollowsTheQuerysLanguage(t *testing.T) {
-	body := getIn(t, stored{states: []storage.NodeState{laptop}}, "/?lang=ru", "en").Body.String()
+	body := getIn(t, stored{states: []storage.NodeState{laptop}}, "/board?lang=ru", "en").Body.String()
 
 	if want := liveMarker("Не обновляется: хаб не отвечает", "ru"); !strings.Contains(body, want) {
 		t.Errorf("page does not carry %q", want)

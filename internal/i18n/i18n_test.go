@@ -191,3 +191,55 @@ func TestPrinterMarksAnOffsetOnlyZone(t *testing.T) {
 		t.Errorf("Zone = %q, want the offset", got)
 	}
 }
+
+// spec: timeline.md#changes — a day heading: today, yesterday, or the day and month, with
+// the year when it is not the current one, as each language writes them.
+func TestDateNamesTheDay(t *testing.T) {
+	now := time.Date(2026, time.September, 24, 15, 40, 0, 0, time.UTC)
+	for _, tc := range []struct {
+		locale i18n.Locale
+		at     time.Time
+		want   string
+	}{
+		{i18n.English, now.Add(-time.Hour), "Today"},
+		{i18n.Russian, now.Add(-16 * time.Hour), "Вчера"},
+		{i18n.English, time.Date(2026, time.September, 21, 9, 0, 0, 0, time.UTC), "21 September"},
+		{i18n.Russian, time.Date(2026, time.September, 21, 9, 0, 0, 0, time.UTC), "21 сентября"},
+		{i18n.English, time.Date(2025, time.September, 21, 9, 0, 0, 0, time.UTC), "21 September 2025"},
+		{i18n.Russian, time.Date(2025, time.March, 1, 9, 0, 0, 0, time.UTC), "1 марта 2025"},
+	} {
+		if got := i18n.For(tc.locale).Date(tc.at, now); got != tc.want {
+			t.Errorf("%s Date(%v) = %q, want %q", tc.locale, tc.at, got, tc.want)
+		}
+	}
+}
+
+// spec: timeline.md#changes — days are counted in the reader's zone.
+func TestDateCountsDaysInTheReadersZone(t *testing.T) {
+	moscow, err := time.LoadLocation("Europe/Moscow")
+	if err != nil {
+		t.Fatalf("load the zone: %v", err)
+	}
+	now := time.Date(2026, time.September, 24, 0, 30, 0, 0, time.UTC) // 03:30 in Moscow
+	at := time.Date(2026, time.September, 23, 22, 0, 0, 0, time.UTC)  // 01:00 in Moscow, the same day
+	if got := i18n.For(i18n.English).In(moscow).Date(at, now); got != "Today" {
+		t.Errorf("Date = %q, want today in Moscow", got)
+	}
+}
+
+// spec: timeline.md#changes — yesterday is the calendar day before, even where the clocks
+// skip midnight.
+func TestDateKnowsYesterdayWhereClocksSkipMidnight(t *testing.T) {
+	santiago, err := time.LoadLocation("America/Santiago")
+	if err != nil {
+		t.Fatalf("load the zone: %v", err)
+	}
+	now := time.Date(2025, time.September, 8, 0, 30, 0, 0, santiago)
+	p := i18n.For(i18n.English).In(santiago)
+	if got := p.Date(time.Date(2025, time.September, 7, 18, 0, 0, 0, santiago), now); got != "Yesterday" {
+		t.Errorf("Sunday = %q, want Yesterday", got)
+	}
+	if got := p.Date(time.Date(2025, time.September, 6, 23, 45, 0, 0, santiago), now); got != "6 September" {
+		t.Errorf("Saturday = %q, want its date", got)
+	}
+}

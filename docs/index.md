@@ -46,7 +46,7 @@ One decision per file, each stating what was rejected and why. New records start
 | [0023](decisions/0023-proxy-holds-the-web-perimeter.md) | The proxy authenticates the web; the hub authenticates only ingest | accepted |
 | [0024](decisions/0024-the-hub-follows-a-target-with-a-kept-install-script.md) | The hub follows a target file with a kept copy of the install script | accepted |
 | [0025](decisions/0025-the-hub-checks-hourly-and-downloads-a-binary-to-install-it.md) | The hub checks hourly and downloads a binary only to install it | accepted |
-| [0026](decisions/0026-reader-time-zone-from-the-browser.md) | The reader's time zone comes from the browser in a cookie; pages stay server-rendered | accepted |
+| [0026](decisions/0026-reader-time-zone-from-the-browser.md) | The reader's time zone comes from the browser in a cookie; pages stay server-rendered | accepted, amended by [0037](decisions/0037-skins-are-tabs-and-the-root-opens-the-last-one.md) |
 | [0027](decisions/0027-the-hub-installer-reuses-the-binary-in-place.md) | The hub's installer reuses a binary in place that is already its release | accepted |
 | [0028](decisions/0028-agents-follow-a-target-the-hub-serves.md) | Agents follow a target the hub serves under `/api/v1/agent/` | accepted |
 | [0029](decisions/0029-pages-refresh-by-fetching-their-own-address.md) | Pages refresh themselves by fetching their own address | accepted |
@@ -55,8 +55,10 @@ One decision per file, each stating what was rejected and why. New records start
 | [0032](decisions/0032-thresholds-are-set-in-the-interface.md) | Thresholds are set in the interface and stored with the data | accepted |
 | [0033](decisions/0033-a-subject-is-a-series.md) | A subject is a series, and a threshold is one comparison per level | accepted, amended by [0034](decisions/0034-a-series-without-a-sensor-still-ages.md) |
 | [0034](decisions/0034-a-series-without-a-sensor-still-ages.md) | A series that names no sensor ages by its node's longest interval | accepted |
-| [0035](decisions/0035-mission-control-is-rendered-by-the-hub.md) | Mission control is rendered by the hub; TypeScript waits for a skin that needs a client | accepted |
+| [0035](decisions/0035-mission-control-is-rendered-by-the-hub.md) | Mission control is rendered by the hub; TypeScript waits for a skin that needs a client | accepted, amended by [0037](decisions/0037-skins-are-tabs-and-the-root-opens-the-last-one.md) |
 | [0036](decisions/0036-an-anomaly-is-a-value-outside-its-weeks-band.md) | An anomaly is a value outside the band its series kept the week before | accepted |
+| [0037](decisions/0037-skins-are-tabs-and-the-root-opens-the-last-one.md) | Skins are tabs, each at its own address; `/` opens the one last chosen | accepted |
+| [0038](decisions/0038-a-lane-is-summarised-on-read.md) | A timeline lane is summarised on read from the event log and the stored points | accepted |
 
 ## Behaviour specs
 
@@ -77,12 +79,13 @@ can see ([ADR 0017](decisions/0017-one-spec-and-decision-gates.md)). New specs s
 | [history.md](specs/history.md) | The history series, `/api/v1/series`, `/api/v1/history` and the drill-down page | approved |
 | [state.md](specs/state.md) | `/api/v1/state`: subjects, stored levels, staleness and anomalies, and the levels on `/debug` | approved |
 | [anomaly.md](specs/anomaly.md) | Each series' norm, how far its newest value lies from it, and the anomaly rank | approved |
-| [mission-control.md](specs/mission-control.md) | `/`, mission control: what needs attention, in what order, and the move of the table to `/debug` | approved |
+| [mission-control.md](specs/mission-control.md) | `/board`, mission control: what needs attention, in what order, and the move of the table to `/debug` | approved |
+| [timeline.md](specs/timeline.md) | `/timeline`: what needs attention now, each node's last 24 hours, and the levels that changed | approved |
 | [thresholds.md](specs/thresholds.md) | The page that sets what a series is judged by — what may be stored as a threshold, and whether it may be shown as unusual | approved |
 | [release.md](specs/release.md) | How a merge tags itself, what a tag publishes, how a release is signed, and how an artifact is checked | approved |
 | [installer.md](specs/installer.md) | One command that installs or upgrades a hub or an agent from a signed release, the hub following the version its host names, and an agent following the one the hub names | approved |
 | [deployment.md](specs/deployment.md) | The install layout, the units — the hub's and the agents' update timers among them — and what `install-agent.sh` does to a node | approved |
-| [web.md](specs/web.md) | What every hub page shares: the reader's time zone, how a page says which zone it used, how an open page keeps itself current, and the shell | approved |
+| [web.md](specs/web.md) | What every hub page shares: the tabs between skins and the one `/` opens, the reader's time zone, how a page says which zone it used, how an open page keeps itself current, and the shell | approved |
 
 ## Design notes
 
@@ -104,6 +107,7 @@ Reasoning from working sessions, including options that were rejected.
 | [2026-09-20](log/2026-09-20-thresholds-in-the-interface.md) | Thresholds move into the interface: why the rule engine was not generalised, and what three reviews changed |
 | [2026-09-22](log/2026-09-22-mvp-scope.md) | MVP scope: why it is infra only, why backups wait, and whose memory figure a Mac reports |
 | [2026-09-23](log/2026-09-23-mission-control.md) | Mission control: the engine slice before the board, no health number, server-rendered, and which deviation |
+| [2026-09-24](log/2026-09-24-timeline.md) | The timeline and tabs between skins: anomalies left to the log, the choice made by a tab click, and past freshness |
 
 ## Not written yet
 
