@@ -16,23 +16,10 @@ import (
 // ingestPath is versioned like every endpoint the hub serves.
 const ingestPath = "/api/v1/ingest"
 
-// StatusError is a hub answer that was not 200.
-type StatusError struct {
-	Status  int
-	Message string
-}
-
-func (e StatusError) Error() string {
-	if e.Message == "" {
-		return fmt.Sprintf("the hub answered %d", e.Status)
-	}
-	return fmt.Sprintf("the hub answered %d: %s", e.Status, e.Message)
-}
-
 // retryable tells a batch worth keeping from one that will never be accepted: a refused
 // shape stays refused, while a busy or broken hub recovers.
 func retryable(err error) bool {
-	var status StatusError
+	var status api.StatusError
 	if errors.As(err, &status) {
 		return status.Status == http.StatusTooManyRequests || status.Status >= http.StatusInternalServerError
 	}
@@ -55,7 +42,7 @@ func NewHTTPClient(hubURL, token string, timeout time.Duration) *HTTPClient {
 	}
 }
 
-// Send posts one request and returns the hub's answer, or a StatusError when the hub
+// Send posts one request and returns the hub's answer, or an api.StatusError when the hub
 // refused it.
 func (c *HTTPClient) Send(ctx context.Context, request api.Request) (api.Response, error) {
 	body, err := json.Marshal(request)
@@ -78,7 +65,7 @@ func (c *HTTPClient) Send(ctx context.Context, request api.Request) (api.Respons
 	if resp.StatusCode != http.StatusOK {
 		var refusal api.ErrorBody
 		_ = json.NewDecoder(resp.Body).Decode(&refusal)
-		return api.Response{}, StatusError{Status: resp.StatusCode, Message: refusal.Error}
+		return api.Response{}, api.StatusError{Status: resp.StatusCode, Message: refusal.Error}
 	}
 
 	var answer api.Response

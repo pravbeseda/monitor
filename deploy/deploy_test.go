@@ -297,7 +297,8 @@ func TestExampleEnvironmentFilesHoldPlaceholdersOnly(t *testing.T) {
 		keys []string
 	}{
 		{agentEnv, []string{"MONITOR_HUB", "MONITOR_NODE", "MONITOR_TOKEN"}},
-		{hubEnv, []string{"MONITOR_TELEGRAM_TOKEN", "MONITOR_TELEGRAM_CHAT_ID"}},
+		{hubEnv, []string{"MONITOR_TELEGRAM_TOKEN", "MONITOR_TELEGRAM_CHAT_ID",
+			"MONITOR_GDRIVE_CLIENT_ID", "MONITOR_GDRIVE_CLIENT_SECRET", "MONITOR_GDRIVE_REFRESH_TOKEN"}},
 	}
 
 	for _, tc := range tests {

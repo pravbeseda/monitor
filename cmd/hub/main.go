@@ -19,11 +19,15 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/pravbeseda/monitor/internal/collect"
 	"github.com/pravbeseda/monitor/internal/config"
 	"github.com/pravbeseda/monitor/internal/evaluate"
 	"github.com/pravbeseda/monitor/internal/hub"
+	"github.com/pravbeseda/monitor/internal/ingest"
 	"github.com/pravbeseda/monitor/internal/logging"
 	"github.com/pravbeseda/monitor/internal/notify"
+	"github.com/pravbeseda/monitor/internal/sensor"
+	"github.com/pravbeseda/monitor/internal/sensor/gdrive"
 	"github.com/pravbeseda/monitor/internal/storage"
 	"github.com/pravbeseda/monitor/internal/version"
 )
@@ -113,14 +117,16 @@ func run(args []string, out io.Writer) error {
 		ReadHeaderTimeout: readHeaderTimeout,
 	}
 	evaluating := make(chan struct{})
+	collecting := make(chan struct{})
 	serving := make(chan struct{})
 
-	// Both goroutines write to the database that the deferred Close takes away, so
+	// Every goroutine writes to the database that the deferred Close takes away, so
 	// whatever ends the run — a signal or a listener that never came up — cancels them
 	// first and waits: a delivery recorded after the handle went would be sent again.
 	defer func() {
 		stop()
 		<-evaluating
+		<-collecting
 		<-serving
 	}()
 
@@ -134,6 +140,10 @@ func run(args []string, out io.Writer) error {
 			Started:  time.Now(),
 			Now:      time.Now,
 		}).Run(ctx, evaluate.Interval)
+	}()
+	go func() {
+		defer close(collecting)
+		collect.Run(ctx, cfg.Nodes(), hubSensors(cfg), ingest.NewHandler(cfg, store, time.Now), time.Now)
 	}()
 	go func() {
 		defer close(serving)
@@ -151,6 +161,16 @@ func run(args []string, out io.Writer) error {
 		return fmt.Errorf("serve on %s: %w", opts.listen, err)
 	}
 	return nil
+}
+
+// hubSensors are the sensors the hub carries for its service nodes (ADR 0039), each built
+// only when the configuration gave it credentials.
+func hubSensors(cfg *config.Config) []sensor.Sensor {
+	var out []sensor.Sensor
+	if creds := cfg.GoogleDrive(); creds != (config.GoogleDrive{}) {
+		out = append(out, gdrive.New(gdrive.Credentials(creds)))
+	}
+	return out
 }
 
 // listenAddress is the environment's address, or the product default. An empty variable is

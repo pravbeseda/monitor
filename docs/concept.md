@@ -74,6 +74,7 @@ metric metadata) + a lazy-loaded renderer.
 | infra | free space, load, uptime, backups | own agents on nodes |
 | finance | invested total, savings, contributions | an external sensor; manual input deferred |
 | health | steps, sleep, weight | Google Fit / Health Connect export |
+| services | cloud storage free space | a service node the hub collects itself ([spec](specs/services.md)) |
 
 Manual input is deferred: the MVP adds no metric a person has to type in, and finance and
 health wait for sources that report on their own

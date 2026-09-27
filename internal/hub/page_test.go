@@ -32,8 +32,9 @@ type stored struct {
 	err       error
 }
 
-func (s stored) SaveIngest(context.Context, storage.Ingest) error { return nil }
-func (s stored) Close() error                                     { return nil }
+func (s stored) SaveIngest(context.Context, storage.Ingest) error    { return nil }
+func (s stored) IntroduceNode(context.Context, storage.Ingest) error { return nil }
+func (s stored) Close() error                                        { return nil }
 
 func (s stored) Snapshot(context.Context, []string) (storage.Snapshot, error) {
 	return storage.Snapshot{Nodes: s.states, States: s.levels, Thresholds: s.thresholds, Excluded: s.excluded}, s.err

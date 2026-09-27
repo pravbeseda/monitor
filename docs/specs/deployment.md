@@ -92,6 +92,7 @@ a fact about one host, not about the product.
 | `MONITOR_LISTEN` | `hub.env` | the loopback address the hub serves on, when the host's free port is not the default ([hub-config.md](hub-config.md#startup)) |
 | `MONITOR_TELEGRAM_TOKEN`, `MONITOR_TELEGRAM_CHAT_ID` | `hub.env` | notifier credentials, when the channel is Telegram |
 | the variables `hub.yaml` names in each node's `token_env` | `hub.env` | the token each node presents |
+| `MONITOR_GDRIVE_CLIENT_ID`, `MONITOR_GDRIVE_CLIENT_SECRET`, `MONITOR_GDRIVE_REFRESH_TOKEN` | `hub.env` | the Google Drive sensor's credentials, when a service node runs it ([services.md](services.md#the-file-and-the-environment)) |
 
 ## Behaviour
 

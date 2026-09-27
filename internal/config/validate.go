@@ -68,12 +68,13 @@ func validateClass(f file, name string) error {
 	// interval that looks too short at this layer can be right once the node is resolved.
 	// That comparison belongs to resolve, where the tick is final.
 	profile := lastList(builtin.Profile, custom.Profile)
-	if _, err := sensorSettings(profile,
-		defaultSensors, builtin.Sensors, f.Sensors, custom.Sensors); err != nil {
+	service := name == ServiceClass
+	sensors, err := sensorSettings(profile,
+		defaultSensors, builtin.Sensors, forHost(service, f.Sensors), custom.Sensors)
+	if err != nil {
 		return fmt.Errorf("%s%w", where, err)
 	}
-
-	return nil
+	return checkHost(where, service, sensors)
 }
 
 // classNames is every class the hub knows: the compiled-in ones and the file's own.

@@ -272,3 +272,57 @@ func TestSnapshotOrdersNodesByName(t *testing.T) {
 		t.Errorf("states = %+v, want them ordered by name", states)
 	}
 }
+
+// spec: services.md#collection — a service node is on record from the first time the hub
+// runs it, so it can fall silent before it ever stores a measurement.
+func TestIntroduceNodeRecordsANodeWithNoRecord(t *testing.T) {
+	db := open(t)
+	at := time.Date(2026, 9, 27, 10, 0, 0, 0, time.UTC)
+
+	if err := db.IntroduceNode(context.Background(), ingest("cloud", at)); err != nil {
+		t.Fatalf("IntroduceNode: %v", err)
+	}
+
+	if node := db.node(t, "cloud"); !node.LastSeen.Equal(at) {
+		t.Errorf("last-seen = %v, want %v", node.LastSeen, at)
+	}
+}
+
+// spec: services.md#collection — a restart introduces the node again and changes nothing, so
+// a node already silent stays silent rather than reporting again.
+func TestIntroduceNodeLeavesTheLastSeenOfARecordedNode(t *testing.T) {
+	db := open(t)
+	seen := time.Date(2026, 9, 27, 10, 0, 0, 0, time.UTC)
+	if err := db.SaveIngest(context.Background(), ingest("cloud", seen, free("/", 1))); err != nil {
+		t.Fatalf("SaveIngest: %v", err)
+	}
+
+	if err := db.IntroduceNode(context.Background(), ingest("cloud", seen.Add(5*time.Hour))); err != nil {
+		t.Fatalf("IntroduceNode: %v", err)
+	}
+
+	if node := db.node(t, "cloud"); !node.LastSeen.Equal(seen) {
+		t.Errorf("last-seen = %v, want it left at %v", node.LastSeen, seen)
+	}
+}
+
+// spec: services.md#collection — a hub upgraded while its service keeps failing still shows
+// its own version for the service node, without the node counting as seen.
+func TestIntroduceNodeKeepsTheVersionOfARecordedNodeCurrent(t *testing.T) {
+	db := open(t)
+	seen := time.Date(2026, 9, 27, 10, 0, 0, 0, time.UTC)
+	if err := db.SaveIngest(context.Background(), ingest("cloud", seen, free("/", 1))); err != nil {
+		t.Fatalf("SaveIngest: %v", err)
+	}
+	upgraded := ingest("cloud", seen.Add(5*time.Hour))
+	upgraded.AgentVersion = "9.9.9"
+
+	if err := db.IntroduceNode(context.Background(), upgraded); err != nil {
+		t.Fatalf("IntroduceNode: %v", err)
+	}
+
+	node := db.node(t, "cloud")
+	if node.AgentVersion != "9.9.9" || !node.LastSeen.Equal(seen) {
+		t.Errorf("node = %+v, want version 9.9.9 and last-seen left at %v", node, seen)
+	}
+}

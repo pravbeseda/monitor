@@ -13,7 +13,10 @@
 
 The agent is the only thing running on a node. It ticks, asks each sensor whose interval
 has elapsed for measurements, posts them to the hub, and applies whatever configuration
-the response carries. It decides nothing about meaning: no thresholds, no alerts, no
+the response carries. The hub runs the same loop for each service node it collects itself,
+asking for its configuration on the first tick and collecting on the second, which follows
+at once, and reporting in process
+([services.md](services.md)). It decides nothing about meaning: no thresholds, no alerts, no
 history.
 
 It holds three local values and no more — the hub URL, its node name, and its token — so

@@ -7,7 +7,8 @@
   [0010](../decisions/0010-agent-configuration.md),
   [0011](../decisions/0011-quality-gates.md),
   [0028](../decisions/0028-agents-follow-a-target-the-hub-serves.md),
-  [0032](../decisions/0032-thresholds-are-set-in-the-interface.md)
+  [0032](../decisions/0032-thresholds-are-set-in-the-interface.md),
+  [0039](../decisions/0039-the-hub-collects-a-service-node.md)
 
 ## Purpose
 
@@ -18,7 +19,8 @@ authenticates with, and a flat per-node configuration with a version, which
 so that nothing downstream merges anything.
 
 It does not evaluate: the meaning of `silence_after` belongs to
-[evaluation](evaluation.md), which owns its validation too. It parses `digest` and `notify`
+[evaluation](evaluation.md), which owns its validation too, save the lower bound a service
+node's window must respect ([services.md](services.md#startup)). It parses `digest` and `notify`
 too, but what they mean and what refuses them belongs to that spec. This one owns the
 tokens, what reaches an agent, and the version each node's agent is told to follow.
 
@@ -65,9 +67,10 @@ nodes:
 **Product defaults** (compiled in, overridable at every layer): `base_tick` 5m, the
 filesystem allow-list and the skip list above, `disk` every 15m, the
 [host sensors](host-sensors.md) `load` and `memory` every 5m and `uptime` and `systemd` every
-15m, and classes
-`laptop` (profile `[disk, load, memory, uptime]`, disk every 1h) and `server` (profile
-`[disk, load, memory, uptime, systemd]`). A compiled-in interval never stops the hub
+15m, `gdrive` every 1h, and classes
+`laptop` (profile `[disk, load, memory, uptime]`, disk every 1h), `server` (profile
+`[disk, load, memory, uptime, systemd]`) and `service` (no profile, `silence_after` 3h), whose
+nodes the hub collects itself ([services.md](services.md)). A compiled-in interval never stops the hub
 starting: where it is shorter than the tick a node resolves to, the sensor collects every
 tick instead. A hub upgrades itself unattended
 ([0025](../decisions/0025-the-hub-checks-hourly-and-downloads-a-binary-to-install-it.md)),
@@ -76,7 +79,7 @@ The skip list names mount points no one watches — the system volumes of a Mac 
 simulator images — and says nothing about any installation.
 
 **Deployment settings** (no defaults, absent means a startup error): the `nodes` map, each
-node's `class` and `token_env`. Tokens themselves live in the environment, never in the
+node's `class` and — except on a `service` node, which no agent speaks for — `token_env`. Tokens themselves live in the environment, never in the
 file.
 
 Each node names one environment variable holding its token: a handful of nodes needs no
@@ -118,7 +121,7 @@ One row = one test. Anchors: `spec: hub-config.md#<heading>`.
 | a key the hub does not know, at any level | startup error naming the key |
 | `rules` at any level, or a node's `volumes` — the two keys thresholds used to live in | the hub starts; one warning per key names it and says thresholds are now set on the page, and no number inside it is used ([thresholds.md](thresholds.md)) |
 | `nodes` missing or empty | startup error: a hub with no nodes serves nobody |
-| a node without `token_env` | startup error naming the node |
+| a node without `token_env`, of a class other than `service` | startup error naming the node |
 | `token_env` names a variable that is unset or empty | startup error naming the variable |
 | a token shorter than 32 characters | startup error naming the variable |
 | two nodes sharing one `token_env` | startup error naming both nodes |
@@ -184,7 +187,7 @@ logs both versions when it delivers a new one.
 
 | Situation | Result |
 |---|---|
-| every `token_env` is set at startup | the tokens are held in memory for ingest to compare |
+| every `token_env` is set at startup | the tokens are held in memory for ingest to compare; a `service` node has none, and no request authenticates as it |
 | a token is rotated on the server | the new value takes effect when the hub restarts |
 | a token appears anywhere in a log line, an error or a response | never happens; errors name the variable, never its value |
 
@@ -219,7 +222,10 @@ logs both versions when it delivers a new one.
 - **A sensor in the agent's manifest that no layer enables**: it stays off. The manifest
   records what the agent could run; the configuration decides what it does run.
 - **A sensor enabled for a node whose manifest lacks it**: it is delivered anyway and the
-  agent ignores what it cannot run; the hub does not filter by manifest in stage 1.
+  agent ignores what it cannot run; the hub does not filter by manifest in stage 1. The one
+  exception is where a sensor runs at all: the hub's own sensors only on a `service` node
+  and an agent's never there, which startup refuses
+  ([services.md](services.md#startup)).
 - **A hub upgraded to a release whose compiled-in profiles changed**: every node that takes
   its profile from code resolves differently, so each is delivered a new
   [configuration version](#configuration-version) on its next request, and its

@@ -14,7 +14,8 @@ your own — and keep them out of this repository.
 What you need: `ssh`/`sudo` access to each machine. Section 0 needs nothing else. The manual
 path below also needs a checkout of this repository — it carries the verifier and the key a
 release is checked with — and the Go toolchain `go.mod` names if you build the binaries
-yourself. One Debian host runs the hub; every node, Debian or macOS, runs the agent.
+yourself. One Debian host runs the hub; every node, Debian or macOS, runs the agent — except a
+service node, which the hub collects itself ([Watching Google Drive](#watching-google-drive)).
 
 ## 0. The short way: one command
 
@@ -194,7 +195,9 @@ hub's own `/thresholds` page once a series is reporting
 ([specs/thresholds.md](specs/thresholds.md),
 [ADR 0032](decisions/0032-thresholds-are-set-in-the-interface.md)). `hub.env` holds only
 secrets: one token per node, named by that node's `token_env`, plus the Telegram credentials
-when the channel is `telegram`. Generate a token per node, long and random:
+when the channel is `telegram` and the Google Drive ones when a service node watches Drive.
+Delete the example's `cloud` node unless it does: with placeholder credentials it would fall
+silent three hours after the start. Generate a token per node, long and random:
 
 ```sh
 openssl rand -base64 32
@@ -211,7 +214,7 @@ systemctl status monitor-hub.service
 ```
 
 A healthy start writes one line to the journal —
-`monitor-hub <version> listening on 127.0.0.1:8080 (nodes: 2, notify: log)` — and the page
+`monitor-hub <version> listening on 127.0.0.1:8080 (nodes: 3, notify: log)` — and the page
 answers on the host itself: `curl -s localhost:8080/ | head`. When that port is already taken
 on the host, set `MONITOR_LISTEN` in `hub.env` to another loopback address, for example
 `MONITOR_LISTEN=127.0.0.1:8090`, and restart the service: the logged line names the address
@@ -588,6 +591,55 @@ sudo systemctl daemon-reload
 That leaves the configuration and the measurements — `/etc/monitor/hub.yaml`,
 `/etc/monitor/hub.env` and `/var/lib/monitor` — standing. Removing them is a separate,
 deliberate step: the database is the whole history.
+
+## Watching Google Drive
+
+A Google account's free space is a series of a service node, which the hub collects itself
+([services.md](specs/services.md)). Nothing is installed on any machine; the hub needs an
+OAuth client of your own and a refresh token for the account, once.
+
+1. In the Google Cloud console, create a project and enable the **Google Drive API** in it.
+   Without it every collection logs `accessNotConfigured`.
+2. Configure the consent screen: user type **External**, and add the scope
+   `https://www.googleapis.com/auth/drive.appdata`. It is non-sensitive, so no verification
+   is asked. Where a homepage, a privacy policy and terms of service are asked for, serve the
+   pages in [`public/`](../public/) from a domain of yours. Then **publish the app to
+   production**: in Testing, Google expires its refresh tokens after seven days.
+3. Create an OAuth client of type **Web application** with the authorized redirect URI
+   `https://developers.google.com/oauthplayground`.
+4. In the [OAuth Playground](https://developers.google.com/oauthplayground), open the
+   settings, tick **Use your own OAuth credentials**, enter the client's id and secret, and
+   keep the access type **Offline**. Authorize the scope from step 2 with the account to
+   watch — past the "unverified app" warning, and without limiting the access in time — then
+   exchange the code for tokens and copy the **refresh token**.
+5. Add the three values to `hub.env`, and the node to `hub.yaml`:
+
+   ```sh
+   MONITOR_GDRIVE_CLIENT_ID=replace-me
+   MONITOR_GDRIVE_CLIENT_SECRET=replace-me
+   MONITOR_GDRIVE_REFRESH_TOKEN=replace-me
+   ```
+
+   ```yaml
+   nodes:
+     cloud:
+       class: service
+       sensors:
+         gdrive: { enabled: true }
+   ```
+
+6. Restart the hub. `gdrive.free_bytes` and `gdrive.free_pct` appear under `cloud` on
+   `/debug` within seconds; set a threshold on the first to be told before the account fills.
+
+When Google stops answering the hub, `cloud` falls silent three hours later. The journal says
+why, naming the credential to replace:
+
+| The journal says | Do |
+|---|---|
+| `invalid_grant` | repeat step 4 and replace `MONITOR_GDRIVE_REFRESH_TOKEN` — the token was revoked, went unused for six months, or came from an app still in Testing |
+| `unauthorized_client` | repeat step 4 with the Playground's own-credentials box ticked, and replace `MONITOR_GDRIVE_REFRESH_TOKEN` |
+| `invalid_client` | check `MONITOR_GDRIVE_CLIENT_ID` and `MONITOR_GDRIVE_CLIENT_SECRET` against the console |
+| `accessNotConfigured` | enable the Drive API, step 1 |
 
 ## The proxy in front of the hub
 

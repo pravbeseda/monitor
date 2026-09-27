@@ -182,6 +182,9 @@ Each line is an index into the ADR that owns it.
   storage + evaluation + web + notifier), shared code in `internal/...`. → 0004
 - **Push, not pull**: agents POST to `/api/v1/ingest` over HTTPS with a per-node token; node
   silence is an expected state configured per node class (`silence_after`). → 0002
+- **An online service is a node the hub collects itself** (class `service`, no token): the
+  agent's loop in process, seen when it stores a measurement (and when first recorded), its
+  credentials in `hub.env`. → 0039
 - **Sensors are in-process modules** (`Sensor: collect() -> []Measurement`); the interface
   must not reveal whether an implementation is built in or external. → 0003
 - **A metric costs no code**: a measurement declares itself, its id carries its unit, and

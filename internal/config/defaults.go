@@ -29,6 +29,7 @@ var defaultSensors = map[string]fileSensor{
 	"memory":  {Interval: "5m"},
 	"uptime":  {Interval: "15m"},
 	"systemd": {Interval: "15m"},
+	"gdrive":  {Interval: "1h"},
 }
 
 var defaultClasses = map[string]fileClass{
@@ -41,4 +42,7 @@ var defaultClasses = map[string]fileClass{
 		Profile:      []string{"disk", "load", "memory", "uptime", "systemd"},
 		SilenceAfter: "10m",
 	},
+	// No profile: a service sensor needs credentials, so it runs only where the file enables
+	// it. Three hourly collections go by before a service node falls silent.
+	ServiceClass: {SilenceAfter: "3h"},
 }

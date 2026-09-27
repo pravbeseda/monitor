@@ -1,0 +1,64 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Privacy Policy · Monitor</title>
+  <meta name="description" content="What data Monitor accesses in a Google account, how it is used and stored, and how to revoke access.">
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+<main>
+  <h1>Privacy Policy</h1>
+  <p class="lead">Effective September 27, 2026</p>
+
+  <p>Monitor is a private, self-hosted application. Each installation is operated by one person,
+  its owner, for that person's own use. This policy describes what an installation does with the
+  data of the Google account its owner connects to it.</p>
+
+  <h2>What data is accessed</h2>
+  <p>Monitor requests one Google OAuth scope, <code>https://www.googleapis.com/auth/drive.appdata</code>,
+  and uses it for one call: reading the account's storage quota — its total limit and the space
+  used by Drive, Gmail and Photos together.</p>
+  <p>Monitor does not read, list, download, create, modify or delete any file, email, photo or
+  other content of the account, and it does not access the account holder's name, email address
+  or contacts.</p>
+
+  <h2>How the data is used</h2>
+  <p>The quota figures are used only to compute the free space left in the account, to show it
+  to the owner, and to alert the owner when it runs low.</p>
+
+  <h2>Where the data is stored</h2>
+  <p>The figures are stored in the owner's own Monitor database, on a server the owner controls.
+  The OAuth credentials — the client's id and secret and the refresh token — are kept in a
+  configuration file readable only by the Monitor service on that server. Nothing is sent to the
+  developers of Monitor or to anyone else.</p>
+
+  <h2>Sharing</h2>
+  <p>Google user data is not sold, shared, or transferred to any third party. It is not used for
+  advertising, and not used to train any artificial intelligence or machine learning model.
+  Monitor contains no analytics or tracking.</p>
+
+  <h2>Limited Use</h2>
+  <p>Monitor's use and transfer of information received from Google APIs adheres to the
+  <a href="https://developers.google.com/terms/api-services-user-data-policy">Google API Services
+  User Data Policy</a>, including the Limited Use requirements.</p>
+
+  <h2>Retention and deletion</h2>
+  <p>The quota figures are kept as history for as long as the owner keeps the installation, and
+  are deleted with its database. Access can be revoked at any time at
+  <a href="https://myaccount.google.com/permissions">myaccount.google.com/permissions</a>; after
+  that, Monitor can no longer read the quota.</p>
+
+  <h2>Changes and contact</h2>
+  <p>Changes to this policy are published on this page with a new effective date. Questions can be
+  raised as an issue at
+  <a href="https://github.com/pravbeseda/monitor/issues">github.com/pravbeseda/monitor/issues</a>.</p>
+
+  <footer>
+    <a href="index.html">Monitor</a>
+    <a href="terms.html">Terms of service</a>
+  </footer>
+</main>
+</body>
+</html>

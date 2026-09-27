@@ -53,6 +53,9 @@ type Node struct {
 	target evaluate.Target
 }
 
+// Service says the hub collects this node itself, so it has no Token (ADR 0039).
+func (n Node) Service() bool { return n.Class == ServiceClass }
+
 // Target is what evaluation reads of this node (ADR 0015): the silence window, the
 // interval of every sensor the node actually runs, and the thresholds.
 func (n Node) Target() evaluate.Target { return n.target }
@@ -68,6 +71,7 @@ type Config struct {
 	nodes  map[string]Node
 	digest evaluate.Schedule
 	notify Notify
+	gdrive GoogleDrive
 }
 
 // String keeps tokens out of a debug print, whatever verb is used on the configuration.
@@ -118,11 +122,15 @@ func Load(path string) (*Config, error) {
 	holder := make(map[string]string, len(f.Nodes))
 	for _, name := range sorted(f.Nodes) {
 		entry := f.Nodes[name]
-		if err := claimToken(owner, name, entry.TokenEnv); err != nil {
-			return nil, err
-		}
 		node, err := resolve(f, name, entry)
 		if err != nil {
+			return nil, err
+		}
+		if node.Service() {
+			nodes[name] = node
+			continue
+		}
+		if err := claimToken(owner, name, entry.TokenEnv); err != nil {
 			return nil, err
 		}
 		// The token is what tells the hub which node asks, so it has to name exactly one.
@@ -132,7 +140,11 @@ func Load(path string) (*Config, error) {
 		holder[node.Token] = name
 		nodes[name] = node
 	}
-	return &Config{nodes: nodes, digest: digest, notify: notify}, nil
+	gdrive, err := resolveGoogleDrive(nodes)
+	if err != nil {
+		return nil, fmt.Errorf("%s: %w", path, err)
+	}
+	return &Config{nodes: nodes, digest: digest, notify: notify, gdrive: gdrive}, nil
 }
 
 // Node returns the resolved configuration of one node.
@@ -160,12 +172,8 @@ func (c *Config) Nodes() []Node {
 	return out
 }
 
-// claimToken reads the node's token from its environment variable, refusing a variable
-// two nodes share, one that is unset, and one holding a token too short to be a secret.
+// claimToken refuses a token variable two nodes share.
 func claimToken(owner map[string]string, node, env string) error {
-	if env == "" {
-		return fmt.Errorf("node %s: token_env is required and has no default", node)
-	}
 	if other, taken := owner[env]; taken {
 		return fmt.Errorf("nodes %s and %s share the token variable %s", other, node, env)
 	}
@@ -173,7 +181,12 @@ func claimToken(owner map[string]string, node, env string) error {
 	return nil
 }
 
+// token reads a node's token from its environment variable, refusing a node that names
+// none, a variable that is unset, and one holding a token too short to be a secret.
 func token(env string) (string, error) {
+	if env == "" {
+		return "", errors.New("token_env is required and has no default")
+	}
 	value, err := envValue(env, "the node's token has no default")
 	if err != nil {
 		return "", err
