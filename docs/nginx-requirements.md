@@ -43,6 +43,7 @@ Its whole HTTP surface:
 | `/api/v1/series` | GET | a program, a chart renderer | no |
 | `/api/v1/history` | GET | a program, a chart renderer | no |
 | `/api/v1/state` | GET | a program, a skin | no |
+| `/public`, `/public/` and every path under it | GET, HEAD | anyone: the pages an OAuth consent screen links to, and Google reading them ([ADR 0040](decisions/0040-the-hub-serves-its-public-pages-open.md)) | no — open by design |
 
 The version prefix `/api/v1/` is part of the contract and later endpoints keep it. Assume the
 path list grows; do not enumerate paths where a prefix rule will do.
@@ -90,6 +91,12 @@ path list grows; do not enumerate paths where a prefix rule will do.
    the ingest path needs to work. The prefix is matched on the normalised path, so
    `/api/v1/agent/../series` is not under it and still needs the proxy's credential.
 
+   **The public pages need no credential either**: the exact path `/public` and the prefix
+   `/public/` — with its slash, so a later `/public-…` path is not swept in — matched on the
+   normalised path the same way, and passed on unrewritten. They are open to anyone by
+   design ([ADR 0040](decisions/0040-the-hub-serves-its-public-pages-open.md)), so
+   `/public/../api/v1/state` is not under the prefix and still needs the credential.
+
 5. **Everything else needs a credential the proxy checks.** Missing or wrong gets
    `401` and never reaches the hub. Two things must both work: a person opening
    `https://hub.example.com/` gets a prompt in the browser, and a program reaches
@@ -111,7 +118,8 @@ path list grows; do not enumerate paths where a prefix rule will do.
    only the proxy can do: the hub authenticates before it looks at a body, so an oversized
    body carrying a bad token is answered `401`, never `413`.
 
-8. **Rate limiting on the public name**, since ingest is reachable unauthenticated by design.
+8. **Rate limiting on the public name**, since ingest and the public pages are reachable
+   unauthenticated by design; the limit is on every path.
    At least 120 requests a minute per source address with a burst of 20, and over that the
    proxy answers `429` **immediately** rather than queueing the request — a delayed request
    holds a connection and still arrives. The number is a variable of the role: nodes get
@@ -121,7 +129,8 @@ path list grows; do not enumerate paths where a prefix rule will do.
 
 9. **The proxy caches nothing.** Every page and every API response is live state; a cached one
    shows a healthy disk that filled up ten minutes ago. What a *browser* caches is the hub's
-   own business — its JSON and its pages both say `no-store`; nothing in nginx can fix that.
+   own business — its JSON and its pages say `no-store`, the public pages `no-cache`; nothing
+   in nginx can fix that.
 
 10. **The proxy does not depend on the hub being up.** It starts, reloads and survives on its
     own. While the hub restarts — a version upgrade, a configuration change — the proxy
@@ -152,9 +161,12 @@ path list grows; do not enumerate paths where a prefix rule will do.
 - No authentication in front of `/api/v1/ingest` or `/api/v1/agent/` (requirement 4).
 - No IP allow-list: nodes are laptops on changing networks.
 - No websockets, no HTTP/2 server push, no static hosting, no CDN.
-- No unauthenticated health path. The hub has none today, so an external uptime check needs
-  the program credential from requirement 6. If the role would rather probe something open,
-  say so and the hub gets one — it is a code change on our side, not a proxy setting.
+- No unauthenticated health path. The hub has none today — `/public/` answers without a
+  credential, but proves only that the process is up
+  ([0040](decisions/0040-the-hub-serves-its-public-pages-open.md)) — so an external
+  uptime check needs the program credential from requirement 6. If the role would rather
+  probe something open, say so and the hub gets one — it is a code change on our side, not
+  a proxy setting.
 
 ## How we check it is done
 
@@ -229,6 +241,15 @@ curl -sS -i --path-as-is https://hub.example.com/api/v1/agent/../series
                                                     # 401 with WWW-Authenticate: the proxy's
 curl -s -o /dev/null -w '%{http_code}\n' http://hub.example.com/api/v1/agent/target
                                                     # refused, not redirected
+```
+
+And the public pages, open without leaking what they are not:
+
+```sh
+curl -sI https://hub.example.com/public/            # 200, no WWW-Authenticate
+curl -sI https://hub.example.com/public             # a redirect to /public/, no WWW-Authenticate
+curl -sS -i --path-as-is https://hub.example.com/public/../api/v1/state
+                                                    # 401 with WWW-Authenticate: the proxy's
 ```
 
 Requirements 7 and 8 — the caps:

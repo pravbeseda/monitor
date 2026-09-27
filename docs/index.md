@@ -10,7 +10,7 @@ entry point to every document in the project.
 | [concept.md](concept.md) | Idea, architectural principles, planned skins, domains, roadmap |
 | [poc.md](poc.md) | POC spec: scope, terminology, wire format, work plan, answered questions |
 | [install.md](install.md) | Install guide: one command, then the manual path — the hub host, install and verify a node, upgrade by hand or from a timer, uninstall, watching Google Drive |
-| [../public/](../public/) | The project's public pages — a homepage, a privacy policy and terms of service — that an OAuth consent screen links to |
+| [../public/](../public/) | The project's public pages — a homepage, a privacy policy and terms of service — that an OAuth consent screen links to; the hub serves them at `/public/` |
 | [nginx-requirements.md](nginx-requirements.md) | What the hub needs from the reverse proxy in front of it, handed to the Ansible repository that owns that host |
 | [hub-host-node-requirements.md](hub-host-node-requirements.md) | What the Ansible play must do to install the agent on the hub host too and keep it on the hub's target, and how to check it |
 | [plans/stage-1-skeleton.md](plans/stage-1-skeleton.md) | Step plan for POC stage 1, kept as a record; plans now live in the task and the pull request ([0017](decisions/0017-one-spec-and-decision-gates.md)) |
@@ -61,6 +61,7 @@ One decision per file, each stating what was rejected and why. New records start
 | [0037](decisions/0037-skins-are-tabs-and-the-root-opens-the-last-one.md) | Skins are tabs, each at its own address; `/` opens the one last chosen | accepted |
 | [0038](decisions/0038-a-lane-is-summarised-on-read.md) | A timeline lane is summarised on read from the event log and the stored points | accepted |
 | [0039](decisions/0039-the-hub-collects-a-service-node.md) | The hub collects a service node itself, through the same path an agent reports on | accepted |
+| [0040](decisions/0040-the-hub-serves-its-public-pages-open.md) | The hub serves the public pages itself, under `/public/`, without a credential | accepted |
 
 ## Behaviour specs
 
@@ -88,7 +89,7 @@ can see ([ADR 0017](decisions/0017-one-spec-and-decision-gates.md)). New specs s
 | [release.md](specs/release.md) | How a merge tags itself, what a tag publishes, how a release is signed, and how an artifact is checked | approved |
 | [installer.md](specs/installer.md) | One command that installs or upgrades a hub or an agent from a signed release, the hub following the version its host names, and an agent following the one the hub names | approved |
 | [deployment.md](specs/deployment.md) | The install layout, the units — the hub's and the agents' update timers among them — and what `install-agent.sh` does to a node | approved |
-| [web.md](specs/web.md) | What every hub page shares: the tabs between skins and the one `/` opens, the reader's time zone, how a page says which zone it used, how an open page keeps itself current, and the shell | approved |
+| [web.md](specs/web.md) | What every hub page shares: the tabs between skins and the one `/` opens, the reader's time zone, how a page says which zone it used, how an open page keeps itself current, the shell, and the public pages that carry none of it | approved |
 
 ## Design notes
 

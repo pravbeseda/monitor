@@ -31,6 +31,7 @@ func Routes(cfg *config.Config, store Store, now func() time.Time) *http.ServeMu
 	mux.Handle("GET /board", Board(current))
 	mux.Handle("GET /timeline", Timeline(current, store, targetOf(cfg)))
 	mux.Handle("GET /debug", Debug(current))
+	mux.Handle("GET /public/", Public())
 
 	read := reader(cfg, store, now)
 	mux.Handle("GET /api/v1/series", SeriesAPI(read))

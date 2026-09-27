@@ -11,14 +11,18 @@
   [timeline.md](timeline.md) for `/timeline`,
   [thresholds.md](thresholds.md) for `/thresholds`); the reader's language
   is settled by [0008](../decisions/0008-english-repo-bilingual-ui.md) and needs nothing
-  here. The JSON API is not a reader: nothing here touches it.
+  here. The JSON API is not a reader: nothing here touches it. A *hub page* below is
+  any HTML page the hub serves outside `/public/`: the public pages share only the icon
+  ([public](#public)); their content is the files in `public/`, served by
+  `internal/hub/public.go`.
 - **Decisions:** [0005](../decisions/0005-poc-stack.md),
   [0008](../decisions/0008-english-repo-bilingual-ui.md),
   [0018](../decisions/0018-history-through-the-api.md),
   [0023](../decisions/0023-proxy-holds-the-web-perimeter.md),
   [0026](../decisions/0026-reader-time-zone-from-the-browser.md),
   [0029](../decisions/0029-pages-refresh-by-fetching-their-own-address.md),
-  [0037](../decisions/0037-skins-are-tabs-and-the-root-opens-the-last-one.md)
+  [0037](../decisions/0037-skins-are-tabs-and-the-root-opens-the-last-one.md),
+  [0040](../decisions/0040-the-hub-serves-its-public-pages-open.md)
 
 ## Purpose
 
@@ -60,10 +64,10 @@ tell which of them they are.
 
 | Request | What the reader sees |
 |---|---|
-| any HTML page of the hub | `Cache-Control: no-store`, and `Vary: Cookie, Accept-Language` — the answer depends on who is asking and is never a stored copy |
+| any hub page | `Cache-Control: no-store`, and `Vary: Cookie, Accept-Language` — the answer depends on who is asking and is never a stored copy |
 | the same address opened again after the browser has learned its zone | the reader's zone, never the earlier answer served again |
 | a refusal or a failure rendered as a page | the same zone handling as any other page: a first visit that fails still leaves the reader in their own zone afterwards |
-| any HTML page of the hub, in a browser tab | the monitor's own icon, a green pulse line on the dark page colour, carried inside the page so it costs no request of its own |
+| any hub page, in a browser tab | the monitor's own icon, a green pulse line on the dark page colour, carried inside the page so it costs no request of its own |
 
 ### Skins and their tabs {#skins}
 
@@ -78,7 +82,7 @@ zone is ([zone](#zone)); the hub only reads it.
 
 | Request | What the reader sees |
 |---|---|
-| any HTML page of the hub | a row of tabs at the top, one per skin, each linking to its address with the page's language |
+| any hub page | a row of tabs at the top, one per skin, each linking to its address with the page's language |
 | a skin's own address | that skin, its tab marked as the open one |
 | `/history` or `/thresholds` | the tabs, none marked |
 | `/` from a browser that never clicked a tab | a redirect to `/board` |
@@ -90,7 +94,7 @@ zone is ([zone](#zone)); the hub only reads it.
 | open pages keeping themselves current or reloading after an upgrade ([live](#live)) | the remembered skin unchanged, however many are open |
 | a remembered skin this hub no longer has | a redirect to `/board` |
 | scripting turned off, or a browser that stores nothing | `/` redirects to `/board` every time |
-| a click on a tab | on any HTML page of the hub, a script that stores that tab's skin for a year and for the whole site, as a secure cookie over HTTPS, as the zone is stored |
+| a click on a tab | on any hub page, a script that stores that tab's skin for a year and for the whole site, as a secure cookie over HTTPS, as the zone is stored |
 | the redirect, `GET` or `HEAD` | `302 Found`, `Cache-Control: no-store` and `Vary: Cookie`: the answer depends on who asks, and a cache never keeps it |
 
 ### Keeping an open page current {#live}
@@ -113,6 +117,31 @@ zone is ([zone](#zone)); the hub only reads it.
 | the reader uses the back button afterwards | the page they came from; refreshing added nothing to the browser's history |
 | a page whose content is a form — `/thresholds` | never refreshed: nothing on it changes on its own, and a refresh would replace what the reader typed or the refusal they are reading ([thresholds.md](thresholds.md#form)) |
 | scripting is turned off | the page as it was drawn, never refreshed; reloading it by hand still works |
+
+### The public pages {#public}
+
+An OAuth consent screen links to a homepage, a privacy policy and terms of service, and
+Google reads them without a credential. They describe the tool, not an installation, so they
+are the same on every hub and carry nothing it measures or is configured with
+([0040](../decisions/0040-the-hub-serves-its-public-pages-open.md)).
+
+| Request | What the reader sees |
+|---|---|
+| `GET /public/` | the homepage: what Monitor is, that it is private and self-hosted, what it asks of a Google account, and links to the privacy policy and the terms |
+| `GET /public/privacy.html`, `GET /public/terms.html` | the privacy policy, the terms of service |
+| `GET /public/style.css` | the stylesheet the three pages share |
+| any of the four | `200`, `text/html; charset=utf-8` or `text/css; charset=utf-8`, and `Cache-Control: no-cache`: a browser asks again each time, so an edit shows on the next load after an upgrade |
+| `GET /public` | a redirect to `/public/`, so the pages' relative links resolve |
+| `GET /public/index.html` | a redirect to `/public/`: the homepage has one address |
+| a path under `/public` that is not in clean form — a doubled slash, a `.` or `..` segment, a trailing slash after a file | a redirect to its clean form, which is served as that path would be: one that leaves `/public/` is an ordinary hub path |
+| any other clean path under `/public/` | `404 Not Found`, never a listing of what is there |
+| `HEAD` on any of them | what `GET` answers, without the body |
+| any other method under `/public` | `405 Method Not Allowed`, naming `GET` and `HEAD` as allowed |
+| any of them, whatever `Cookie`, `Accept-Language` or query the request carries | the same bytes, in English, with no `Set-Cookie`, and none of the shell but the icon: no tabs, no zone, no refresh |
+| any of the pages, in a browser tab | the monitor's own icon, carried inside the page as on a hub page, so a reader without the proxy's credential is never asked for one |
+
+Which redirect status each answers with is not part of the contract: a browser and Google's
+crawler follow them all.
 
 What the script does in a browser — the timing, the swap, the scroll, the notice — is
 checked by hand in one; the hub's side of it, what every page carries for the script, is
@@ -197,6 +226,8 @@ tested.
 - Delivering a change to the page the instant it arrives —
   [0029](../decisions/0029-pages-refresh-by-fetching-their-own-address.md) says why a
   30-second fetch is enough for now.
+- A Russian version of the public pages —
+  [0040](../decisions/0040-the-hub-serves-its-public-pages-open.md) says why.
 - Whether a page may be opened at all, and any policy the proxy sets in front of it —
   [0023](../decisions/0023-proxy-holds-the-web-perimeter.md) and
   [nginx-requirements.md](../nginx-requirements.md).
