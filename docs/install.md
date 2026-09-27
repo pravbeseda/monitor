@@ -602,8 +602,11 @@ OAuth client of your own and a refresh token for the account, once.
    Without it every collection logs `accessNotConfigured`.
 2. Configure the consent screen: user type **External**, and add the scope
    `https://www.googleapis.com/auth/drive.appdata`. It is non-sensitive, so no verification
-   is asked. Where a homepage, a privacy policy and terms of service are asked for, serve the
-   pages in [`public/`](../public/) from a domain of yours. Then **publish the app to
+   is asked. Where a homepage, a privacy policy and terms of service are asked for, give the
+   pages the hub serves from [`public/`](../public/): `https://hub.example.com/public/`,
+   `/public/privacy.html` and `/public/terms.html`, with the hub's domain among the authorized
+   domains. The proxy lets them through without its credential
+   ([requirement 4](nginx-requirements.md)). Then **publish the app to
    production**: in Testing, Google expires its refresh tokens after seven days.
 3. Create an OAuth client of type **Web application** with the authorized redirect URI
    `https://developers.google.com/oauthplayground`.
@@ -644,7 +647,7 @@ why, naming the credential to replace:
 ## The proxy in front of the hub
 
 This guide stops at the hub's loopback port. The nginx vhost that terminates TLS, passes
-ingest through and holds authentication on the web page is not installed from here: it is
+ingest and the public pages through and holds authentication on the web page is not installed from here: it is
 applied from the Ansible repository that owns the hub host
 ([ADR 0023](decisions/0023-proxy-holds-the-web-perimeter.md)). What it has to do — including
 guarding the threshold form's write path — is [nginx-requirements.md](nginx-requirements.md).

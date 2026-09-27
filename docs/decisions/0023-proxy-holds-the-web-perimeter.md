@@ -4,7 +4,8 @@
   [0026](0026-reader-time-zone-from-the-browser.md), where the hub reads one cookie carrying
   the reader's time zone and nothing else. The perimeter is amended by
   [0028](0028-agents-follow-a-target-the-hub-serves.md): every path under `/api/v1/agent/` is
-  the hub's to authenticate, like ingest.
+  the hub's to authenticate, like ingest. [0040](0040-the-hub-serves-its-public-pages-open.md)
+  opens `/public/` to anyone: the pages an OAuth consent screen links to.
 - **Date:** 2026-09-12
 - **Source:** [POC](../poc.md) stage 3,
   [proxy requirements](../nginx-requirements.md), [ADR 0007](0007-public-repository.md)
