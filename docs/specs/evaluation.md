@@ -248,7 +248,8 @@ needs no configuration — a node that goes quiet must be noticed on a fresh ins
 | any | a node listed in the file that has never reported | no subject | nothing: an uninstalled agent is not an incident |
 
 Recovery has no margin and no separate trigger: `last_seen` advances on every accepted
-request ([ingest](ingest.md#storage)), and the next tick reads it. Silence cannot flap,
+request ([ingest](ingest.md#storage)) — on a service node, on every stored measurement and on its first report
+([services.md](services.md)) — and the next tick reads it. Silence cannot flap,
 because a request either arrived inside the window or did not.
 
 ### Notifications

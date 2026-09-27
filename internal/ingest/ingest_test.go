@@ -46,11 +46,17 @@ const validBody = `{
 
 // spy records what ingest asked storage to do, so a test can assert that nothing was.
 type spy struct {
-	saved []storage.Ingest
+	saved      []storage.Ingest
+	introduced []storage.Ingest
 }
 
 func (s *spy) SaveIngest(_ context.Context, in storage.Ingest) error {
 	s.saved = append(s.saved, in)
+	return nil
+}
+
+func (s *spy) IntroduceNode(_ context.Context, in storage.Ingest) error {
+	s.introduced = append(s.introduced, in)
 	return nil
 }
 

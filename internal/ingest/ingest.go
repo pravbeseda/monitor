@@ -1,8 +1,9 @@
 // Package ingest implements /api/v1/ingest: the only channel between an agent and the
-// hub (docs/specs/ingest.md).
+// hub, which the hub also reports its own service nodes through (docs/specs/ingest.md).
 package ingest
 
 import (
+	"context"
 	"crypto/subtle"
 	"encoding/json"
 	"errors"
@@ -44,8 +45,7 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		fail(w, http.StatusUnauthorized, "unknown or missing token")
 		return
 	}
-	received := h.now()
-	if !h.limiter.allow(node.Name, received) {
+	if !h.limiter.allow(node.Name, h.now()) {
 		fail(w, http.StatusTooManyRequests, fmt.Sprintf("more than %d requests a minute", requestsPerMinute))
 		return
 	}
@@ -55,30 +55,50 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		fail(w, status, err.Error())
 		return
 	}
-	in, err := validate(req, received)
+	body, err := h.Accept(r.Context(), node, req)
 	if err != nil {
-		fail(w, http.StatusBadRequest, err.Error())
-		return
-	}
-	if in.Node != node.Name {
-		fail(w, http.StatusForbidden, "the node does not belong to this token")
-		return
-	}
-	if err := h.store.SaveIngest(r.Context(), in); err != nil {
+		var refused api.StatusError
+		if errors.As(err, &refused) {
+			fail(w, refused.Status, refused.Message)
+			return
+		}
 		// The agent only learns that the hub answered 500; the reason stays here.
-		slog.Error("store ingest", "node", in.Node, "error", err)
+		slog.Error("store ingest", "node", node.Name, "error", err)
 		fail(w, http.StatusInternalServerError, "the measurements could not be stored")
 		return
 	}
-
-	body := api.Response{}
-	if req.ConfigVersion != node.Version {
-		body = api.Response{ConfigVersion: node.Version, Config: deliver(node.Agent)}
-		// A rollout is invisible otherwise: the version is opaque to the agent, so the
-		// journal is the only place the two can be compared.
-		slog.Info("deliver a configuration", "node", node.Name, "from", req.ConfigVersion, "to", node.Version)
-	}
 	write(w, http.StatusOK, body)
+}
+
+// Accept checks and stores one report of node, and answers it as the endpoint would, a
+// refusal as an api.StatusError. It is the endpoint without its transport — no token, no
+// rate limit, no body cap — which is how the hub reports the service nodes it collects
+// itself (ADR 0039).
+func (h *Handler) Accept(ctx context.Context, node config.Node, req api.Request) (api.Response, error) {
+	in, err := validate(req, h.now())
+	if err != nil {
+		return api.Response{}, api.StatusError{Status: http.StatusBadRequest, Message: err.Error()}
+	}
+	if in.Node != node.Name {
+		return api.Response{}, api.StatusError{Status: http.StatusForbidden, Message: "the node does not belong to this token"}
+	}
+	// A service node cannot sleep, so only a stored measurement is a sign of life; an empty
+	// report merely makes it known, so that it can fall silent before it ever stores one.
+	save := h.store.SaveIngest
+	if node.Service() && len(in.Measurements) == 0 {
+		save = h.store.IntroduceNode
+	}
+	if err := save(ctx, in); err != nil {
+		return api.Response{}, err
+	}
+
+	if req.ConfigVersion == node.Version {
+		return api.Response{}, nil
+	}
+	// A rollout is invisible otherwise: the version is opaque to the agent, so the journal
+	// is the only place the two can be compared.
+	slog.Info("deliver a configuration", "node", node.Name, "from", req.ConfigVersion, "to", node.Version)
+	return api.Response{ConfigVersion: node.Version, Config: deliver(node.Agent)}, nil
 }
 
 // authenticate resolves the bearer token to its node, comparing in constant time so that

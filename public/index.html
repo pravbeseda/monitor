@@ -1,0 +1,42 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Monitor</title>
+  <meta name="description" content="Monitor: a personal control panel that turns infrastructure and service metrics into meaning. Private, self-hosted, single-user.">
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+<main>
+  <h1>Monitor</h1>
+  <p class="lead">A personal control panel for one person's own machines and online services.</p>
+
+  <p>Monitor collects measurements — free disk space, memory, load, the storage left in a cloud
+  account — and computes what they mean: whether something needs attention, how urgently, and
+  whether a value is unusual for it. It alerts on changes that matter and stays quiet otherwise.</p>
+
+  <div class="note">
+    <p><strong>Monitor is a private application.</strong> It is not a public service: there is no
+    sign-up and no shared server. Each installation is run by its owner, on the owner's own
+    server, for the owner alone.</p>
+  </div>
+
+  <h2>Google account access</h2>
+  <p>An installation can watch how much storage is left in its owner's Google account. For that
+  it asks Google for the narrowest access that shows the storage quota. It never reads, lists or
+  changes the account's files, email or photos. The details are in the
+  <a href="privacy.html">privacy policy</a>.</p>
+
+  <h2>Source code</h2>
+  <p>The tooling is developed in the open at
+  <a href="https://github.com/pravbeseda/monitor">github.com/pravbeseda/monitor</a>. No
+  configuration, credentials or measurements are published there.</p>
+
+  <footer>
+    <a href="privacy.html">Privacy policy</a>
+    <a href="terms.html">Terms of service</a>
+  </footer>
+</main>
+</body>
+</html>

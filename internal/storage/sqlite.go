@@ -278,9 +278,9 @@ func applyMigration(db *sql.DB, step int) error {
 
 // SaveIngest stores one request in a single transaction; a failure stores nothing.
 func (s *SQLite) SaveIngest(ctx context.Context, in Ingest) (err error) {
-	manifest, err := json.Marshal(in.Manifest)
+	node, err := nodeArgs(in)
 	if err != nil {
-		return fmt.Errorf("encode manifest of %s: %w", in.Node, err)
+		return err
 	}
 
 	tx, err := s.db.BeginTx(ctx, nil)
@@ -293,15 +293,13 @@ func (s *SQLite) SaveIngest(ctx context.Context, in Ingest) (err error) {
 		}
 	}()
 
-	_, err = tx.ExecContext(ctx, `
-		INSERT INTO nodes (node, last_seen, agent_version, config_version, manifest)
-		VALUES (?, ?, ?, ?, ?)
+	_, err = tx.ExecContext(ctx, insertNode+`
 		ON CONFLICT(node) DO UPDATE SET
 			last_seen      = excluded.last_seen,
 			agent_version  = excluded.agent_version,
 			config_version = excluded.config_version,
 			manifest       = excluded.manifest`,
-		in.Node, formatTime(in.ReceivedAt), in.AgentVersion, in.ConfigVersion, string(manifest))
+		node...)
 	if err != nil {
 		return fmt.Errorf("save node %s: %w", in.Node, err)
 	}
@@ -340,6 +338,40 @@ func (s *SQLite) SaveIngest(ctx context.Context, in Ingest) (err error) {
 		return fmt.Errorf("commit ingest of %s: %w", in.Node, err)
 	}
 	return nil
+}
+
+// IntroduceNode records a node the way SaveIngest would, except that it sets last-seen only
+// for a node the hub has no record of yet, and stores no measurement. A service node is
+// seen only when it stores a measurement, and its first report is the one exception
+// (docs/specs/services.md); its versions and manifest still follow every report.
+func (s *SQLite) IntroduceNode(ctx context.Context, in Ingest) error {
+	node, err := nodeArgs(in)
+	if err != nil {
+		return err
+	}
+	_, err = s.db.ExecContext(ctx, insertNode+`
+		ON CONFLICT(node) DO UPDATE SET
+			agent_version  = excluded.agent_version,
+			config_version = excluded.config_version,
+			manifest       = excluded.manifest`,
+		node...)
+	if err != nil {
+		return fmt.Errorf("introduce node %s: %w", in.Node, err)
+	}
+	return nil
+}
+
+// insertNode writes the row nodeArgs returns; each caller says what a known node keeps.
+const insertNode = `
+		INSERT INTO nodes (node, last_seen, agent_version, config_version, manifest)
+		VALUES (?, ?, ?, ?, ?)`
+
+func nodeArgs(in Ingest) ([]any, error) {
+	manifest, err := json.Marshal(in.Manifest)
+	if err != nil {
+		return nil, fmt.Errorf("encode manifest of %s: %w", in.Node, err)
+	}
+	return []any{in.Node, formatTime(in.ReceivedAt), in.AgentVersion, in.ConfigVersion, string(manifest)}, nil
 }
 
 func states(ctx context.Context, from querier) ([]NodeState, error) {

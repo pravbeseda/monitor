@@ -170,7 +170,7 @@ One row = one test. Anchors: `spec: state.md#<heading>`.
 | a hub where nothing is watched | `watched: 0` at the top level and on every node |
 | a sensor the node resolves as `enabled: false` | its series listed, `stale: true`, keeping whatever level evaluation stored before |
 | a series with no labels | `labels: {}` |
-| `last_seen` of a node | when the hub last accepted a request from it, not any time an agent stamped |
+| `last_seen` of a node | when the hub last accepted a request from it, not any time an agent stamped; for a service node, when it last stored a measurement, or when the hub first recorded it if it never has ([services.md](services.md)) |
 | `agent_version` of a node that never reported one | `null` |
 
 ### Levels {#levels}

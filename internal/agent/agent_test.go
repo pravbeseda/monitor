@@ -353,8 +353,8 @@ func TestSensorThatHangsDoesNotStopTheTick(t *testing.T) {
 // spec: agent.md#delivering — a hub that failed gets the same measurements again.
 func TestKeepsMeasurementsUntilTheyAreAccepted(t *testing.T) {
 	tests := map[string]error{
-		"the hub is down":       agent.StatusError{Status: http.StatusInternalServerError},
-		"the hub is busy":       agent.StatusError{Status: http.StatusTooManyRequests},
+		"the hub is down":       api.StatusError{Status: http.StatusInternalServerError},
+		"the hub is busy":       api.StatusError{Status: http.StatusTooManyRequests},
 		"the network is absent": errors.New("dial tcp: no route to host"),
 	}
 
@@ -391,7 +391,7 @@ func TestDropsMeasurementsTheHubRefused(t *testing.T) {
 	h, c := &hub{}, &clock{at: start}
 	h.answers = []answer{
 		{response: configure("v1", "5m", map[string]api.SensorConfig{"disk": {Enabled: true, Interval: "5m"}})},
-		{err: agent.StatusError{Status: http.StatusBadRequest}},
+		{err: api.StatusError{Status: http.StatusBadRequest}},
 		{},
 	}
 	disk := &stub{name: "disk", measurements: []sensor.Measurement{reading("disk.free_bytes", 1)}}
@@ -415,8 +415,8 @@ func TestBufferDropsTheOldestMeasurements(t *testing.T) {
 	h, c := &hub{}, &clock{at: start}
 	h.answers = []answer{
 		{response: configure("v1", "5m", map[string]api.SensorConfig{"disk": {Enabled: true, Interval: "5m"}})},
-		{err: agent.StatusError{Status: http.StatusInternalServerError}},
-		{err: agent.StatusError{Status: http.StatusInternalServerError}},
+		{err: api.StatusError{Status: http.StatusInternalServerError}},
+		{err: api.StatusError{Status: http.StatusInternalServerError}},
 		{},
 	}
 	// Every collection fills the buffer on its own, and its values say which one it was.
@@ -550,5 +550,28 @@ func TestMeasurementsNameTheirSensor(t *testing.T) {
 	}
 	if sent[0].Sensor == nil || *sent[0].Sensor != "disk" {
 		t.Errorf("sensor = %v, want %q", sent[0].Sensor, "disk")
+	}
+}
+
+// spec: services.md#collection — a sensor that failed is not asked again before its interval
+// has passed, as one that answered is not.
+// spec: agent.md#ticking — the interval is measured from the sensor's last collection.
+func TestAFailedSensorWaitsItsInterval(t *testing.T) {
+	h, c := &hub{}, &clock{at: start}
+	h.answers = []answer{{response: configure("v1", "5m", map[string]api.SensorConfig{
+		"gdrive": {Enabled: true, Interval: "1h"},
+	})}}
+	failing := &stub{name: "gdrive", err: errors.New("refused")}
+	a := newAgent(t, h, c, failing)
+
+	for range 3 {
+		if err := a.Tick(context.Background()); err != nil {
+			t.Fatalf("tick: %v", err)
+		}
+		c.advance(5 * time.Minute)
+	}
+
+	if failing.calls != 1 {
+		t.Errorf("the sensor was asked %d times in 15 minutes, want once", failing.calls)
 	}
 }

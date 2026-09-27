@@ -23,9 +23,17 @@ func resolve(f file, name string, entry fileNode) (Node, error) {
 		return Node{}, fmt.Errorf("node %s: unknown class %q", name, entry.Class)
 	}
 
-	secret, err := token(entry.TokenEnv)
-	if err != nil {
-		return Node{}, fmt.Errorf("node %s: %w", name, err)
+	service := entry.Class == ServiceClass
+	var secret string
+	if service {
+		if entry.TokenEnv != "" {
+			return Node{}, fmt.Errorf("node %s: a token_env would let an agent speak for it, and %s", name, reserved)
+		}
+	} else {
+		var err error
+		if secret, err = token(entry.TokenEnv); err != nil {
+			return Node{}, fmt.Errorf("node %s: %w", name, err)
+		}
 	}
 
 	baseTick, err := duration("base_tick", last(defaultBaseTick, f.BaseTick, custom.BaseTick, entry.BaseTick))
@@ -47,9 +55,12 @@ func resolve(f file, name string, entry fileNode) (Node, error) {
 	profile := lastList(builtin.Profile, custom.Profile)
 	sensors, err := resolveSensors(profile, baseTick,
 		[]map[string]fileSensor{defaultSensors, builtin.Sensors},
-		[]map[string]fileSensor{f.Sensors, custom.Sensors, entry.Sensors})
+		[]map[string]fileSensor{forHost(service, f.Sensors), custom.Sensors, entry.Sensors})
 	if err != nil {
 		return Node{}, fmt.Errorf("node %s: %w", name, err)
+	}
+	if err := checkHost(fmt.Sprintf("node %s: ", name), service, sensors); err != nil {
+		return Node{}, err
 	}
 
 	agent := Agent{BaseTick: baseTick, Filesystems: filesystems, SkipMounts: skipMounts, Sensors: sensors}
@@ -67,7 +78,7 @@ func resolve(f file, name string, entry fileNode) (Node, error) {
 		}
 	}
 
-	return Node{
+	node := Node{
 		Name:         name,
 		Class:        entry.Class,
 		Token:        secret,
@@ -80,7 +91,13 @@ func resolve(f file, name string, entry fileNode) (Node, error) {
 			SilenceAfter: silenceAfter,
 			Intervals:    intervals,
 		},
-	}, nil
+	}
+	if service {
+		if err := checkServiceNode(name, node); err != nil {
+			return Node{}, err
+		}
+	}
+	return node, nil
 }
 
 // classLayers returns the compiled-in class and the file's class of the same name. They

@@ -64,6 +64,9 @@ type Storage interface {
 	// SaveIngest stores one request atomically — measurements, manifest and last-seen —
 	// skipping measurements already stored under the same node, metric, labels and ts.
 	SaveIngest(ctx context.Context, in Ingest) error
+	// IntroduceNode records a node as SaveIngest would, without measurements; of a node
+	// already on record it updates the versions and manifest, never last-seen.
+	IntroduceNode(ctx context.Context, in Ingest) error
 	// Series lists every stored series of a metric, ordered by node then by labels, each
 	// with its newest timestamp and the sensor that value named.
 	Series(ctx context.Context, sel Selection) ([]SeriesNewest, error)

@@ -47,3 +47,9 @@ nodes:
     token_env: MONITOR_TOKEN_SERVER_B
     sensors:
       disk: { interval: 5m }
+  # An online service rather than a machine: the hub collects it itself, so it has no token.
+  # Its credentials are read from MONITOR_GDRIVE_* (docs/install.md#watching-google-drive).
+  cloud:
+    class: service
+    sensors:
+      gdrive: { enabled: true }

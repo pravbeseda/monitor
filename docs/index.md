@@ -9,7 +9,8 @@ entry point to every document in the project.
 |---|---|
 | [concept.md](concept.md) | Idea, architectural principles, planned skins, domains, roadmap |
 | [poc.md](poc.md) | POC spec: scope, terminology, wire format, work plan, answered questions |
-| [install.md](install.md) | Install guide: one command, then the manual path — the hub host, install and verify a node, upgrade by hand or from a timer, uninstall |
+| [install.md](install.md) | Install guide: one command, then the manual path — the hub host, install and verify a node, upgrade by hand or from a timer, uninstall, watching Google Drive |
+| [../public/](../public/) | The project's public pages — a homepage, a privacy policy and terms of service — that an OAuth consent screen links to |
 | [nginx-requirements.md](nginx-requirements.md) | What the hub needs from the reverse proxy in front of it, handed to the Ansible repository that owns that host |
 | [hub-host-node-requirements.md](hub-host-node-requirements.md) | What the Ansible play must do to install the agent on the hub host too and keep it on the hub's target, and how to check it |
 | [plans/stage-1-skeleton.md](plans/stage-1-skeleton.md) | Step plan for POC stage 1, kept as a record; plans now live in the task and the pull request ([0017](decisions/0017-one-spec-and-decision-gates.md)) |
@@ -59,6 +60,7 @@ One decision per file, each stating what was rejected and why. New records start
 | [0036](decisions/0036-an-anomaly-is-a-value-outside-its-weeks-band.md) | An anomaly is a value outside the band its series kept the week before | accepted |
 | [0037](decisions/0037-skins-are-tabs-and-the-root-opens-the-last-one.md) | Skins are tabs, each at its own address; `/` opens the one last chosen | accepted |
 | [0038](decisions/0038-a-lane-is-summarised-on-read.md) | A timeline lane is summarised on read from the event log and the stored points | accepted |
+| [0039](decisions/0039-the-hub-collects-a-service-node.md) | The hub collects a service node itself, through the same path an agent reports on | accepted |
 
 ## Behaviour specs
 
@@ -73,6 +75,7 @@ can see ([ADR 0017](decisions/0017-one-spec-and-decision-gates.md)). New specs s
 | [ingest.md](specs/ingest.md) | `/api/v1/ingest` contract: request, response, config delivery; the node's target under `/api/v1/agent/` | approved |
 | [hub-config.md](specs/hub-config.md) | The hub's YAML file: validation, layering, per-node configuration and its version, and each node's agent target | approved |
 | [disk-sensor.md](specs/disk-sensor.md) | The disk sensor: enumeration, filtering and the label contract of its metrics | approved |
+| [services.md](specs/services.md) | Service nodes the hub collects itself, when one falls silent, and the Google Drive sensor | approved |
 | [host-sensors.md](specs/host-sensors.md) | The load, memory, uptime and failed-units sensors: what each reads on Linux and macOS, and the metrics it reports | approved |
 | [agent.md](specs/agent.md) | The agent: local configuration, tick loop, delivery and configuration application | approved |
 | [evaluation.md](specs/evaluation.md) | Levels, hysteresis, the event log, silence, digests and the notifier boundary | approved |
@@ -108,6 +111,7 @@ Reasoning from working sessions, including options that were rejected.
 | [2026-09-22](log/2026-09-22-mvp-scope.md) | MVP scope: why it is infra only, why backups wait, and whose memory figure a Mac reports |
 | [2026-09-23](log/2026-09-23-mission-control.md) | Mission control: the engine slice before the board, no health number, server-rendered, and which deviation |
 | [2026-09-24](log/2026-09-24-timeline.md) | The timeline and tabs between skins: anomalies left to the log, the choice made by a tab click, and past freshness |
+| [2026-09-27](log/2026-09-27-cloud-storage.md) | Cloud storage: why not rclone, whose series a Drive is, and how a dead token shows |
 
 ## Not written yet
 

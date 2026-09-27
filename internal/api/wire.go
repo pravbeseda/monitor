@@ -3,6 +3,7 @@
 package api
 
 import (
+	"fmt"
 	"regexp"
 	"strings"
 	"time"
@@ -74,6 +75,20 @@ type SensorConfig struct {
 // ErrorBody is what every refused request answers with.
 type ErrorBody struct {
 	Error string `json:"error"`
+}
+
+// StatusError is a hub answer that was not 200: its status, and the message its ErrorBody
+// carried.
+type StatusError struct {
+	Status  int
+	Message string
+}
+
+func (e StatusError) Error() string {
+	if e.Message == "" {
+		return fmt.Sprintf("the hub answered %d", e.Status)
+	}
+	return fmt.Sprintf("the hub answered %d: %s", e.Status, e.Message)
 }
 
 // FormatDuration writes what an operator would write: 5m rather than 5m0s.
