@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"log/slog"
+	"sync"
 	"sync/atomic"
 	"time"
 
@@ -75,7 +76,7 @@ func (e *Evaluator) Tick(ctx context.Context) error {
 
 	// The hub is up whether or not the rest of the pass succeeds, and an outage is only
 	// what lies between two ticks it could not run (docs/specs/evaluation.md#node-silence).
-	if err := e.begin(ctx); err != nil {
+	if err := e.Begin(ctx); err != nil {
 		return err
 	}
 	if err := e.store.SetLastTickAt(ctx, e.now()); err != nil {
@@ -138,10 +139,10 @@ func (e *Evaluator) Tick(ctx context.Context) error {
 	return e.digest(ctx, subjects, watch, since, now)
 }
 
-// begin records the outage that ended at this start — the span from the last tick
-// recorded before it. It runs once, before the first tick, so that the state leaves the
-// outage out as soon as the hub serves it.
-func (e *Evaluator) begin(ctx context.Context) error {
+// Begin records the outage that ended at this start — the span from the last tick
+// recorded before it. The hub calls it before it serves, so the state leaves the outage out
+// from the first request; the first tick calls it again when that failed.
+func (e *Evaluator) Begin(ctx context.Context) error {
 	if e.begun {
 		return nil
 	}
@@ -297,9 +298,10 @@ const Interval = time.Minute
 // Run evaluates every `every` until ctx is cancelled. A pass that fails is logged and the
 // next one starts from the same snapshot, so nothing is retried by hand.
 func (e *Evaluator) Run(ctx context.Context, every time.Duration) {
-	if err := e.begin(ctx); err != nil && ctx.Err() == nil {
-		slog.Error("record the hub's outage", "error", err)
-	}
+	var beating sync.WaitGroup
+	beating.Go(func() { e.beat(ctx, every) })
+	defer beating.Wait()
+
 	ticker := time.NewTicker(every)
 	defer ticker.Stop()
 	for {
@@ -309,6 +311,24 @@ func (e *Evaluator) Run(ctx context.Context, every time.Duration) {
 		case <-ticker.C:
 			if err := e.Tick(ctx); err != nil && ctx.Err() == nil {
 				slog.Error("evaluation pass", "error", err)
+			}
+		}
+	}
+}
+
+// beat records that the hub is up on the same schedule as the passes but apart from them,
+// so a pass held up by a channel that does not answer does not leave the mark behind: a hub
+// stopped in the middle of it was up, not down (docs/specs/evaluation.md#node-silence).
+func (e *Evaluator) beat(ctx context.Context, every time.Duration) {
+	ticker := time.NewTicker(every)
+	defer ticker.Stop()
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case <-ticker.C:
+			if err := e.store.SetLastTickAt(ctx, e.now()); err != nil && ctx.Err() == nil {
+				slog.Error("record that the hub is up", "error", err)
 			}
 		}
 	}

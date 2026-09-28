@@ -239,9 +239,10 @@ needs no configuration — a node that stops reporting must be noticed on a fres
 
 A node's *quiet* is how long it has not reported — now − last_seen — less every part of
 that time the hub itself was down: while the hub is down no request can arrive, so its own
-outage is never the node's silence. The hub records the instant of every tick it starts,
-whether or not the pass succeeds; each time the hub starts, before its first tick, the span
-from the last tick recorded to the start is recorded as an outage. The state judges
+outage is never the node's silence. While it runs, the hub records every minute that it is
+up — at every tick it starts, whether or not the pass succeeds, and in between while a pass
+runs long; each time the hub starts, before it serves a request, the span from the last
+instant recorded to the start is recorded as an outage. The state judges
 staleness by the same quiet ([state](state.md#staleness)).
 
 | State | Event | New state | Side effect |

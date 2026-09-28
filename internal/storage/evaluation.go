@@ -15,8 +15,9 @@ import (
 // is never told twice about one transition.
 const lastDigestKey = "last_digest_at"
 
-// lastTickKey is the instant of the latest evaluation pass: after a restart, the gap from
-// it to the start is the hub's own outage, which is no node's silence.
+// lastTickKey is the latest instant the hub recorded it was up — every pass, and every
+// minute in between: after a restart, the gap from it to the start is the hub's own outage,
+// which is no node's silence.
 const lastTickKey = "last_tick_at"
 
 // Subject is what has a level: one series — a node, a metric and the labels that pick
@@ -424,13 +425,13 @@ func (s *SQLite) SetLastDigestAt(ctx context.Context, at time.Time) error {
 	return s.writeMark(ctx, lastDigestKey, "digest mark", at)
 }
 
-// LastTickAt is the instant of the latest evaluation pass, and whether any pass has been
-// recorded (docs/specs/evaluation.md#node-silence).
+// LastTickAt is the latest instant the hub recorded it was up, and whether it ever has
+// (docs/specs/evaluation.md#node-silence).
 func (s *SQLite) LastTickAt(ctx context.Context) (time.Time, bool, error) {
 	return s.readMark(ctx, lastTickKey, "tick mark")
 }
 
-// SetLastTickAt records the instant of an evaluation pass.
+// SetLastTickAt records that the hub is up at at.
 func (s *SQLite) SetLastTickAt(ctx context.Context, at time.Time) error {
 	return s.writeMark(ctx, lastTickKey, "tick mark", at)
 }

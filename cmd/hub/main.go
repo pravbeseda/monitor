@@ -134,16 +134,22 @@ func run(args []string, out io.Writer) error {
 		<-serving
 	}()
 
+	evaluator := evaluate.New(evaluate.Options{
+		Store:    store,
+		Notifier: channel,
+		Targets:  cfg.Targets(),
+		Digest:   cfg.Digest(),
+		Started:  started,
+		Now:      time.Now,
+	})
+	// Recorded before the first request is served, so the state never counts the outage
+	// as silence; a failure here is retried by the first tick.
+	if err := evaluator.Begin(ctx); err != nil {
+		fmt.Fprintf(os.Stderr, "hub: record the outage: %v\n", err)
+	}
 	go func() {
 		defer close(evaluating)
-		evaluate.New(evaluate.Options{
-			Store:    store,
-			Notifier: channel,
-			Targets:  cfg.Targets(),
-			Digest:   cfg.Digest(),
-			Started:  started,
-			Now:      time.Now,
-		}).Run(ctx, evaluate.Interval)
+		evaluator.Run(ctx, evaluate.Interval)
 	}()
 	go func() {
 		defer close(collecting)

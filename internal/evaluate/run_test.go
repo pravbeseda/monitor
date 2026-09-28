@@ -55,9 +55,9 @@ func TestRunEvaluatesUntilTheHubStops(t *testing.T) {
 	}
 }
 
-// spec: evaluation.md#node-silence — the outage is recorded as the hub starts, before its
-// first tick, so the state leaves it out from the start.
-func TestRunRecordsTheOutageBeforeItsFirstTick(t *testing.T) {
+// spec: evaluation.md#node-silence — the outage is recorded as the hub starts, before it
+// serves a request or runs a tick.
+func TestBeginRecordsTheOutage(t *testing.T) {
 	db := open(t)
 	started := time.Now()
 	if err := db.SetLastTickAt(context.Background(), started.Add(-time.Hour)); err != nil {
@@ -67,26 +67,53 @@ func TestRunRecordsTheOutageBeforeItsFirstTick(t *testing.T) {
 		Store: db, Notifier: &recorder{},
 		Digest: schedule, Started: started, Now: time.Now,
 	})
+	if err := e.Begin(context.Background()); err != nil {
+		t.Fatalf("Begin: %v", err)
+	}
+	snap, err := db.Snapshot(context.Background(), nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(snap.Outages) != 1 || !snap.Outages[0].To.Equal(started.UTC().Truncate(time.Millisecond)) {
+		t.Fatalf("outages = %+v, want the one ending at the start", snap.Outages)
+	}
+}
+
+// spec: evaluation.md#node-silence — the hub records that it is up while a pass runs long,
+// so a hub stopped mid-pass is not counted as down for the length of that pass.
+func TestTheHubIsMarkedUpDuringALongPass(t *testing.T) {
+	db := open(t)
+	// Buffered, so the passes after the held one do not wait for a reader.
+	held := &blocking{Store: db, entered: make(chan struct{}, 1000), release: make(chan struct{})}
+	e := evaluate.New(evaluate.Options{
+		Store: held, Notifier: &recorder{},
+		Digest: schedule, Started: time.Now(), Now: time.Now,
+	})
 	ctx, stop := context.WithCancel(context.Background())
 	done := make(chan struct{})
 	go func() {
-		e.Run(ctx, time.Hour)
+		e.Run(ctx, 5*time.Millisecond)
 		close(done)
 	}()
-	defer func() { stop(); <-done }()
+	defer func() { stop(); close(held.release); <-done }()
 
+	<-held.entered
+	first, _, err := db.LastTickAt(context.Background())
+	if err != nil {
+		t.Fatal(err)
+	}
 	deadline := time.After(2 * time.Second)
 	for {
-		snap, err := db.Snapshot(context.Background(), nil)
+		last, _, err := db.LastTickAt(context.Background())
 		if err != nil {
 			t.Fatal(err)
 		}
-		if len(snap.Outages) == 1 && snap.Outages[0].To.Equal(started.UTC().Truncate(time.Millisecond)) {
+		if last.After(first) {
 			return
 		}
 		select {
 		case <-deadline:
-			t.Fatalf("outages before the first tick = %+v", snap.Outages)
+			t.Fatalf("the mark stayed at %v while the pass was held", first)
 		default:
 			time.Sleep(time.Millisecond)
 		}
