@@ -54,3 +54,41 @@ func TestRunEvaluatesUntilTheHubStops(t *testing.T) {
 		t.Fatal("the loop outlived the hub it belongs to")
 	}
 }
+
+// spec: evaluation.md#node-silence — the outage is recorded as the hub starts, before its
+// first tick, so the state leaves it out from the start.
+func TestRunRecordsTheOutageBeforeItsFirstTick(t *testing.T) {
+	db := open(t)
+	started := time.Now()
+	if err := db.SetLastTickAt(context.Background(), started.Add(-time.Hour)); err != nil {
+		t.Fatal(err)
+	}
+	e := evaluate.New(evaluate.Options{
+		Store: db, Notifier: &recorder{},
+		Digest: schedule, Started: started, Now: time.Now,
+	})
+	ctx, stop := context.WithCancel(context.Background())
+	done := make(chan struct{})
+	go func() {
+		e.Run(ctx, time.Hour)
+		close(done)
+	}()
+	defer func() { stop(); <-done }()
+
+	deadline := time.After(2 * time.Second)
+	for {
+		snap, err := db.Snapshot(context.Background(), nil)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if len(snap.Outages) == 1 && snap.Outages[0].To.Equal(started.UTC().Truncate(time.Millisecond)) {
+			return
+		}
+		select {
+		case <-deadline:
+			t.Fatalf("outages before the first tick = %+v", snap.Outages)
+		default:
+			time.Sleep(time.Millisecond)
+		}
+	}
+}

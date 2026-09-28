@@ -115,6 +115,7 @@ Reasoning from working sessions, including options that were rejected.
 | [2026-09-24](log/2026-09-24-timeline.md) | The timeline and tabs between skins: anomalies left to the log, the choice made by a tab click, and past freshness |
 | [2026-09-27](log/2026-09-27-cloud-storage.md) | Cloud storage: why not rclone, whose series a Drive is, and how a dead token shows |
 | [2026-09-28](log/2026-09-28-mission-control-folds.md) | Mission control folds into the timeline: why the board was one phrase, and what was kept |
+| [2026-09-28](log/2026-09-28-silence-after-a-restart.md) | Silence after the hub restarts: why a grace window after every start was dropped for leaving out the hub's own outages |
 
 ## Not written yet
 

@@ -67,8 +67,8 @@ neither.
 **Stale** is evaluation's *frozen* ([evaluation](evaluation.md#freezing)), decided by the
 same code at the instant of the request: a subject is stale when its newest value is older
 than three intervals of the sensor that value names — or, when it names none, three of the
-longest interval among the sensors its node runs — when its node is silent past its
-`silence_after`, or when its node no longer runs that sensor — resolved `enabled: false`, or
+longest interval among the sensors its node runs — when its node's quiet is past its
+`silence_after` ([evaluation](evaluation.md#node-silence)), or when its node no longer runs that sensor — resolved `enabled: false`, or
 no interval resolved for it, which is where a node the file no longer names ends up too. The
 silence subject is never stale. Every subject of a node therefore carries a verdict: `stale`
 is a boolean, never absent.
@@ -188,7 +188,7 @@ One row = one test. Anchors: `spec: state.md#<heading>`.
 | a node with one `warning` subject and the rest `ok` | node `level: warning` |
 | a node none of whose subjects has a level | node `level: null` |
 | a node whose only `critical` subject is stale — an unplugged removable volume, or a series whose sensor stopped reporting | node `level` the most severe of its other subjects; that subject still `level: critical`, `stale: true` |
-| a node silent past its `silence_after` whose subjects were `warning` | node `level: critical`, from its silence subject alone |
+| a node whose silence subject is `critical` and whose subjects were `warning` | node `level: critical`, from its silence subject alone |
 | one node `critical`, another `ok` | response `level: critical` |
 
 ### Staleness {#staleness}
@@ -198,6 +198,7 @@ One row = one test. Anchors: `spec: state.md#<heading>`.
 | a series whose newest value is exactly three intervals old | `stale: false`: the bound is inclusive |
 | the same a moment later | `stale: true`, `level` and `since` still the ones stored |
 | a node silent past its `silence_after` | each of its subjects `stale: true` but its silence subject, which is `stale: false` |
+| a node that last reported at 12:00, the hub down from 12:05 to 12:25, its `silence_after` 10m, asked at 12:26 | a subject whose value is fresh by its own interval `stale: false`: the hub's outage is not the node's silence |
 | a series whose newest value names no sensor, exactly three of its node's longest sensor interval old | `stale: false`: the bound is inclusive here too, and nothing else says when the value was due |
 | the same series a moment later | `stale: true`, so a series no agent will ever name again still ages off the page |
 | a series whose newest value names no sensor, on a node that runs no sensor at all | `stale: true`: nothing will refresh it |

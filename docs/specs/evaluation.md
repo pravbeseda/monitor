@@ -4,8 +4,8 @@
 - **Owns:** `internal/evaluate` (hub): the tick, thresholds, hysteresis, silence detection
   and the notification boundary. The channels behind that boundary — the log line and the
   Telegram bot — are `internal/notify`, which formats and delivers but never decides.
-  Persistence of thresholds, levels, events and the digest mark stays with
-  `internal/storage`; the `digest`, `notify` and `silence_after` keys are parsed and
+  Persistence of thresholds, levels, events, the digest mark and the hub's outages stays
+  with `internal/storage`; the `digest`, `notify` and `silence_after` keys are parsed and
   validated by `internal/config`, which keeps owning the file. Editing a threshold is the
   page's business ([thresholds.md](thresholds.md)); this spec owns what a stored threshold
   means.
@@ -233,19 +233,41 @@ state, so nothing is lost when the clock is corrected.
 ### Node silence
 
 The node is a subject too: metric `silence`, empty labels, level `ok` or `critical`. It
-needs no configuration — a node that goes quiet must be noticed on a fresh install
+needs no configuration — a node that stops reporting must be noticed on a fresh install
 ([0032](../decisions/0032-thresholds-are-set-in-the-interface.md)) — and the window is the
 `silence_after` its class resolves to ([0006](../decisions/0006-alerting-rules.md)).
 
+A node's *quiet* is how long it has not reported — now − last_seen — less every part of
+that time the hub itself was down: while the hub is down no request can arrive, so its own
+outage is never the node's silence. The hub records the instant of every tick it starts,
+whether or not the pass succeeds; each time the hub starts, before its first tick, the span
+from the last tick recorded to the start is recorded as an outage. The state judges
+staleness by the same quiet ([state](state.md#staleness)).
+
 | State | Event | New state | Side effect |
 |---|---|---|---|
-| ok | now − last_seen > `silence_after` | critical | notify immediately |
-| critical | now − last_seen > `silence_after`, notified under 24h ago | critical | nothing |
-| critical | now − last_seen > `silence_after`, notified 24h ago or more | critical | notify again |
-| critical | now − last_seen within `silence_after` | ok | notify recovery |
-| ok | now − last_seen within `silence_after` | ok | nothing |
-| ok | now − last_seen exactly `silence_after` | ok | nothing: the window is inclusive, and only past it is silence |
+| ok | quiet > `silence_after` | critical | notify immediately |
+| critical | quiet > `silence_after`, notified under 24h ago | critical | nothing |
+| critical | quiet > `silence_after`, notified 24h ago or more | critical | notify again |
+| critical | quiet within `silence_after` | ok | notify recovery |
+| ok | quiet within `silence_after` | ok | nothing |
+| ok | quiet exactly `silence_after` | ok | nothing: the window is inclusive, and only past it is silence |
 | any | a node listed in the file that has never reported | no subject | nothing: an uninstalled agent is not an incident |
+
+What the quiet leaves out, for a server whose `silence_after` is 10m and which last reported
+at 12:00:
+
+| The hub | Quiet at 12:30 |
+|---|---|
+| up throughout | 30m: the node is silent |
+| down from 12:05 to 12:25 | 10m: the node is not silent yet |
+| last ticked at 11:59, stopped just after the node's 12:00 report, back at 12:25 | 5m: only the part of the outage after the last report is left out |
+| restarted at 12:25 after 30 seconds down | 29m 30s: a short restart leaves out only its own 30 seconds |
+| down from 12:05 to 12:10 and from 12:20 to 12:25 | 20m: every outage is left out |
+| down from 11:40 to 11:55, the node reporting at 12:00 after it | 30m: an outage before the last report leaves nothing out |
+| started at 12:25 on a database with no tick recorded | 30m: nothing says the hub was down |
+| down from 12:05 to 12:20 and, its clock set back in between, from 12:10 to 12:25 | 10m: time two outages share is left out once |
+| an outage recorded from 12:20 to 12:40 — a clock set back since | 20m: only the part up to now is left out |
 
 Recovery has no margin and no separate trigger: `last_seen` advances on every accepted
 request ([ingest](ingest.md#storage)) — on a service node, on every stored measurement and on its first report
@@ -347,6 +369,9 @@ occurrence, because that is the day it speaks for. On a database that has never 
 | a subject's first evaluation, level `warning` or `critical` | the subject appears, plus one event whose previous level is `ok` |
 | a level change that is delivered instantly | the event is recorded before the message goes out: a hub that dies in between delivers on a later tick, and no message is ever sent for an event that was not recorded |
 | the hub restarts | every subject's level, its `since` and when it was last notified are as they were; nothing is re-notified |
+| the hub restarts after an outage longer than a node's `silence_after`, and the node reports before its quiet passes `silence_after` | no "fell silent" and no "reporting again": the node was never silent ([node silence](#node-silence)) |
+| the hub restarts after an outage, a node silent since before it | still `critical`: no "reporting again" |
+| the hub back from an outage longer than `silence_after`, restarted again a few minutes later, the node reporting before its quiet passes `silence_after` | no "fell silent": both outages are left out |
 | two ticks at the same instant over unchanged data | the second writes no event and sends no message |
 | a tick fires while the previous one is still running | skipped and logged: there is only ever one evaluation pass |
 | the hub is asked to stop mid-tick | a change already recorded stays recorded, an in-flight send is abandoned rather than waited on, and no further subject is evaluated |
@@ -362,7 +387,9 @@ one, which is the event stream skins subscribe to
 closed, which is the hub's first start time until a tick crosses `digest.at` and that
 tick's own time afterwards — silence closes the window as a delivered message does, a
 refused delivery leaves it open ([Digest](#digest)), and a stored value is a boundary, never
-proof that a message went out. How that is stored is the implementation's business
+proof that a message went out; and the instant of the latest tick with every outage the
+hub has had, which is what the quiet leaves out ([node silence](#node-silence)). How that
+is stored is the implementation's business
 ([0017](../decisions/0017-one-spec-and-decision-gates.md)).
 
 ### Configuration changes
@@ -381,7 +408,7 @@ rows about the file are about the first tick after a restart with a changed file
 | a threshold set again on a subject whose configuration was removed while it stood in `critical` | judged as a new subject, previous level `ok`, so a value still past the threshold transitions and alerts again |
 | a stored threshold this build cannot read — an unknown direction, a value that is not finite | that subject is not judged and the fact is logged; the rest of the tick runs |
 | a threshold configured for a series that is already past it | the first tick transitions it like any other: a subject that arrives critical alerts at once |
-| `silence_after` widened while a node is silent-critical | the next tick finds `now − last_seen` inside the new window and recovers it |
+| `silence_after` widened while a node is silent-critical | the next tick finds its quiet inside the new window and recovers it |
 | a sensor interval lowered while the agent still holds the old one | `stale_after` shrinks first, so healthy subjects may freeze for up to one configuration delivery ([ingest](ingest.md#configuration-delivery)) |
 | the node's longest sensor interval changed, or the sensor that held it switched off | every series of that node naming no sensor is aged by the new bound from the next tick on, which may freeze one or thaw one, though nothing about those series changed |
 | a node removed from the file | no subjects for it: its stored levels are left untouched and never evaluated, and no recovery is notified |

@@ -67,6 +67,34 @@ func (t Target) silent(lastSeen, now time.Time) bool {
 	return now.Sub(lastSeen) > t.SilenceAfter
 }
 
+// Heard is a node's last_seen moved past every part of the hub's outages that followed it,
+// up to now: no request could arrive then, so none of it counts towards the node's silence.
+// Silence and freezing read it in place of last_seen. Outages come oldest first; a clock set
+// back can make two overlap, and the time they share is left out once
+// (docs/specs/evaluation.md#node-silence).
+func Heard(lastSeen time.Time, outages []storage.Outage, now time.Time) time.Time {
+	var left time.Duration
+	counted := lastSeen
+	for _, outage := range outages {
+		from, to := laterOf(outage.From, counted), outage.To
+		if to.After(now) {
+			to = now
+		}
+		if to.After(from) {
+			left += to.Sub(from)
+			counted = to
+		}
+	}
+	return lastSeen.Add(left)
+}
+
+func laterOf(a, b time.Time) time.Time {
+	if a.After(b) {
+		return a
+	}
+	return b
+}
+
 // Subject is one thing that has a level, as one tick sees it: a series — the triple
 // (node, metric, labels) — with what it was, what it is now, and the value that decided
 // it. Only a watched series is one: an unconfigured series is stored and displayed,
@@ -132,6 +160,7 @@ func Subjects(targets []Target, snap storage.Snapshot, now time.Time) []Subject 
 		if !ever {
 			continue // a node the file lists and no agent has installed is not an incident.
 		}
+		node.LastSeen = Heard(node.LastSeen, snap.Outages, now)
 		// Silence and freezing read one clock, so a node that has just fallen silent freezes
 		// its other subjects in this tick rather than the next.
 		out = append(out, silenceSubject(target, target.silent(node.LastSeen, now), stored, now))

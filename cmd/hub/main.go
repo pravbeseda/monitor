@@ -95,6 +95,10 @@ func run(args []string, out io.Writer) error {
 		return err
 	}
 
+	// The start is taken before a request can arrive: the hub's outage ends here, and a
+	// report stored after it must not be read as one from before (evaluate.Options).
+	started := time.Now()
+
 	// The address is taken before it is announced: a journal that claims a port the hub
 	// never got is read by whoever is hunting for the one it could not take.
 	listener, err := net.Listen("tcp", opts.listen)
@@ -137,7 +141,7 @@ func run(args []string, out io.Writer) error {
 			Notifier: channel,
 			Targets:  cfg.Targets(),
 			Digest:   cfg.Digest(),
-			Started:  time.Now(),
+			Started:  started,
 			Now:      time.Now,
 		}).Run(ctx, evaluate.Interval)
 	}()
