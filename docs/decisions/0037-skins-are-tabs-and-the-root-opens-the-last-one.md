@@ -1,6 +1,6 @@
 # 0037. Skins are tabs, each at its own address; `/` opens the one last chosen
 
-- **Status:** accepted
+- **Status:** accepted, amended by [0041](0041-mission-control-folds-into-the-timeline.md)
 - **Date:** 2026-09-24
 - **Amends:** [0035](0035-mission-control-is-rendered-by-the-hub.md), which put mission
   control at `/`; and the clause of [0026](0026-reader-time-zone-from-the-browser.md) that

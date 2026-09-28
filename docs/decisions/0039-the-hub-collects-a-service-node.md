@@ -20,7 +20,7 @@ and by [0007](0007-public-repository.md) a secret lives in an environment file.
 
 Such a token dies quietly — revoked, unused for six months, or issued by a client left in
 Testing — and a sensor that fails leaves its series stale, which by
-[mission-control](../specs/mission-control.md) raises nothing while every series of the node
+[attention](../specs/attention.md) raises nothing while every series of the node
 is stale.
 
 ## Decision

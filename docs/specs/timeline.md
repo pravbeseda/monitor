@@ -4,9 +4,9 @@
 - **Owns:** the page `GET /timeline` in `internal/hub` — the timeline skin: what needs
   attention now, how each node's last 24 hours looked, and the levels that changed. What
   a level, a staleness or a silence *is* stays with [evaluation](evaluation.md) and
-  [state](state.md); the items of "now" are mission control's
-  ([mission-control](mission-control.md#model)); the tabs, the zone, the shell and the
-  refresh come from [web](web.md); every user-facing string comes from `internal/i18n`.
+  [state](state.md); what "now" lists is [attention](attention.md); the tabs, the zone, the
+  shell and the refresh come from [web](web.md); every user-facing string comes from
+  `internal/i18n`.
 - **Decisions:** [0001](../decisions/0001-semantic-core-and-skins.md),
   [0002](../decisions/0002-push-not-pull.md),
   [0015](../decisions/0015-evaluation-on-a-tick.md),
@@ -15,13 +15,14 @@
   [0035](../decisions/0035-mission-control-is-rendered-by-the-hub.md),
   [0036](../decisions/0036-an-anomaly-is-a-value-outside-its-weeks-band.md),
   [0037](../decisions/0037-skins-are-tabs-and-the-root-opens-the-last-one.md),
-  [0038](../decisions/0038-a-lane-is-summarised-on-read.md)
+  [0038](../decisions/0038-a-lane-is-summarised-on-read.md),
+  [0041](../decisions/0041-mission-control-folds-into-the-timeline.md)
 
 ## Purpose
 
-Mission control answers "is everything fine now". The timeline adds "and what happened
-while I was not looking": a strip per node over the last day, and the log of level changes
-evaluation has kept all along ([evaluation](evaluation.md#persistence-and-restart)). It
+The timeline is the hub's primary view. Its "now" answers "is everything fine", and the
+rest of it "and what happened while I was not looking": a strip per node over the last
+day, and the log of level changes evaluation has kept all along ([evaluation](evaluation.md#persistence-and-restart)). It
 judges nothing: every colour on it is a level evaluation stored, a silence it recorded, or
 data that was or was not fresh. How a past hour is summarised from those records is
 [0038](../decisions/0038-a-lane-is-summarised-on-read.md).
@@ -32,8 +33,8 @@ Only nodes the configuration names, and that have reported at least once, take p
 
 The page has three panels, headed "Now", "Last 24 hours" and "What changed".
 
-**Now** is mission control's list of items: the same items, in the same order, with the
-same headline, notice and links ([mission-control](mission-control.md#model)).
+**Now** is the list of what needs attention, with its headline, notice and links
+([attention](attention.md#model)).
 
 **A level's span.** A series' level begins at the `since` evaluation recorded for it —
 the change that entered it, or its first evaluation, which records no change when it finds
@@ -72,7 +73,7 @@ state with its colour.
 
 **A change** is one transition from the event log: a series or a node's silence moving
 between levels. It shows the time, a dot in the colour of the level it entered, the node,
-the series named as mission control names it ([mission-control](mission-control.md#model)), the
+the series named as "now" names it ([attention](attention.md#model)), the
 level it left and the level it entered as the catalogue's level words, and the value that
 produced it, formatted in its unit as `/debug` formats it. A node's silence reads "fell
 silent" on entering `critical`, followed by how long the node had not reported — its
@@ -94,9 +95,9 @@ English catalogue's; every one of them has its Russian.
 
 | State | What the reader sees |
 |---|---|
-| a volume at `critical`, a node silent, a series ranking | under "Now", the items mission control shows, in its order, with its headline |
-| everything `ok`, nothing ranking | mission control's headline "All is well" and no item |
-| nothing watched | mission control's headline and its nothing-judged notice |
+| a volume at `critical` on `server-b`, `server-c` silent, a series at `ok` ranking on `server-a` | under "Now", the headline "critical", then `server-b`'s volume, `server-c`'s silence and `server-a`'s anomaly |
+| every watched series `ok` and fresh, no node silent, nothing ranking | the headline "All is well" and no item |
+| nothing watched, every node reporting, no item | the headline "Nothing is judged yet" and the nothing-judged notice |
 
 ### Lanes {#lanes}
 
@@ -132,7 +133,7 @@ fresh at every moment.
 
 | State | What the reader sees |
 |---|---|
-| a volume moving from `warning` to `critical` at 14:02 with 4% free | "14:02", a red dot, the node, the series named as mission control names it, "warning → critical" and its value formatted as `/debug` formats it |
+| a volume moving from `warning` to `critical` at 14:02 with 4% free | "14:02", a red dot, the node, the series named as "now" names it, "warning → critical" and its value formatted as `/debug` formats it |
 | a series recovering to `ok` | the same line with a green dot, ending "→ ok" and its value |
 | a series whose first evaluation found it `critical` | "ok → critical": evaluation records a first level as a change from `ok` |
 | a node falling silent at 09:10, its `silence_after` 15m | "09:10", a red dot, the node, "fell silent", "no report for 15.0 min" |
@@ -154,8 +155,8 @@ fresh at every moment.
 |---|---|
 | `/timeline` | the timeline, under the tabs with its own marked ([web](web.md#skins)) |
 | `/timeline?lang=ru` | every word in Russian, the language kept on every link |
-| a level change or a node falling silent while the page is open | on the page within 30 seconds, in now, its lane and the changes, without a reload ([web](web.md#live)) |
-| the state, the log or the stored points cannot be read | the same failure mission control answers with |
+| a new anomaly, a level change or a node falling silent while the page is open | on the page within 30 seconds without a reload: all three in now, and a level change or a silence also in its lane and the changes ([web](web.md#live)) |
+| the state, the log or the stored points cannot be read | the same failure `/debug` answers with |
 
 ## Invariants
 
@@ -193,8 +194,7 @@ fresh at every moment.
 - **Anomalies in the lanes and the changes** — an anomaly is computed on read and never
   stored ([0036](../decisions/0036-an-anomaly-is-a-value-outside-its-weeks-band.md)), so
   there is no history of one to show. Recording them is
-  [#54](https://github.com/pravbeseda/monitor/issues/54). They appear in now, as on
-  mission control.
+  [#54](https://github.com/pravbeseda/monitor/issues/54). They appear in now.
 - **A laptop falling asleep or waking** as a change: staleness writes no event, so the
   lanes show it and the changes do not. The prototype's "asleep" is "no fresh data" here,
   since the hub cannot tell sleep from a failure.

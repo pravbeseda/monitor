@@ -718,8 +718,8 @@ func TestASaveWithoutTheSwitchIsRefused(t *testing.T) {
 // spec: thresholds.md#form — the switch in the reader's language.
 func TestThresholdSwitchSpeaksTheReadersLanguage(t *testing.T) {
 	for target, wants := range map[string][]string{
-		dataAddress:              {"When this series is unusual", "show it on mission control", "never show it as unusual"},
-		dataAddress + "&lang=ru": {"Когда серия необычна", "показывать в центре управления", "никогда не показывать как необычную"},
+		dataAddress:              {"When this series is unusual", "show it on the timeline", "never show it as unusual"},
+		dataAddress + "&lang=ru": {"Когда серия необычна", "показывать в ленте", "никогда не показывать как необычную"},
 	} {
 		_, body := openForm(t, holding(dataSeries), target)
 		for _, want := range wants {

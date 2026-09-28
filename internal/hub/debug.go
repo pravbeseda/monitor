@@ -77,8 +77,8 @@ type rowView struct {
 	Collected  string
 	// Stale is the translated mark of a row that stopped arriving, empty on a fresh one.
 	Stale string
-	// Unusual marks a series that ranks, beside its usual value, so the ones mission
-	// control leaves off past its fifth can be found here (docs/specs/state.md#page).
+	// Unusual marks a series that ranks, beside its usual value, so the ones the timeline's
+	// "now" leaves off past its fifth can be found here (docs/specs/state.md#page).
 	Unusual string
 }
 

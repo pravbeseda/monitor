@@ -1,31 +1,29 @@
-# Spec: Mission control
+# Spec: Attention
 
 - **Status:** approved
-- **Owns:** the page `GET /board` in `internal/hub` — mission control, the hub's primary view —
-  which items it shows, in what order and with which links; and the address `/debug`, where
-  the table of every series now lives. What that table contains stays with
-  [state](state.md#page) and [history](history.md#page); what a level, a staleness or an
-  anomaly *is* stays with [evaluation](evaluation.md), [state](state.md) and
-  [anomaly](anomaly.md); every user-facing string comes from `internal/i18n`; the zone, the
-  shell and the refresh come from [web](web.md).
+- **Owns:** the list of what needs attention now, in `internal/hub` — which items it holds,
+  in what order, with which links, and the headline above them. The timeline shows it under
+  "Now" ([timeline](timeline.md#now)), and the page around it is the timeline's. What a
+  level, a staleness or an anomaly *is* stays with [evaluation](evaluation.md),
+  [state](state.md) and [anomaly](anomaly.md); every user-facing string comes from
+  `internal/i18n`; the zone comes from [web](web.md).
 - **Decisions:** [0001](../decisions/0001-semantic-core-and-skins.md),
   [0002](../decisions/0002-push-not-pull.md),
   [0008](../decisions/0008-english-repo-bilingual-ui.md),
-  [0029](../decisions/0029-pages-refresh-by-fetching-their-own-address.md),
-  [0035](../decisions/0035-mission-control-is-rendered-by-the-hub.md),
   [0036](../decisions/0036-an-anomaly-is-a-value-outside-its-weeks-band.md),
-  [0037](../decisions/0037-skins-are-tabs-and-the-root-opens-the-last-one.md)
+  [0041](../decisions/0041-mission-control-folds-into-the-timeline.md)
 
 ## Purpose
 
-Mission control answers the first two questions of the [concept](../concept.md): is
-everything fine, and if not, where to look. It is empty while all is well, and what needs
-attention surfaces on it by itself, most urgent first. Everything else — every series, its
-value and its link to a threshold — is one click away on `/debug`.
+The list answers the first two questions of the [concept](../concept.md): is everything
+fine, and if not, where to look. It is empty while all is well, and what needs attention
+surfaces on it by itself, most urgent first. Everything else — every series, its value and
+its link to a threshold — is one click away on `/debug`.
 
-It is a skin ([0001](../decisions/0001-semantic-core-and-skins.md)): it reads the state the
-[State API](state.md) answers and judges nothing. Rendering it in the hub rather than in a
-browser is [0035](../decisions/0035-mission-control-is-rendered-by-the-hub.md).
+It began as a skin of its own, mission control, and was folded into the timeline when the
+timeline turned out to show all of it
+([0041](../decisions/0041-mission-control-folds-into-the-timeline.md)). It reads the state
+the [State API](state.md) answers and judges nothing.
 
 ## Model
 
@@ -89,7 +87,7 @@ one ([state](state.md#page)).
 
 ## Behaviour
 
-One row = one test. Anchors: `spec: mission-control.md#<heading>`. Words quoted below are
+One row = one test. Anchors: `spec: attention.md#<heading>`. Words quoted below are
 the English catalogue's; every one of them has its Russian.
 
 ### Items {#items}
@@ -138,39 +136,35 @@ the English catalogue's; every one of them has its Russian.
 | nothing watched, one node silent | "critical", and the nothing-judged notice below it |
 | nothing watched, every node reporting, one anomaly | "Nothing is judged yet", the nothing-judged notice, and the anomaly |
 | nothing watched, every node reporting, no item | "Nothing is judged yet" and the nothing-judged notice: a hub that judges nothing must not read as well |
-| every node configured-out | "Nothing is judged yet" |
+| every node configured-out | "Nothing is judged yet" and the nothing-judged notice |
 | the only node reported for the first time, before the next tick | "Nothing is judged yet" |
 | everything `ok` and one anomaly | "Nothing past a threshold", and the anomaly below it |
 | everything `ok` and a watched series with no fresh data | "Nothing past a threshold", and that item below it |
 | everything `ok`, nothing else | "All is well" |
 
-### The page {#page}
+### Values {#values}
 
-| Request | What the reader sees |
+| State | What the reader sees |
 |---|---|
-| `/board` | mission control, under the tabs ([web](web.md#skins)) |
-| `/debug` | the debug view of [state](state.md#page) and [history](history.md#page), under the tabs |
-| `/board?lang=ru`, `/debug?lang=ru` | every word on the page in Russian, the language kept on every link |
-| any time on the page | in the reader's zone ([web](web.md#zone)) |
 | any value and any usual value | formatted in the unit its metric id declares, as `/debug` formats it |
-| a new anomaly, a level change or a node falling silent while the page is open | on the page within 30 seconds, without a reload ([web](web.md#live)) |
-| the state cannot be read | the same failure `/debug` answers with |
+| any time in an item | in the reader's zone ([web](web.md#zone)) |
+| the reader's language Russian | the headline, the notice and every word of the items in Russian |
 
 ## Invariants
 
-- Mission control shows nothing the [State API](state.md) would not return at the same
+- The list shows nothing the [State API](state.md) would not return at the same
   instant: no level, staleness, value or anomaly of its own.
 - A series appears at most once.
-- Every item on the page has a reason in the state; with no reason, the page holds none.
-- Every series that ranks is on the board or marked on `/debug`, which the line after the
+- Every item has a reason in the state; with no reason, the list holds none.
+- Every series that ranks is in the list or marked on `/debug`, which the line after the
   fifth anomaly links to.
 
 ## Edge cases
 
 - **A hub that watches nothing** still ranks anomalies: the notice says nothing is judged
-  by a threshold, and the board still shows what is unusual.
+  by a threshold, and the list still shows what is unusual.
 - **A fresh hub** has no norms for about two days ([anomaly](anomaly.md#norm-period)), so
-  in its first days only levels, silence and stale series reach the board.
+  in its first days only levels, silence and stale series reach the list.
 - **A sensor switched off in the configuration** leaves its watched series stale for good,
   and a no-fresh-data item with it. The item links to the thresholds page: removing the
   threshold is how the reader says the series is no longer wanted.
@@ -178,10 +172,10 @@ the English catalogue's; every one of them has its Russian.
   ([anomaly](anomaly.md#edge-cases)) until the reader excludes it, from the item's own link
   to its thresholds page ([thresholds](thresholds.md#saving)).
 - **A node that has just fallen silent** has its series stale at once, while its silence
-  subject turns `critical` only on the next evaluation tick: for up to a minute the board
+  subject turns `critical` only on the next evaluation tick: for up to a minute the list
   shows neither ([evaluation](evaluation.md#the-tick)).
 - **Many anomalies at once** — a hub back from a long outage whose nodes all changed — are
-  capped at five on the board; the rest are marked on `/debug`.
+  capped at five in the list; the rest are marked on `/debug`.
 - **Both series of one volume** can rank together, a byte count and a percentage moving as
   one; they are two items, side by side, because each is a series of its own
   ([0033](../decisions/0033-a-subject-is-a-series.md)).
@@ -190,12 +184,10 @@ the English catalogue's; every one of them has its Russian.
 
 - **Health 0–100, trend and forecast** — not built; the headline is the state's level.
 - **Notifying an anomaly** — [0036](../decisions/0036-an-anomaly-is-a-value-outside-its-weeks-band.md).
-- **Dismissing or acknowledging an item** — the board shows the state; an item leaves when
+- **Dismissing or acknowledging an item** — the list shows the state; an item leaves when
   its reason does.
-- **A count of unwatched series on the board** — every hub has some, so it would never
+- **A count of unwatched series in the list** — every hub has some, so it would never
   leave; `/debug` counts them per node, and anomalies judge them meanwhile.
-- **Other skins** — the [timeline](timeline.md); advisors, the city, the organism, the
-  Telegram bot as a skin.
 
 ## Open questions
 

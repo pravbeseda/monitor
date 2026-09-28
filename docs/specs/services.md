@@ -108,7 +108,7 @@ One row = one test. Anchors: `spec: services.md#<heading>`.
 | the hub restarted after being down longer than the service node's `silence_after`, Google answering within a minute | no silence message for the service node |
 | the service node on `/debug` and in `/api/v1/state` | its agent version is the hub's own |
 | `gdrive` fails once | nothing is asked of Google again until the sensor's interval has passed, as with an agent's sensor; neither the node nor its series go silent or stale |
-| no collection has stored a measurement for longer than `silence_after` — the token revoked, Google unreachable | the service node falls silent: an instant critical message and a silent node on the board |
+| no collection has stored a measurement for longer than `silence_after` — the token revoked, Google unreachable | the service node falls silent: an instant critical message and a silent node under the timeline's "now" |
 | `gdrive` answers again after that | the service node is reporting again, announced instantly |
 | an ingest request naming the service node, with any node's token | refused with 403, as a node another token belongs to is ([ingest.md](ingest.md#authentication)) |
 | a request to `/api/v1/ingest` or under `/api/v1/agent/` with `Authorization: Bearer ` and nothing after it | refused with 401: no token, and never the service node that has none |

@@ -101,7 +101,6 @@ func TestAPIStaysInUTCForAReaderWithAZone(t *testing.T) {
 func TestEveryPageCarriesTheShell(t *testing.T) {
 	store := served{series: []seriesPoints{volume()}}
 	pages := map[string]hub.Store{
-		"/board":    stored{states: []storage.NodeState{laptop}},
 		"/debug":    stored{states: []storage.NodeState{laptop}},
 		"/timeline": stored{states: []storage.NodeState{laptop}},
 		oneVolume:   store,
@@ -136,7 +135,6 @@ func TestEveryPageCarriesTheShell(t *testing.T) {
 // browser asks the hub for no /favicon.ico of its own.
 func TestEveryPageCarriesItsIcon(t *testing.T) {
 	pages := map[string]hub.Store{
-		"/board":    stored{states: []storage.NodeState{laptop}},
 		"/debug":    stored{states: []storage.NodeState{laptop}},
 		"/timeline": stored{states: []storage.NodeState{laptop}},
 		oneVolume:   served{series: []seriesPoints{volume()}},

@@ -2,9 +2,6 @@ package hub
 
 import (
 	"fmt"
-	"html/template"
-	"log/slog"
-	"net/http"
 	"sort"
 	"time"
 
@@ -14,19 +11,11 @@ import (
 	"github.com/pravbeseda/monitor/internal/state"
 )
 
-var boardTemplate = template.Must(template.ParseFS(templates, "templates/board.html", "templates/attention.html", "templates/shell.html"))
-
-// shownAnomalies is how many anomaly items the board shows before a line counts the rest.
+// shownAnomalies is how many anomaly items the list shows before a line counts the rest.
 const shownAnomalies = 5
 
-// boardView is mission control as the template sees it: every string translated.
-type boardView struct {
-	shell
-	attentionView
-}
-
-// attentionView is what needs attention now, as mission control and the timeline both show
-// it (templates/attention.html).
+// attentionView is what needs attention now, as the timeline shows it under "now"
+// (templates/attention.html, docs/specs/attention.md).
 type attentionView struct {
 	Headline       string
 	HeadlineClass  string
@@ -50,26 +39,6 @@ type itemView struct {
 	Thresholds string
 }
 
-// Board renders mission control: what needs attention now, most urgent first, and nothing
-// the state would not return (docs/specs/mission-control.md).
-func Board(read StateReader) http.Handler {
-	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		values := r.URL.Query()
-		printer := i18n.For(i18n.Negotiate(values.Get("lang"), r.Header.Get("Accept-Language"))).In(zoneOf(r))
-
-		current, err := read(r.Context())
-		if err != nil {
-			storageFailure(w, printer, err)
-			return
-		}
-
-		shellHeaders(w)
-		if err := boardTemplate.Execute(w, boardOf(printer, current, language(values))); err != nil {
-			slog.Error("render the board", "error", err)
-		}
-	})
-}
-
 // itemKind is what an item is about, in the order of how urgent it is.
 type itemKind int
 
@@ -89,10 +58,6 @@ type item struct {
 
 func (i item) silence() bool { return i.subject.Metric == evaluate.SilenceMetric }
 
-func boardOf(printer *i18n.Printer, current state.State, lang string) boardView {
-	return boardView{shell: shellOf(printer, "board.title", "board", lang), attentionView: attentionOf(printer, current, lang)}
-}
-
 func attentionOf(printer *i18n.Printer, current state.State, lang string) attentionView {
 	out := attentionView{
 		DebugURL: pageLink("/debug", lang),
@@ -109,7 +74,7 @@ func attentionOf(printer *i18n.Printer, current state.State, lang string) attent
 		out.Items = append(out.Items, itemOf(printer, one, current, lang))
 	}
 	if more := anomalies - shownAnomalies; more > 0 {
-		out.More = fmt.Sprintf(printer.T("board.more"), more)
+		out.More = fmt.Sprintf(printer.T("attention.more"), more)
 	}
 
 	nothingWatched := current.Watched == 0 && len(current.Nodes) > 0
@@ -123,17 +88,17 @@ func attentionOf(printer *i18n.Printer, current state.State, lang string) attent
 		mark := levelOf(printer, current.Level)
 		out.Headline, out.HeadlineClass = mark.Word, mark.Class
 	case current.Level == nil || nothingWatched:
-		out.Headline = printer.T("board.nothing_judged")
+		out.Headline = printer.T("attention.nothing_judged")
 	case len(found) > 0:
-		out.Headline = printer.T("board.nothing_past")
+		out.Headline = printer.T("attention.nothing_past")
 	default:
-		out.Headline = printer.T("board.all_well")
+		out.Headline = printer.T("attention.all_well")
 	}
 	return out
 }
 
 // itemsOf picks what needs attention out of the state and orders it
-// (docs/specs/mission-control.md#model). Only nodes the configuration names take part.
+// (docs/specs/attention.md#model). Only nodes the configuration names take part.
 func itemsOf(current state.State) []item {
 	configured := map[string]bool{}
 	for _, node := range current.Nodes {
@@ -194,7 +159,7 @@ func itemOf(printer *i18n.Printer, one item, current state.State, lang string) i
 			Class: "item-critical",
 			Name:  s.Node,
 			Link:  pageLink("/debug", lang),
-			Note:  fmt.Sprintf(printer.T("board.silent"), printer.Time(lastSeenOf(current, s.Node))),
+			Note:  fmt.Sprintf(printer.T("attention.silent"), printer.Time(lastSeenOf(current, s.Node))),
 		}
 	}
 
@@ -207,19 +172,19 @@ func itemOf(printer *i18n.Printer, one item, current state.State, lang string) i
 		out.Name += " · " + named
 	}
 	if s.Anomaly != nil && s.Anomaly.Rank > 0 {
-		out.Usual = fmt.Sprintf(printer.T("board.usually"), format(printer, s.Metric, s.Anomaly.Norm))
+		out.Usual = fmt.Sprintf(printer.T("attention.usually"), format(printer, s.Metric, s.Anomaly.Norm))
 	}
 	switch one.kind {
 	case itemCritical, itemWarning:
 		out.Level = levelOf(printer, s.Level)
 		out.Class = "item-" + s.Level.String()
-		out.Note = fmt.Sprintf(printer.T("board.since"), printer.Time(s.Since))
+		out.Note = fmt.Sprintf(printer.T("attention.since"), printer.Time(s.Since))
 	case itemAnomalous:
 		out.Class = "item-unusual"
 		out.Thresholds = thresholdLink(s.Node, s.Metric, s.Labels, lang)
 	case itemNoFreshData:
 		out.Class = "item-stale"
-		out.Note = fmt.Sprintf(printer.T("board.stale"), printer.Time(s.TS))
+		out.Note = fmt.Sprintf(printer.T("attention.stale"), printer.Time(s.TS))
 		out.Thresholds = thresholdLink(s.Node, s.Metric, s.Labels, lang)
 	}
 	return out
