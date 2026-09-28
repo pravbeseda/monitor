@@ -2,6 +2,7 @@ package main
 
 import (
 	"bytes"
+	"database/sql"
 	"errors"
 	"flag"
 	"io"
@@ -14,6 +15,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/pravbeseda/monitor/internal/storage"
 	"github.com/pravbeseda/monitor/internal/version"
 )
 
@@ -295,4 +297,52 @@ func (b *syncBuffer) String() string {
 	b.mu.Lock()
 	defer b.mu.Unlock()
 	return b.buf.String()
+}
+
+// spec: evaluation.md#persistence-and-restart — a hub that cannot read or record its outage
+// does not start, and says why, rather than count the outage as every node's silence.
+func TestRunRefusesToStartWithoutItsOutage(t *testing.T) {
+	dir := t.TempDir()
+	dbPath := filepath.Join(dir, "monitor.db")
+	store, err := storage.OpenSQLite(dbPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := store.Close(); err != nil {
+		t.Fatal(err)
+	}
+	raw, err := sql.Open("sqlite", dbPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := raw.Exec(`INSERT INTO meta (key, value) VALUES ('last_tick_at', 'not a time')`); err != nil {
+		t.Fatal(err)
+	}
+	if err := raw.Close(); err != nil {
+		t.Fatal(err)
+	}
+
+	configPath := filepath.Join(dir, "config.yaml")
+	config := "nodes:\n  laptop-a:\n    class: laptop\n    token_env: MONITOR_TOKEN_LAPTOP_A\n"
+	if err := os.WriteFile(configPath, []byte(config), 0o600); err != nil {
+		t.Fatalf("write config: %v", err)
+	}
+	t.Setenv("MONITOR_TOKEN_LAPTOP_A", strings.Repeat("a", 40))
+
+	var out bytes.Buffer
+	done := make(chan error, 1)
+	go func() {
+		done <- run([]string{"--config", configPath, "--db", dbPath, "--listen", "127.0.0.1:0"}, &out)
+	}()
+	select {
+	case err := <-done:
+		if err == nil || !strings.Contains(err.Error(), "outage") {
+			t.Fatalf("error = %v, want it to say the outage could not be recorded", err)
+		}
+		if strings.Contains(out.String(), "listening on") {
+			t.Errorf("startup output = %q, want no claim that it listens", out.String())
+		}
+	case <-time.After(10 * time.Second):
+		t.Fatal("run did not return: the hub started without its outage")
+	}
 }

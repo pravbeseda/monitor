@@ -30,8 +30,6 @@ type Evaluator struct {
 	// started is where the digest window begins on a database that has never digested,
 	// and where the hub's latest outage ends.
 	started time.Time
-	// begun says that outage is recorded.
-	begun bool
 	// running keeps two passes from overlapping. A tick that would start while the
 	// previous one is still going gives way rather than queueing behind it.
 	running atomic.Bool
@@ -74,11 +72,8 @@ func (e *Evaluator) Tick(ctx context.Context) error {
 	}
 	defer e.running.Store(false)
 
-	// The hub is up whether or not the rest of the pass succeeds, and an outage is only
-	// what lies between two ticks it could not run (docs/specs/evaluation.md#node-silence).
-	if err := e.Begin(ctx); err != nil {
-		return err
-	}
+	// The hub is up whether or not the rest of the pass succeeds
+	// (docs/specs/evaluation.md#node-silence).
 	if err := e.store.SetLastTickAt(ctx, e.now()); err != nil {
 		return err
 	}
@@ -139,23 +134,17 @@ func (e *Evaluator) Tick(ctx context.Context) error {
 	return e.digest(ctx, subjects, watch, since, now)
 }
 
-// Begin records the outage that ended at this start — the span from the last tick
-// recorded before it. The hub calls it before it serves, so the state leaves the outage out
-// from the first request; the first tick calls it again when that failed.
+// Begin records the outage that ended at this start — the span from the last instant the
+// hub recorded it was up. The hub calls it once, before it serves or runs: afterwards the
+// mark is past the start, and a second call records nothing.
 func (e *Evaluator) Begin(ctx context.Context) error {
-	if e.begun {
-		return nil
-	}
 	last, recorded, err := e.store.LastTickAt(ctx)
 	if err != nil {
 		return err
 	}
 	if recorded && last.Before(e.started) {
-		if err := e.store.RecordOutage(ctx, storage.Outage{From: last, To: e.started}); err != nil {
-			return err
-		}
+		return e.store.RecordOutage(ctx, storage.Outage{From: last, To: e.started})
 	}
-	e.begun = true
 	return nil
 }
 

@@ -34,6 +34,10 @@ A second review found two gaps in a version that remembered the latest outage al
   after an outage a live node's series read "no fresh data"; so the outages come with the
   storage snapshot both read, and one function moves last_seen past them.
 
+The outage is recorded before the hub serves a request, and a hub that cannot record it
+does not start: a retry on the first tick raced the heartbeat, which could move the mark
+past the start first and lose the outage for good, bringing #56 back.
+
 A tick lands every minute, so an outage can be overstated by up to a minute. The first
 start of this build has no tick recorded and leaves nothing out, once. Outages are not
 pruned: one row per restart.

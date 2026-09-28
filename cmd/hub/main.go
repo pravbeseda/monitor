@@ -110,6 +110,22 @@ func run(args []string, out io.Writer) error {
 	// together: a change already recorded stays recorded, an in-flight send is abandoned.
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 
+	evaluator := evaluate.New(evaluate.Options{
+		Store:    store,
+		Notifier: channel,
+		Targets:  cfg.Targets(),
+		Digest:   cfg.Digest(),
+		Started:  started,
+		Now:      time.Now,
+	})
+	// The outage is recorded before a request is served, so the state never counts it as
+	// silence. A hub that cannot record it does not start: nothing has moved the last mark,
+	// so the next start records it (docs/specs/evaluation.md#persistence-and-restart).
+	if err := evaluator.Begin(ctx); err != nil {
+		stop()
+		return errors.Join(fmt.Errorf("record the outage: %w", err), listener.Close())
+	}
+
 	if _, err := fmt.Fprintf(out, "monitor-hub %s listening on %s (nodes: %d, notify: %s)\n",
 		version.Current, listener.Addr(), len(cfg.Nodes()), cfg.Notify().Channel); err != nil {
 		stop()
@@ -134,19 +150,6 @@ func run(args []string, out io.Writer) error {
 		<-serving
 	}()
 
-	evaluator := evaluate.New(evaluate.Options{
-		Store:    store,
-		Notifier: channel,
-		Targets:  cfg.Targets(),
-		Digest:   cfg.Digest(),
-		Started:  started,
-		Now:      time.Now,
-	})
-	// Recorded before the first request is served, so the state never counts the outage
-	// as silence; a failure here is retried by the first tick.
-	if err := evaluator.Begin(ctx); err != nil {
-		fmt.Fprintf(os.Stderr, "hub: record the outage: %v\n", err)
-	}
 	go func() {
 		defer close(evaluating)
 		evaluator.Run(ctx, evaluate.Interval)

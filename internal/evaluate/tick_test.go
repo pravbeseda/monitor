@@ -104,8 +104,13 @@ func evaluatorSince(store evaluate.Store, channel evaluate.Notifier, started, at
 	})
 }
 
+// pass is one tick of a hub that has begun: every evaluator is a start, and records its
+// outage before it runs.
 func pass(t *testing.T, e *evaluate.Evaluator) {
 	t.Helper()
+	if err := e.Begin(context.Background()); err != nil {
+		t.Fatalf("Begin: %v", err)
+	}
 	if err := e.Tick(context.Background()); err != nil {
 		t.Fatalf("Tick: %v", err)
 	}

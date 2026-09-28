@@ -373,6 +373,7 @@ occurrence, because that is the day it speaks for. On a database that has never 
 | the hub restarts after an outage longer than a node's `silence_after`, and the node reports before its quiet passes `silence_after` | no "fell silent" and no "reporting again": the node was never silent ([node silence](#node-silence)) |
 | the hub restarts after an outage, a node silent since before it | still `critical`: no "reporting again" |
 | the hub back from an outage longer than `silence_after`, restarted again a few minutes later, the node reporting before its quiet passes `silence_after` | no "fell silent": both outages are left out |
+| the outage cannot be read or recorded as the hub starts | the hub does not start and says why; nothing moved the last mark, so the next start records the outage |
 | two ticks at the same instant over unchanged data | the second writes no event and sends no message |
 | a tick fires while the previous one is still running | skipped and logged: there is only ever one evaluation pass |
 | the hub is asked to stop mid-tick | a change already recorded stays recorded, an in-flight send is abandoned rather than waited on, and no further subject is evaluated |
