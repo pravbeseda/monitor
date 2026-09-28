@@ -7,6 +7,8 @@ import (
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/pravbeseda/monitor/internal/evaluate"
 )
 
 var tabPattern = regexp.MustCompile(`<a class="tab" href="([^"]*)" data-skin="([^"]*)"( aria-current="page")?>([^<]*)</a>`)
@@ -35,16 +37,16 @@ func openTab(tabs []tab) string {
 	return ""
 }
 
-// spec: web.md#skins — `/` redirects to the skin the last tab click remembered, mission
-// control when there is none, keeping the query, and no cache keeps the answer.
+// spec: web.md#skins — `/` redirects to the skin the last tab click remembered, the
+// timeline when there is none, keeping the query, and no cache keeps the answer.
 func TestTheRootRedirectsToTheRememberedSkin(t *testing.T) {
 	for _, tc := range []struct {
 		name, method, target, cookie, want string
 	}{
-		{"no tab ever clicked", http.MethodGet, "/", "", "/board"},
+		{"no tab ever clicked", http.MethodGet, "/", "", "/timeline"},
 		{"the table remembered", http.MethodGet, "/", "debug", "/debug"},
 		{"the timeline remembered", http.MethodGet, "/", "timeline", "/timeline"},
-		{"a skin this hub no longer has", http.MethodGet, "/", "city", "/board"},
+		{"mission control, remembered before it folded", http.MethodGet, "/", "board", "/timeline"},
 		{"the language kept", http.MethodGet, "/?lang=ru", "debug", "/debug?lang=ru"},
 		{"HEAD", http.MethodHead, "/", "debug", "/debug"},
 	} {
@@ -79,7 +81,6 @@ func TestEveryPageCarriesTheTabs(t *testing.T) {
 	for _, tc := range []struct {
 		target, open string
 	}{
-		{"/board", "board"},
 		{"/debug", "debug"},
 		{"/timeline", "timeline"},
 		{oneVolume, ""},
@@ -95,7 +96,7 @@ func TestEveryPageCarriesTheTabs(t *testing.T) {
 			for _, one := range tabs {
 				skins = append(skins, one.skin+" "+one.href+" "+one.label)
 			}
-			want := []string{"board /board Mission control", "timeline /timeline Timeline", "debug /debug All series"}
+			want := []string{"timeline /timeline Timeline", "debug /debug All series"}
 			if strings.Join(skins, ", ") != strings.Join(want, ", ") {
 				t.Errorf("tabs = %v, want %v", skins, want)
 			}
@@ -115,7 +116,7 @@ func TestTheTabsKeepTheLanguage(t *testing.T) {
 	for _, one := range tabsOf(t, rec.Body.String()) {
 		got = append(got, one.href+" "+one.label)
 	}
-	want := []string{"/board?lang=ru Центр управления", "/timeline?lang=ru Лента", "/debug?lang=ru Все серии"}
+	want := []string{"/timeline?lang=ru Лента", "/debug?lang=ru Все серии"}
 	if strings.Join(got, ", ") != strings.Join(want, ", ") {
 		t.Errorf("tabs = %v, want %v", got, want)
 	}
@@ -124,7 +125,7 @@ func TestTheTabsKeepTheLanguage(t *testing.T) {
 // spec: web.md#skins — a skin's page writes no cookie: only a tab click, in the browser,
 // makes a choice, so a refresh or a reload changes nothing.
 func TestASkinPageChoosesNothing(t *testing.T) {
-	for _, target := range []string{"/board", "/timeline", "/debug"} {
+	for _, target := range []string{"/timeline", "/debug"} {
 		rec := httptest.NewRecorder()
 		routesWith(t, stored{}, func() time.Time { return lastSeen }).ServeHTTP(rec, httptest.NewRequest(http.MethodGet, target, nil))
 		if rec.Code != http.StatusOK {
@@ -139,7 +140,7 @@ func TestASkinPageChoosesNothing(t *testing.T) {
 // spec: web.md#skins — every page carries the script that, on a click on a tab, stores that
 // tab's skin for a year and for the whole site.
 func TestEveryPageStoresTheTabClicked(t *testing.T) {
-	for _, target := range []string{"/board", "/timeline", "/debug", oneVolume, dataAddress, "/history?metric=disk.free_pct&nonsense=1"} {
+	for _, target := range []string{"/timeline", "/debug", oneVolume, dataAddress, "/history?metric=disk.free_pct&nonsense=1"} {
 		body := getState(t, holding(dataSeries), target, at).Body.String()
 		for _, want := range []string{
 			`event.target.closest("a.tab[data-skin]")`,
@@ -149,5 +150,23 @@ func TestEveryPageStoresTheTabClicked(t *testing.T) {
 				t.Errorf("GET %s carries no %s", target, want)
 			}
 		}
+	}
+}
+
+// spec: web.md#skins — mission control folded into the timeline, and nothing answers at its
+// old address.
+func TestNothingAnswersAtBoard(t *testing.T) {
+	if rec := getState(t, stored{}, "/board", at); rec.Code != http.StatusNotFound {
+		t.Fatalf("GET /board = %d, want 404: %s", rec.Code, rec.Body)
+	}
+}
+
+// spec: web.md#skins — a link under "Now" is no tab, so following it chooses nothing.
+func TestALinkUnderNowIsNoTab(t *testing.T) {
+	body := showAttention(t, stateOf(silenceOf("server-b", evaluate.Critical)), "/timeline")
+	item := oneItem(t, body)
+	containsAll(t, "the silence item", item, `href="/debug"`)
+	if strings.Contains(item, "data-skin") || strings.Contains(item, `class="tab`) {
+		t.Errorf("the item's link is a tab: %s", item)
 	}
 }

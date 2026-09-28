@@ -16,9 +16,9 @@
 
 A threshold answers "is this value bad?", and only where somebody set a number. An anomaly
 answers a different question — "is this value unlike what this series usually does?" — for
-every series, with nothing set. It is what lets mission control surface a load five times
-its usual on a machine nobody wrote a threshold for
-([mission-control.md](mission-control.md)).
+every series, with nothing set. It is what lets the timeline's "now" surface a load five
+times its usual on a machine nobody wrote a threshold for
+([attention.md](attention.md)).
 
 It judges no level, writes no event and sends no message: an anomaly is shown, never
 notified ([0036](../decisions/0036-an-anomaly-is-a-value-outside-its-weeks-band.md)). It
@@ -278,7 +278,7 @@ The norm period holds only −5:
 
 - **Notifying an anomaly** — shown only
   ([0036](../decisions/0036-an-anomaly-is-a-value-outside-its-weeks-band.md)); a digest line
-  waits until the board shows how often anomalies occur.
+  waits until the timeline shows how often anomalies occur.
 - **Daily or weekly seasonality** — the band is the whole week; comparing an hour with the
   same hour of other days is a later refinement.
 - **A per-series tolerance** — a wider or narrower cut-off than 2 — deferred until a series

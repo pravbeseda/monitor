@@ -1,10 +1,11 @@
 # 0035. Mission control is rendered by the hub; TypeScript waits for a skin that needs a client
 
 - **Status:** accepted, amended by [0037](0037-skins-are-tabs-and-the-root-opens-the-last-one.md)
+  and [0041](0041-mission-control-folds-into-the-timeline.md)
 - **Date:** 2026-09-23
 - **Amends:** the line of [0005](0005-poc-stack.md) that keeps skins in TypeScript over the
   State API, and the answer to question 1 in [poc.md](../poc.md) that repeats it
-- **Source:** [mission-control spec](../specs/mission-control.md),
+- **Source:** [attention spec](../specs/attention.md),
   [design notes](../log/2026-09-23-mission-control.md)
 
 ## Context

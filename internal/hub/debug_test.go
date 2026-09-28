@@ -3,6 +3,7 @@ package hub_test
 import (
 	"net/http"
 	"net/http/httptest"
+	"net/url"
 	"strings"
 	"testing"
 	"time"
@@ -64,24 +65,33 @@ func TestDebugMarksAnUnusualSeriesInRussian(t *testing.T) {
 	}
 }
 
-// spec: state.md#page — /debug carries the tabs, mission control among them, keeping the
+// spec: state.md#page — /debug carries the tabs, the timeline among them, keeping the
 // language.
 func TestDebugCarriesTheTabs(t *testing.T) {
 	for target, want := range map[string]string{
-		"/debug":         "/board",
-		"/debug?lang=ru": "/board?lang=ru",
+		"/debug":         "/timeline",
+		"/debug?lang=ru": "/timeline?lang=ru",
 	} {
 		if tabs := tabsOf(t, showDebug(t, unusualRoot(), target)); len(tabs) == 0 || tabs[0].href != want {
-			t.Errorf("GET %s tabs = %v, want mission control's first at %s", target, tabs, want)
+			t.Errorf("GET %s tabs = %v, want the timeline's first at %s", target, tabs, want)
 		}
 	}
 }
 
-// spec: mission-control.md#page — the table of every series lives at /debug.
-func TestTheTableLivesAtDebug(t *testing.T) {
-	rec := getState(t, unusualRoot(), "/debug", func() time.Time { return lastSeen })
-	if rec.Code != http.StatusOK || !strings.Contains(rec.Body.String(), "<td>disk.free_bytes</td>") {
-		t.Fatalf("GET /debug = %d, want the table: %s", rec.Code, rec.Body)
+// spec: state.md#page — /debug?lang=ru keeps the language on every link.
+func TestDebugKeepsTheLanguageOnEveryLink(t *testing.T) {
+	body := showDebug(t, unusualRoot(), "/debug?lang=ru")
+	links := hrefPattern.FindAllStringSubmatch(body, -1)
+	if len(links) == 0 {
+		t.Fatal("no link on /debug")
+	}
+	for _, found := range links {
+		if !strings.HasPrefix(found[1], "/") {
+			continue // the shell's icon, not a link
+		}
+		if target, _ := url.Parse(strings.ReplaceAll(found[1], "&amp;", "&")); target.Query().Get("lang") != "ru" {
+			t.Errorf("a link drops the language: %s", found[1])
+		}
 	}
 }
 

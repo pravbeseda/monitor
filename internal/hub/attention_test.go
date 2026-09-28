@@ -17,8 +17,9 @@ import (
 	"github.com/pravbeseda/monitor/internal/state"
 )
 
-// The board is a consumer of the state and nothing else, so its rows are tested against
-// states written by hand: what the state says is state.md's to test.
+// The list of what needs attention is a consumer of the state and nothing else, so its rows
+// are tested on the timeline against states written by hand: what the state says is
+// state.md's to test.
 
 func lvl(level evaluate.Level) *evaluate.Level { return &level }
 
@@ -94,20 +95,26 @@ func stateOf(subjects ...state.Subject) state.State {
 	return out
 }
 
-func showBoard(t *testing.T, current state.State, target string) string {
+// showNow renders the timeline over current, with no log and no points behind it.
+func showNow(t *testing.T, current state.State, req *http.Request) string {
 	t.Helper()
 	rec := httptest.NewRecorder()
-	req := httptest.NewRequest(http.MethodGet, target, nil)
-	hub.Board(func(context.Context) (state.State, error) { return current, nil }).ServeHTTP(rec, req)
+	untargeted := func(string) (evaluate.Target, bool) { return evaluate.Target{}, false }
+	hub.Timeline(func(context.Context) (state.State, error) { return current, nil }, logged{}, untargeted).ServeHTTP(rec, req)
 	if rec.Code != http.StatusOK {
 		t.Fatalf("status = %d: %s", rec.Code, rec.Body)
 	}
 	return rec.Body.String()
 }
 
+func showAttention(t *testing.T, current state.State, target string) string {
+	t.Helper()
+	return showNow(t, current, httptest.NewRequest(http.MethodGet, target, nil))
+}
+
 var itemPattern = regexp.MustCompile(`(?s)<li class="item[^"]*">.*?</li>`)
 
-// items are the board's items in the order it shows them.
+// items are the list's items in the order it shows them.
 func items(body string) []string {
 	return itemPattern.FindAllString(body, -1)
 }
@@ -141,8 +148,8 @@ func containsAll(t *testing.T, what, text string, wants ...string) {
 	}
 }
 
-// spec: mission-control.md#items
-func TestTheBoardShowsNoItemWhenNothingNeedsAttention(t *testing.T) {
+// spec: attention.md#items
+func TestNoItemWhenNothingNeedsAttention(t *testing.T) {
 	for name, current := range map[string]state.State{
 		"every watched series ok, no anomaly, no node silent": stateOf(
 			silenceOf("server-b", evaluate.OK), judgedAt(free("server-b", "/", 40e9), evaluate.OK)),
@@ -162,42 +169,42 @@ func TestTheBoardShowsNoItemWhenNothingNeedsAttention(t *testing.T) {
 			watchedOnly(free("server-b", "/data", 1e9))),
 	} {
 		t.Run(name, func(t *testing.T) {
-			if got := items(showBoard(t, current, "/")); len(got) != 0 {
+			if got := items(showAttention(t, current, "/timeline")); len(got) != 0 {
 				t.Fatalf("items = %v, want none", got)
 			}
 		})
 	}
 }
 
-// spec: mission-control.md#items — a silent node is one item, and its series none of their
+// spec: attention.md#items — a silent node is one item, and its series none of their
 // own.
 func TestASilentNodeIsOneItem(t *testing.T) {
-	body := showBoard(t, stateOf(
+	body := showAttention(t, stateOf(
 		silenceOf("server-b", evaluate.Critical),
 		staled(judgedAt(free("server-b", "/", 1e9), evaluate.Critical)),
-	), "/")
+	), "/timeline")
 	containsAll(t, "the silence item", oneItem(t, body), "server-b", "silent", "2026-08-28 10:05 UTC", `href="/debug"`)
 }
 
-// spec: mission-control.md#items — a volume at critical.
+// spec: attention.md#items — a volume at critical.
 func TestALevelItemCarriesTheLevelAndSinceWhen(t *testing.T) {
-	body := showBoard(t, stateOf(silenceOf("server-b", evaluate.OK), judgedAt(free("server-b", "/data", 1e9), evaluate.Critical)), "/")
+	body := showAttention(t, stateOf(silenceOf("server-b", evaluate.OK), judgedAt(free("server-b", "/data", 1e9), evaluate.Critical)), "/timeline")
 	containsAll(t, "the level item", oneItem(t, body),
 		"server-b", "disk.free_bytes", "/data", "1.0 GB", ">critical<", "2026-08-28 08:05 UTC",
 		`href="/history?label.fs=ext4&amp;label.mount=%2Fdata&amp;label.removable=false&amp;metric=disk.free_bytes&amp;node=server-b"`)
 }
 
-// spec: mission-control.md#items — a series at critical that also ranks is one item, with
+// spec: attention.md#items — a series at critical that also ranks is one item, with
 // its usual value.
 func TestALevelThatRanksIsOneItem(t *testing.T) {
-	body := showBoard(t, stateOf(silenceOf("server-b", evaluate.OK), ranked(judgedAt(free("server-b", "/data", 1e9), evaluate.Critical), 1)), "/")
+	body := showAttention(t, stateOf(silenceOf("server-b", evaluate.OK), ranked(judgedAt(free("server-b", "/data", 1e9), evaluate.Critical), 1)), "/timeline")
 	containsAll(t, "the level item", oneItem(t, body), ">critical<", "usually 40.0 GB")
 }
 
-// spec: mission-control.md#items — a watched series at ok that ranks, and an unwatched one
+// spec: attention.md#items — a watched series at ok that ranks, and an unwatched one
 // named by a label other than a mount.
 func TestAnAnomalyItemCarriesTheUsualValue(t *testing.T) {
-	body := showBoard(t, stateOf(silenceOf("server-b", evaluate.OK), ranked(judgedAt(free("server-b", "/data", 1e9), evaluate.OK), 1)), "/")
+	body := showAttention(t, stateOf(silenceOf("server-b", evaluate.OK), ranked(judgedAt(free("server-b", "/data", 1e9), evaluate.OK), 1)), "/timeline")
 	item := oneItem(t, body)
 	containsAll(t, "the anomaly item", item, "server-b", "/data", "1.0 GB", "usually 40.0 GB")
 	linksTo(t, item, "/history", "server-b", "disk.free_bytes", "/data")
@@ -208,18 +215,18 @@ func TestAnAnomalyItemCarriesTheUsualValue(t *testing.T) {
 
 	queue := ranked(reading("server-b", "queue.depth", map[string]string{"queue": "payments"}, 900), 1)
 	queue.Anomaly.Norm = 12
-	containsAll(t, "the anomaly item", oneItem(t, showBoard(t, stateOf(silenceOf("server-b", evaluate.OK), queue), "/")),
+	containsAll(t, "the anomaly item", oneItem(t, showAttention(t, stateOf(silenceOf("server-b", evaluate.OK), queue), "/timeline")),
 		"queue=payments", "usually 12")
 }
 
-// spec: mission-control.md#items — a watched series gone stale on a node still reporting
+// spec: attention.md#items — a watched series gone stale on a node still reporting
 // others, whatever the reason: a failing sensor, or one the configuration switched off.
 func TestAWatchedSeriesWithNoFreshData(t *testing.T) {
-	body := showBoard(t, stateOf(
+	body := showAttention(t, stateOf(
 		silenceOf("server-b", evaluate.OK),
 		judgedAt(free("server-b", "/", 40e9), evaluate.OK),
 		staled(judgedAt(free("server-b", "/data", 1e9), evaluate.Warning)),
-	), "/")
+	), "/timeline")
 	item := oneItem(t, body)
 	containsAll(t, "the no-fresh-data item", item, "/data", "no fresh data since 2026-08-28 09:05 UTC")
 	linksTo(t, item, "/history", "server-b", "disk.free_bytes", "/data")
@@ -229,12 +236,12 @@ func TestAWatchedSeriesWithNoFreshData(t *testing.T) {
 	}
 }
 
-// spec: mission-control.md#items — a node the configuration no longer names.
+// spec: attention.md#items — a node the configuration no longer names.
 func TestAForgottenNodeHasNoItem(t *testing.T) {
 	current := stateOf(silenceOf("server-b", evaluate.OK), ranked(free("server-b", "/", 1e9), 1),
 		staled(judgedAt(free("server-b", "/data", 1e9), evaluate.Critical)))
 	current.Nodes[0].Configured = false
-	if got := items(showBoard(t, current, "/")); len(got) != 0 {
+	if got := items(showAttention(t, current, "/timeline")); len(got) != 0 {
 		t.Fatalf("items = %v, want none", got)
 	}
 }
@@ -252,24 +259,24 @@ func order(t *testing.T, body string, marks ...string) {
 	}
 }
 
-// spec: mission-control.md#order
+// spec: attention.md#order
 func TestTheMostUrgentComesFirst(t *testing.T) {
-	order(t, showBoard(t, stateOf(
+	order(t, showAttention(t, stateOf(
 		silenceOf("server-a", evaluate.OK), judgedAt(free("server-a", "/a", 1e9), evaluate.Warning),
 		silenceOf("server-b", evaluate.OK), judgedAt(free("server-b", "/b", 1e9), evaluate.Critical),
 		silenceOf("server-c", evaluate.Critical),
-	), "/"), "server-b", "server-c", "server-a")
+	), "/timeline"), "server-b", "server-c", "server-a")
 }
 
-// spec: mission-control.md#order — a volume's series together.
+// spec: attention.md#order — a volume's series together.
 func TestAVolumesSeriesSitTogether(t *testing.T) {
-	order(t, showBoard(t, stateOf(
+	order(t, showAttention(t, stateOf(
 		silenceOf("server-b", evaluate.OK),
 		judgedAt(free("server-b", "/a", 1e9), evaluate.Critical),
 		judgedAt(free("server-b", "/b", 1e9), evaluate.Critical),
 		judgedAt(freePct("server-b", "/a", 1), evaluate.Critical),
 		judgedAt(freePct("server-b", "/b", 1), evaluate.Critical),
-	), "/"), "disk.free_bytes · /a", "disk.free_pct · /a", "disk.free_bytes · /b", "disk.free_pct · /b")
+	), "/timeline"), "disk.free_bytes · /a", "disk.free_pct · /a", "disk.free_bytes · /b", "disk.free_pct · /b")
 }
 
 func rankedOn(n int, levels map[int]evaluate.Level) state.State {
@@ -285,23 +292,23 @@ func rankedOn(n int, levels map[int]evaluate.Level) state.State {
 	return stateOf(subjects...)
 }
 
-// spec: mission-control.md#order — anomalies in rank order, five of them, and a line for
+// spec: attention.md#order — anomalies in rank order, five of them, and a line for
 // the rest.
 func TestAnomaliesComeByRankFiveAtMost(t *testing.T) {
-	order(t, showBoard(t, rankedOn(3, nil), "/"), "server-c", "server-b", "server-a")
+	order(t, showAttention(t, rankedOn(3, nil), "/timeline"), "server-c", "server-b", "server-a")
 
-	body := showBoard(t, rankedOn(5, nil), "/")
+	body := showAttention(t, rankedOn(5, nil), "/timeline")
 	if len(items(body)) != 5 || strings.Contains(body, "more unusual") {
 		t.Errorf("five ranking: items = %d, want five and no line", len(items(body)))
 	}
 
 	// Ranks 1 to 6 sit on server-f to server-a: the five shown are f to b.
-	body = showBoard(t, rankedOn(6, nil), "/")
+	body = showAttention(t, rankedOn(6, nil), "/timeline")
 	order(t, body, "server-f", "server-e", "server-d", "server-c", "server-b")
-	containsAll(t, "the board", body, `<a href="/debug">more unusual series: 1</a>`)
+	containsAll(t, "the list", body, `<a href="/debug">more unusual series: 1</a>`)
 
 	// Ranks 1 and 2, on server-g and server-f, are level items and come first.
-	body = showBoard(t, rankedOn(7, map[int]evaluate.Level{1: evaluate.Critical, 2: evaluate.Critical}), "/")
+	body = showAttention(t, rankedOn(7, map[int]evaluate.Level{1: evaluate.Critical, 2: evaluate.Critical}), "/timeline")
 	order(t, body, "server-f", "server-g", "server-e", "server-d", "server-c", "server-b", "server-a")
 	if strings.Contains(body, "more unusual") {
 		t.Error("seven ranking, two critical: a line after the anomalies")
@@ -311,20 +318,20 @@ func TestAnomaliesComeByRankFiveAtMost(t *testing.T) {
 	}
 }
 
-// spec: mission-control.md#order — a warning before an anomaly, an anomaly before a series
+// spec: attention.md#order — a warning before an anomaly, an anomaly before a series
 // with no fresh data.
 func TestLevelsThenAnomaliesThenStaleSeries(t *testing.T) {
-	order(t, showBoard(t, stateOf(
+	order(t, showAttention(t, stateOf(
 		silenceOf("server-a", evaluate.OK),
 		judgedAt(free("server-a", "/", 40e9), evaluate.OK),
 		staled(judgedAt(free("server-a", "/stale", 1e9), evaluate.OK)),
 		silenceOf("server-b", evaluate.OK),
 		ranked(free("server-b", "/a", 1e9), 1),
 		judgedAt(free("server-b", "/b", 1e9), evaluate.Warning),
-	), "/"), "/b", "/a", "/stale")
+	), "/timeline"), "/b", "/a", "/stale")
 }
 
-// spec: mission-control.md#headline
+// spec: attention.md#headline
 func TestTheHeadline(t *testing.T) {
 	configuredOut := stateOf(silenceOf("server-b", evaluate.OK), free("server-b", "/", 40e9))
 	configuredOut.Nodes[0].Configured, configuredOut.Level = false, nil
@@ -349,7 +356,7 @@ func TestTheHeadline(t *testing.T) {
 		{"everything ok, nothing else", stateOf(silenceOf("server-b", evaluate.OK), judgedAt(free("server-b", "/", 40e9), evaluate.OK)), "All is well", false},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
-			body := showBoard(t, tc.current, "/")
+			body := showAttention(t, tc.current, "/timeline")
 			if got := headline(t, body); got != tc.want {
 				t.Errorf("headline = %q, want %q", got, tc.want)
 			}
@@ -360,15 +367,15 @@ func TestTheHeadline(t *testing.T) {
 	}
 }
 
-// spec: mission-control.md#headline — a level headline is marked as that level.
+// spec: attention.md#headline — a level headline is marked as that level.
 func TestALevelHeadlineIsMarked(t *testing.T) {
 	for _, level := range []evaluate.Level{evaluate.Critical, evaluate.Warning} {
-		body := showBoard(t, stateOf(silenceOf("server-b", evaluate.OK), judgedAt(free("server-b", "/", 1e9), level)), "/")
+		body := showAttention(t, stateOf(silenceOf("server-b", evaluate.OK), judgedAt(free("server-b", "/", 1e9), level)), "/timeline")
 		containsAll(t, "the page", body, `class="headline level-`+level.String()+`"`)
 	}
 }
 
-// spec: mission-control.md#headline — the rows whose headline sits above an item.
+// spec: attention.md#headline — the rows whose headline sits above an item.
 func TestTheHeadlineSitsAboveTheItems(t *testing.T) {
 	for name, current := range map[string]state.State{
 		"nothing watched, one anomaly":    stateOf(silenceOf("server-b", evaluate.OK), ranked(free("server-b", "/", 1e9), 1)),
@@ -376,19 +383,19 @@ func TestTheHeadlineSitsAboveTheItems(t *testing.T) {
 		"everything ok and no fresh data": stateOf(silenceOf("server-b", evaluate.OK), judgedAt(free("server-b", "/", 40e9), evaluate.OK), staled(judgedAt(free("server-b", "/data", 1e9), evaluate.OK))),
 	} {
 		t.Run(name, func(t *testing.T) {
-			if got := items(showBoard(t, current, "/")); len(got) != 1 {
+			if got := items(showAttention(t, current, "/timeline")); len(got) != 1 {
 				t.Fatalf("items = %d, want the one below the headline", len(got))
 			}
 		})
 	}
 }
 
-// spec: mission-control.md#page — any value and any usual value in the unit its metric id
+// spec: attention.md#values — any value and any usual value in the unit its metric id
 // declares.
-func TestTheBoardFormatsInTheSeriesUnit(t *testing.T) {
+func TestTheListFormatsInTheSeriesUnit(t *testing.T) {
 	pct := ranked(freePct("server-b", "/", 3.5), 1)
 	pct.Anomaly.Norm = 31.5
-	containsAll(t, "the anomaly item", oneItem(t, showBoard(t, stateOf(silenceOf("server-b", evaluate.OK), pct), "/")), "3.5%", "usually 31.5%")
+	containsAll(t, "the anomaly item", oneItem(t, showAttention(t, stateOf(silenceOf("server-b", evaluate.OK), pct), "/timeline")), "3.5%", "usually 31.5%")
 }
 
 // linksTo checks that an item carries a link to page naming exactly one series.
@@ -411,60 +418,41 @@ func linksTo(t *testing.T, item, page, node, metric, mount string) {
 
 var hrefPattern = regexp.MustCompile(`href="([^"]*)"`)
 
-// spec: mission-control.md#page — the tabs lead to /debug, and every word is in the
-// reader's language with the language kept on every link.
-func TestTheBoardLinksToEverySeriesInTheReadersLanguage(t *testing.T) {
+// spec: attention.md#items — every item's links carry the language.
+func TestItemLinksKeepTheLanguage(t *testing.T) {
+	current := stateOf(silenceOf("server-b", evaluate.OK), ranked(free("server-b", "/", 1e9), 1),
+		judgedAt(free("server-b", "/data", 1e9), evaluate.Critical))
+	links := 0
+	for _, item := range items(showAttention(t, current, "/timeline?lang=ru")) {
+		for _, found := range hrefPattern.FindAllStringSubmatch(item, -1) {
+			links++
+			if target, _ := url.Parse(strings.ReplaceAll(found[1], "&amp;", "&")); target.Query().Get("lang") != "ru" {
+				t.Errorf("a link drops the language: %s", found[1])
+			}
+		}
+	}
+	if links < 3 {
+		t.Errorf("links = %d, want the history and thresholds links of the anomaly and the level's history", links)
+	}
+}
+
+// spec: attention.md#values — the headline, the notice and the items in the reader's
+// language.
+func TestTheListSpeaksTheReadersLanguage(t *testing.T) {
 	current := stateOf(silenceOf("server-b", evaluate.OK), ranked(free("server-b", "/", 1e9), 1))
-	if tabs := tabsOf(t, showBoard(t, current, "/board")); len(tabs) != 3 || tabs[2].href != "/debug" || tabs[2].label != "All series" {
-		t.Errorf("tabs = %v, want the table's last", tabs)
-	}
-
-	body := showBoard(t, current, "/board?lang=ru")
-	if tabs := tabsOf(t, body); len(tabs) != 3 || tabs[2].href != "/debug?lang=ru" || tabs[2].label != "Все серии" {
-		t.Errorf("Russian tabs = %v, want the table's last", tabs)
-	}
-	containsAll(t, "the Russian board", body, "обычно 40,0", "Пока ничего не оценивается")
-	for _, found := range hrefPattern.FindAllStringSubmatch(body, -1) {
-		if !strings.HasPrefix(found[1], "/") {
-			continue // the shell's icon, not a link
-		}
-		if target, _ := url.Parse(strings.ReplaceAll(found[1], "&amp;", "&")); target.Query().Get("lang") != "ru" {
-			t.Errorf("a link drops the language: %s", found[1])
-		}
-	}
-	for _, english := range []string{"All series", "usually", "Nothing is judged yet"} {
+	body := showAttention(t, current, "/timeline?lang=ru")
+	containsAll(t, "the Russian list", body, "обычно 40,0", "Пока ничего не оценивается", "Здесь пока ничего не оценивается")
+	for _, english := range []string{"usually", "Nothing is judged yet"} {
 		if strings.Contains(body, english) {
-			t.Errorf("the Russian board still says %q", english)
+			t.Errorf("the Russian list still says %q", english)
 		}
 	}
 }
 
-// spec: mission-control.md#page — any time on the page is in the reader's zone.
-func TestTheBoardSpeaksTheReadersZone(t *testing.T) {
-	rec := httptest.NewRecorder()
-	req := httptest.NewRequest(http.MethodGet, "/", nil)
+// spec: attention.md#values — any time in an item is in the reader's zone.
+func TestTheListSpeaksTheReadersZone(t *testing.T) {
+	req := httptest.NewRequest(http.MethodGet, "/timeline", nil)
 	req.AddCookie(&http.Cookie{Name: "tz", Value: "Europe/Moscow"})
-	current := stateOf(silenceOf("server-b", evaluate.Critical))
-	hub.Board(func(context.Context) (state.State, error) { return current, nil }).ServeHTTP(rec, req)
-	containsAll(t, "the silence item", oneItem(t, rec.Body.String()), "13:05 MSK")
-}
-
-// spec: mission-control.md#page — the state cannot be read: the same failure /debug
-// answers with.
-func TestTheBoardFailsAsTheTableDoes(t *testing.T) {
-	failing := func(context.Context) (state.State, error) { return state.State{}, errFailed }
-	board, table := httptest.NewRecorder(), httptest.NewRecorder()
-	hub.Board(failing).ServeHTTP(board, httptest.NewRequest(http.MethodGet, "/", nil))
-	hub.Debug(failing).ServeHTTP(table, httptest.NewRequest(http.MethodGet, "/debug", nil))
-	if board.Code != table.Code || board.Body.String() != table.Body.String() {
-		t.Fatalf("board = %d %q, table = %d %q", board.Code, board.Body, table.Code, table.Body)
-	}
-}
-
-// spec: mission-control.md#page — mission control lives at /board.
-func TestMissionControlLivesAtBoard(t *testing.T) {
-	rec := getState(t, stored{}, "/board", func() time.Time { return lastSeen })
-	if rec.Code != http.StatusOK || !strings.Contains(rec.Body.String(), `<h1 class="headline`) {
-		t.Fatalf("GET /board = %d, want mission control: %s", rec.Code, rec.Body)
-	}
+	body := showNow(t, stateOf(silenceOf("server-b", evaluate.Critical)), req)
+	containsAll(t, "the silence item", oneItem(t, body), "13:05 MSK")
 }

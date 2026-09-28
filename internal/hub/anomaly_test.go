@@ -88,10 +88,10 @@ func TestOneHourOneNorm(t *testing.T) {
 	}
 }
 
-// spec: mission-control.md#invariants — the board shows an anomaly the State API ranks, read
-// from stored points through the same state.
-func TestTheBoardShowsWhatTheStateRanks(t *testing.T) {
-	rec := getState(t, loadAt(3.1), "/board", at)
+// spec: attention.md#invariants — the list shows an anomaly the State API ranks, read from
+// stored points through the same state.
+func TestTheListShowsWhatTheStateRanks(t *testing.T) {
+	rec := getState(t, loadAt(3.1), "/timeline", at)
 	containsAll(t, "the anomaly item", oneOf(t, rec.Body.String(), "load.avg_5m"), "3.10", "usually 0.40")
 }
 
@@ -107,9 +107,9 @@ func oneOf(t *testing.T, body, mark string) string {
 }
 
 // spec: thresholds.md#saving — the switch turned off: from the next answer the series
-// carries no anomaly, and mission control shows it as unusual no more; turned on again, it
+// carries no anomaly, and the timeline shows it as unusual no more; turned on again, it
 // ranks again.
-func TestExcludingASeriesTakesItOffTheBoard(t *testing.T) {
+func TestExcludingASeriesTakesItOffTheTimeline(t *testing.T) {
 	db, err := storage.OpenSQLite(filepath.Join(t.TempDir(), "monitor.db"))
 	if err != nil {
 		t.Fatal(err)
@@ -129,7 +129,7 @@ func TestExcludingASeriesTakesItOffTheBoard(t *testing.T) {
 
 	for _, step := range []struct {
 		anomalies string
-		onBoard   bool
+		shown     bool
 	}{{"exclude", false}, {"show", true}} {
 		form := url.Values{"direction": {"above"}, "warning": {""}, "critical": {""}, "anomalies": {step.anomalies}}
 		req := httptest.NewRequest(http.MethodPost, address, strings.NewReader(form.Encode()))
@@ -140,13 +140,13 @@ func TestExcludingASeriesTakesItOffTheBoard(t *testing.T) {
 		if rec.Code != http.StatusSeeOther {
 			t.Fatalf("save %s = %d: %s", step.anomalies, rec.Code, rec.Body)
 		}
-		if got := anomalyOf(t, routes, "load.avg_5m"); (got != nil && string(*got) != "null") != step.onBoard {
+		if got := anomalyOf(t, routes, "load.avg_5m"); (got != nil && string(*got) != "null") != step.shown {
 			t.Errorf("after %s the anomaly is %v", step.anomalies, got)
 		}
-		board := httptest.NewRecorder()
-		routes.ServeHTTP(board, httptest.NewRequest(http.MethodGet, "/board", nil))
-		if shown := strings.Contains(board.Body.String(), "load.avg_5m"); shown != step.onBoard {
-			t.Errorf("after %s the board shows the series: %v", step.anomalies, shown)
+		now := httptest.NewRecorder()
+		routes.ServeHTTP(now, httptest.NewRequest(http.MethodGet, "/timeline", nil))
+		if shown := strings.Contains(strings.Join(items(now.Body.String()), ""), "load.avg_5m"); shown != step.shown {
+			t.Errorf("after %s the timeline shows the series: %v", step.anomalies, shown)
 		}
 	}
 }

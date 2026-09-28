@@ -28,12 +28,11 @@ type skin struct {
 }
 
 var skins = []skin{
-	{name: "board", path: "/board", labelKey: "board.title"},
 	{name: "timeline", path: "/timeline", labelKey: "timeline.title"},
 	{name: "debug", path: "/debug", labelKey: "page.all_series"},
 }
 
-// Root sends the reader to the skin their last tab click chose, or to mission control
+// Root sends the reader to the skin their last tab click chose, or to the timeline
 // (spec: web.md#skins). The answer depends on the cookie, so no cache may keep it.
 func Root() http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {

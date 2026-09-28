@@ -28,7 +28,6 @@ func Routes(cfg *config.Config, store Store, now func() time.Time) *http.ServeMu
 	mux.Handle(ingest.AgentPrefix, ingest.NewAgentHandler(cfg))
 	current := ReadState(store, targetOf(cfg), anomaly.NewNorms(store), now)
 	mux.Handle("GET /{$}", Root())
-	mux.Handle("GET /board", Board(current))
 	mux.Handle("GET /timeline", Timeline(current, store, targetOf(cfg)))
 	mux.Handle("GET /debug", Debug(current))
 	mux.Handle("GET /public/", Public())

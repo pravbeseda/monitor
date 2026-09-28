@@ -43,8 +43,8 @@ type TimelineStore interface {
 	Points(ctx context.Context, ref storage.SeriesRef, from, to time.Time) iter.Seq2[storage.Point, error]
 }
 
-// timelineView is the timeline as the template sees it: mission control's attention list
-// under "now", then the lanes and the changes.
+// timelineView is the timeline as the template sees it: what needs attention under "now",
+// then the lanes and the changes.
 type timelineView struct {
 	shell
 	attentionView

@@ -11,7 +11,9 @@ import (
 	"testing"
 	"time"
 
+	"github.com/pravbeseda/monitor/internal/evaluate"
 	"github.com/pravbeseda/monitor/internal/hub"
+	"github.com/pravbeseda/monitor/internal/state"
 	"github.com/pravbeseda/monitor/internal/storage"
 )
 
@@ -96,35 +98,55 @@ func lanesOf(body string) (order []string, cells map[string][][2]string) {
 	return order, cells
 }
 
-// attentionPattern is the headline and the items, up to the end of the panel or the page.
-var attentionPattern = regexp.MustCompile(`(?s)(<h1 class="headline.*?)\s*(?:</section>|</body>)`)
+// nowPattern is the panel headed "Now".
+var nowPattern = regexp.MustCompile(`(?s)<section class="panel now">.*?</section>`)
 
-// spec: timeline.md#now — now is mission control's headline, notice and items.
-func TestTheTimelineShowsWhatMissionControlShows(t *testing.T) {
-	root := mounted("/")
+func nowOf(t *testing.T, body string) string {
+	t.Helper()
+	now := nowPattern.FindString(body)
+	if now == "" {
+		t.Fatalf("no now panel in %s", body)
+	}
+	return now
+}
+
+// spec: timeline.md#now
+func TestNowIsTheListOfWhatNeedsAttention(t *testing.T) {
 	for _, tc := range []struct {
-		name       string
-		thresholds []storage.Threshold
-		levels     []storage.State
-		headline   string
+		name     string
+		current  state.State
+		headline string
+		items    []string
+		notice   bool
 	}{
-		{"a node silent", nil, []storage.State{silenceLevel("laptop-a", "critical")}, "laptop-a"},
-		{"a volume critical", []storage.Threshold{watched("laptop-a", "disk.free_bytes", root)},
-			[]storage.State{silenceLevel("laptop-a", "ok"), level("laptop-a", "disk.free_bytes", root, "critical")}, "disk.free_bytes"},
-		{"everything ok", []storage.Threshold{watched("laptop-a", "disk.free_bytes", root)},
-			[]storage.State{silenceLevel("laptop-a", "ok"), level("laptop-a", "disk.free_bytes", root, "ok")}, "All is well"},
-		{"nothing watched", nil, nil, "Nothing here is being judged yet"},
+		{"a volume critical, a node silent, a series ranking", stateOf(
+			silenceOf("server-a", evaluate.OK), ranked(judgedAt(freePct("server-a", "/", 3.5), evaluate.OK), 1),
+			silenceOf("server-b", evaluate.OK), judgedAt(free("server-b", "/data", 1e9), evaluate.Critical),
+			silenceOf("server-c", evaluate.Critical),
+		), "critical", []string{"server-b", "server-c", "server-a"}, false},
+		{"everything ok, nothing ranking", stateOf(
+			silenceOf("server-b", evaluate.OK), judgedAt(free("server-b", "/", 40e9), evaluate.OK),
+		), "All is well", nil, false},
+		{"nothing watched", stateOf(
+			silenceOf("server-b", evaluate.OK), free("server-b", "/", 40e9),
+		), "Nothing is judged yet", nil, true},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
-			store := timelineStore(reportingNode("laptop-a"))
-			store.thresholds, store.levels = tc.thresholds, tc.levels
-			board := getState(t, store, "/board", func() time.Time { return lastSeen }).Body.String()
-			want := attentionPattern.FindStringSubmatch(board)
-			if want == nil || !strings.Contains(want[1], tc.headline) {
-				t.Fatalf("the board does not show %q: %v", tc.headline, want)
+			now := nowOf(t, showAttention(t, tc.current, "/timeline"))
+			if got := headline(t, now); got != tc.headline {
+				t.Errorf("headline = %q, want %q", got, tc.headline)
 			}
-			if got := attentionPattern.FindStringSubmatch(showTimeline(t, store, "/timeline")); got == nil || got[1] != want[1] {
-				t.Errorf("now = %v\nwant mission control's %s", got, want[1])
+			got := items(now)
+			if len(got) != len(tc.items) {
+				t.Fatalf("items = %v, want %d", got, len(tc.items))
+			}
+			for i, node := range tc.items {
+				if !strings.Contains(got[i], node) {
+					t.Errorf("item %d = %s, want %s's", i, got[i], node)
+				}
+			}
+			if notice := strings.Contains(now, "Nothing here is being judged yet"); notice != tc.notice {
+				t.Errorf("nothing-judged notice shown: %v, want %v", notice, tc.notice)
 			}
 		})
 	}
@@ -347,20 +369,20 @@ func TestTheTimelineInRussian(t *testing.T) {
 	}
 }
 
-// spec: timeline.md#page — a failed read answers as mission control does.
-func TestTheTimelineFailsAsMissionControlDoes(t *testing.T) {
+// spec: timeline.md#page — a failed read answers as /debug does.
+func TestTheTimelineFailsAsTheTableDoes(t *testing.T) {
 	store := timelineStore(reportingNode("laptop-a"))
 	store.err = errors.New("disk on fire")
 	clock := func() time.Time { return lastSeen }
-	board, timeline := getState(t, store, "/board", clock), getState(t, store, "/timeline", clock)
-	if timeline.Code != board.Code || timeline.Body.String() != board.Body.String() {
-		t.Errorf("timeline = %d %q, board = %d %q", timeline.Code, timeline.Body, board.Code, board.Body)
+	table, timeline := getState(t, store, "/debug", clock), getState(t, store, "/timeline", clock)
+	if timeline.Code != table.Code || timeline.Body.String() != table.Body.String() {
+		t.Errorf("timeline = %d %q, table = %d %q", timeline.Code, timeline.Body, table.Code, table.Body)
 	}
 
 	store.err, store.pointsErr = nil, errors.New("points on fire")
 	failed := getState(t, store, "/timeline", clock)
-	if failed.Code != board.Code || failed.Body.String() != board.Body.String() {
-		t.Errorf("a failed read of the points = %d %q, want mission control's failure", failed.Code, failed.Body)
+	if failed.Code != table.Code || failed.Body.String() != table.Body.String() {
+		t.Errorf("a failed read of the points = %d %q, want the table's failure", failed.Code, failed.Body)
 	}
 }
 

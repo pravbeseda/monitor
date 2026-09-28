@@ -27,14 +27,13 @@ func getIn(t *testing.T, store hub.Store, target, acceptLanguage string) *httpte
 	return rec
 }
 
-// spec: web.md#live — every hub page keeps itself current and names its rendering, refusals
+// spec: web.md#live, timeline.md#page — every hub page keeps itself current and names its rendering, refusals
 // and failures rendered as pages included, with the notice in the reader's language.
 func TestEveryPageKeepsItselfCurrent(t *testing.T) {
 	pages := map[string]struct {
 		store  hub.Store
 		target string
 	}{
-		"mission control":   {stored{states: []storage.NodeState{laptop}}, "/board"},
 		"timeline":          {stored{states: []storage.NodeState{laptop}}, "/timeline"},
 		"debug":             {stored{states: []storage.NodeState{laptop}}, "/debug"},
 		"chart":             {served{series: []seriesPoints{volume()}}, oneVolume},
@@ -76,7 +75,7 @@ func TestEveryPageKeepsItselfCurrent(t *testing.T) {
 // spec: web.md#live — a page whose address names its language refreshes in that language,
 // whatever the browser asks for, so a refresh never reloads it into another one.
 func TestTheMarkerFollowsTheQuerysLanguage(t *testing.T) {
-	body := getIn(t, stored{states: []storage.NodeState{laptop}}, "/board?lang=ru", "en").Body.String()
+	body := getIn(t, stored{states: []storage.NodeState{laptop}}, "/timeline?lang=ru", "en").Body.String()
 
 	if want := liveMarker("Не обновляется: хаб не отвечает", "ru"); !strings.Contains(body, want) {
 		t.Errorf("page does not carry %q", want)

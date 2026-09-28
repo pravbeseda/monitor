@@ -104,7 +104,7 @@ One row = one test. Anchors: `spec: thresholds.md#<heading>`.
 | a save for a series the hub has never stored | `404`; nothing is stored |
 | a save whose `Origin` is another site, or a cross-site form post | refused as a page before anything is read, whatever address it names and whether or not that series exists; nothing is stored |
 | a save with no `Origin` at all — an old browser, a hand-made request | refused the same way: the form's own saves always carry one |
-| the switch turned off | the series is excluded: from the next answer on it carries no anomaly, and mission control shows it as unusual no more |
+| the switch turned off | the series is excluded: from the next answer on it carries no anomaly, and the timeline shows it as unusual no more |
 | the switch turned off, both values blank | the threshold removed and the exclusion stored: the two are separate |
 | the switch turned on again | the exclusion removed: the next answer ranks the series again if it is unusual |
 | the switch turned off in a save refused for its values | nothing stored, the exclusion included; the form shows the switch as the reader left it |

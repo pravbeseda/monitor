@@ -7,8 +7,7 @@
   `internal/hub/templates/shell.html` and the printer's zone in `internal/i18n`. Formatting
   itself stays with `internal/i18n`; what a page *contains* stays with that page's own spec
   ([history.md](history.md) for `/history` and for the values on `/debug`, [state.md](state.md)
-  for the levels on `/debug`, [mission-control.md](mission-control.md) for `/board`,
-  [timeline.md](timeline.md) for `/timeline`,
+  for the levels on `/debug`, [timeline.md](timeline.md) for `/timeline`,
   [thresholds.md](thresholds.md) for `/thresholds`); the reader's language
   is settled by [0008](../decisions/0008-english-repo-bilingual-ui.md) and needs nothing
   here. The JSON API is not a reader: nothing here touches it. A *hub page* below is
@@ -22,7 +21,8 @@
   [0026](../decisions/0026-reader-time-zone-from-the-browser.md),
   [0029](../decisions/0029-pages-refresh-by-fetching-their-own-address.md),
   [0037](../decisions/0037-skins-are-tabs-and-the-root-opens-the-last-one.md),
-  [0040](../decisions/0040-the-hub-serves-its-public-pages-open.md)
+  [0040](../decisions/0040-the-hub-serves-its-public-pages-open.md),
+  [0041](../decisions/0041-mission-control-folds-into-the-timeline.md)
 
 ## Purpose
 
@@ -72,28 +72,30 @@ tell which of them they are.
 ### Skins and their tabs {#skins}
 
 A skin is a page that shows the whole hub its own way
-([0037](../decisions/0037-skins-are-tabs-and-the-root-opens-the-last-one.md)): mission control
-at `/board`, the timeline at `/timeline`, the table of every series at `/debug`, in that
-order, their tabs reading "Mission control", "Timeline" and "All series" ("Центр управления",
-"Лента", "Все серии").
+([0037](../decisions/0037-skins-are-tabs-and-the-root-opens-the-last-one.md)): the timeline
+at `/timeline` and the table of every series at `/debug`, in that order, their tabs reading
+"Timeline" and "All series" ("Лента", "Все серии"). Mission control, once at `/board`, is
+part of the timeline now
+([0041](../decisions/0041-mission-control-folds-into-the-timeline.md)).
 
 The choice is the tab the reader last clicked, stored by the page in the browser the way the
 zone is ([zone](#zone)); the hub only reads it.
 
 | Request | What the reader sees |
 |---|---|
-| any hub page | a row of tabs at the top, one per skin, each linking to its address with the page's language |
+| any hub page | a row of two tabs at the top, "Timeline" then "All series" ("Лента", "Все серии"), each linking to its address with the page's language |
 | a skin's own address | that skin, its tab marked as the open one |
 | `/history` or `/thresholds` | the tabs, none marked |
-| `/` from a browser that never clicked a tab | a redirect to `/board` |
-| a click on the timeline's tab, then `/` | a redirect to `/timeline` |
-| `/?lang=ru` | a redirect to the remembered skin with `?lang=ru` |
-| a click on the timeline's tab, then the table's, then `/` | a redirect to `/debug`: the last tab clicked wins |
-| a click on the timeline's tab, then a link to `/debug` from a page, then `/` | a redirect to `/timeline`: only a tab is a choice |
-| `/debug` opened from a bookmark after a click on the timeline's tab, then `/` | a redirect to `/timeline` |
+| `/` from a browser that never clicked a tab | a redirect to `/timeline` |
+| a click on the table's tab, then `/` | a redirect to `/debug` |
+| a click on the table's tab, then `/?lang=ru` | a redirect to `/debug?lang=ru` |
+| a click on the table's tab, then the timeline's, then `/` | a redirect to `/timeline`: the last tab clicked wins |
+| no tab clicked, then the link to `/debug` from a silent node's item under "Now", then `/` | a redirect to `/timeline`: only a tab is a choice |
+| `/timeline` opened from a bookmark after a click on the table's tab, then `/` | a redirect to `/debug` |
 | open pages keeping themselves current or reloading after an upgrade ([live](#live)) | the remembered skin unchanged, however many are open |
-| a remembered skin this hub no longer has | a redirect to `/board` |
-| scripting turned off, or a browser that stores nothing | `/` redirects to `/board` every time |
+| a remembered skin this hub no longer has — `board`, remembered before [0041](../decisions/0041-mission-control-folds-into-the-timeline.md) | a redirect to `/timeline` |
+| scripting turned off, or a browser that stores nothing | `/` redirects to `/timeline` every time |
+| `/board` | `404 Not Found`, as any address the hub does not serve |
 | a click on a tab | on any hub page, a script that stores that tab's skin for a year and for the whole site, as a secure cookie over HTTPS, as the zone is stored |
 | the redirect, `GET` or `HEAD` | `302 Found`, `Cache-Control: no-store` and `Vary: Cookie`: the answer depends on who asks, and a cache never keeps it |
 
@@ -108,7 +110,7 @@ zone is ([zone](#zone)); the hub only reads it.
 | the tab is in the background | nothing is fetched; brought back to the front, the page shows the current state as soon as the hub answers |
 | a page brought back by the back or forward button | the same: current as soon as the hub answers |
 | the hub or the proxy does not answer within 15 seconds, answers with a failure, or answers with something that is not a hub page | the page as it was, under a notice in the reader's language that it is not being refreshed; the notice leaves with the first refresh that succeeds |
-| the hub cannot read its data | the same notice over the page as it was, on mission control, on `/debug` and on a chart alike: the last good rendering outlives a failure |
+| the hub cannot read its data | the same notice over the page as it was, on the timeline, on `/debug` and on a chart alike: the last good rendering outlives a failure |
 | the proxy stops accepting the reader's credentials | the browser asks for them, as a reload would; refused, the page stays under the notice and is not refreshed again until the reader reloads it |
 | the hub answers with a refusal of the page's query | that refusal, as a fresh load of the address would show it |
 | the address carries a query — a chart window, a language | the refreshed page is what reloading that address would show: the same window, the same language |
@@ -207,9 +209,9 @@ tested.
   is in flight, so a hub under load gets one request per open page, never a queue of them.
 - **Leaving the page** while a refresh is in flight is not a failure: the notice does not go
   up on the way out, nor on a page the browser restores later.
-- **A page open at `/` across the upgrade that moved mission control** fetches `/` and is
-  answered with a redirect, so it says it is not refreshed until the reader reloads it
-  once; from then on it is at `/board`.
+- **A page open at `/board` across the upgrade that folded mission control into the
+  timeline** fetches an address nothing answers, so it says it is not refreshed; a reload
+  shows the address is gone, and `/` leads to the timeline.
 - **A storage failure on a skin** is plain text rather than a page, as it was before any
   of this, so it carries no shell and leaves the reader's zone unlearnt until the hub answers
   again. It is not cached either way.
