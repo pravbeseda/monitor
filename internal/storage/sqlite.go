@@ -179,6 +179,13 @@ var migrations = []string{
 		labels TEXT NOT NULL,
 		PRIMARY KEY (metric, node, labels)
 	) WITHOUT ROWID;`,
+
+	// A span the hub was down, from its last tick to the start that followed: no request
+	// could arrive then, so no node's silence counts it (docs/specs/evaluation.md#node-silence).
+	`CREATE TABLE IF NOT EXISTS outages (
+		began TEXT PRIMARY KEY,
+		ended TEXT NOT NULL
+	) WITHOUT ROWID;`,
 }
 
 // querier is what a database handle and a transaction both offer, so one read runs either

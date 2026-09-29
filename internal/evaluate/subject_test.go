@@ -401,3 +401,31 @@ func TestAnUnreadableThresholdIsNotJudged(t *testing.T) {
 		t.Fatalf("the readable subject is %v, want the rest of the tick to run", got.Level)
 	}
 }
+
+// spec: evaluation.md#node-silence — the quiet of each example, for a node that last
+// reported at 12:00, judged at 12:30.
+func TestTheQuietOfEachExample(t *testing.T) {
+	at := func(minutes float64) time.Time { return tick.Add(time.Duration(minutes * float64(time.Minute))) }
+	span := func(from, to float64) storage.Outage { return storage.Outage{From: at(from), To: at(to)} }
+	now := at(30)
+	for _, tc := range []struct {
+		name    string
+		outages []storage.Outage
+		quiet   time.Duration
+	}{
+		{"up throughout", nil, 30 * time.Minute},
+		{"down from 12:05 to 12:25", []storage.Outage{span(5, 25)}, 10 * time.Minute},
+		{"last ticked at 11:59, back at 12:25", []storage.Outage{span(-1, 25)}, 5 * time.Minute},
+		{"restarted at 12:25 after 30 seconds down", []storage.Outage{span(24.5, 25)}, 29*time.Minute + 30*time.Second},
+		{"down from 12:05 to 12:10 and from 12:20 to 12:25", []storage.Outage{span(5, 10), span(20, 25)}, 20 * time.Minute},
+		{"down from 11:40 to 11:55", []storage.Outage{span(-20, -5)}, 30 * time.Minute},
+		{"two outages sharing 12:10 to 12:20", []storage.Outage{span(5, 20), span(10, 25)}, 10 * time.Minute},
+		{"an outage recorded up to 12:40", []storage.Outage{span(20, 40)}, 20 * time.Minute},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			if got := now.Sub(evaluate.Heard(tick, tc.outages, now)); got != tc.quiet {
+				t.Errorf("quiet = %v, want %v", got, tc.quiet)
+			}
+		})
+	}
+}

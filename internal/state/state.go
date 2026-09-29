@@ -142,7 +142,7 @@ func Build(targets func(node string) (evaluate.Target, bool), snap storage.Snaps
 			// rule, so nothing reads as fresh merely because nothing judged it. Only a
 			// configured node is ever judged, so a judged series needs no second verdict.
 			if !judged {
-				one.Stale = staleOf(target, known, reported.LastSeen, value, now)
+				one.Stale = staleOf(target, known, evaluate.Heard(reported.LastSeen, snap.Outages, now), value, now)
 			}
 			one.Unit, one.Value, one.TS = history.UnitOf(value.Metric), &value.Value, value.TS
 			if _, isExcluded := excluded[key]; !isExcluded && !one.Stale {

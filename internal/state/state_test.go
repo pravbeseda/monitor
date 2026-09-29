@@ -592,6 +592,21 @@ func TestStaleness(t *testing.T) {
 		}
 	})
 
+	t.Run("a node that last reported before the hub's outage", func(t *testing.T) {
+		unheard := silenceAfter + 16*time.Minute
+		snap := storage.Snapshot{
+			Nodes:      []storage.NodeState{heard("server-b", unheard, reported(volume("/"), unheard)...)},
+			Thresholds: []storage.Threshold{watch("server-b", "disk.free_bytes", volume("/"))},
+			Outages:    []storage.Outage{{From: now.Add(-unheard + 5*time.Minute), To: now.Add(-time.Minute)}},
+		}
+		s := build(t, snap)
+		for _, metric := range []string{"disk.free_bytes", "disk.free_pct"} {
+			if got := subject(t, s, "server-b", metric, "/"); staleOf(got.Stale) != "false" {
+				t.Errorf("%s stale = %s, want the hub's outage left out of the node's quiet", metric, staleOf(got.Stale))
+			}
+		}
+	})
+
 	t.Run("a series whose newest value names no sensor", func(t *testing.T) {
 		loose := func(age time.Duration) storage.Snapshot {
 			return storage.Snapshot{Nodes: []storage.NodeState{

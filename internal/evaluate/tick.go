@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"log/slog"
+	"sync"
 	"sync/atomic"
 	"time"
 
@@ -26,7 +27,8 @@ type Evaluator struct {
 	// file is never re-read while the hub runs.
 	targets  []Target
 	schedule Schedule
-	// started is where the digest window begins on a database that has never digested.
+	// started is where the digest window begins on a database that has never digested,
+	// and where the hub's latest outage ends.
 	started time.Time
 	// running keeps two passes from overlapping. A tick that would start while the
 	// previous one is still going gives way rather than queueing behind it.
@@ -40,8 +42,9 @@ type Options struct {
 	Notifier Notifier
 	Targets  []Target
 	Digest   Schedule
-	// Started is when this hub first ran, which is where the digest window begins on a
-	// database that has never digested: history is never replayed.
+	// Started is when this hub started, which is where the digest window begins on a
+	// database that has never digested — history is never replayed — and where the hub's
+	// latest outage ends: the hub's own downtime is no node's silence.
 	Started time.Time
 	// Now is the clock the pass reads. A tick is idempotent at a fixed instant.
 	Now func() time.Time
@@ -68,6 +71,12 @@ func (e *Evaluator) Tick(ctx context.Context) error {
 		return nil
 	}
 	defer e.running.Store(false)
+
+	// The hub is up whether or not the rest of the pass succeeds
+	// (docs/specs/evaluation.md#node-silence).
+	if err := e.store.SetLastTickAt(ctx, e.now()); err != nil {
+		return err
+	}
 
 	// The window is opened before anything is recorded: a pass that stops halfway must
 	// not leave an event behind with no digest window reaching back over it.
@@ -123,6 +132,20 @@ func (e *Evaluator) Tick(ctx context.Context) error {
 	}
 	// The digest runs last, so a warning this pass recorded is in the window it closes.
 	return e.digest(ctx, subjects, watch, since, now)
+}
+
+// Begin records the outage that ended at this start — the span from the last instant the
+// hub recorded it was up. The hub calls it once, before it serves or runs: afterwards the
+// mark is past the start, and a second call records nothing.
+func (e *Evaluator) Begin(ctx context.Context) error {
+	last, recorded, err := e.store.LastTickAt(ctx)
+	if err != nil {
+		return err
+	}
+	if recorded && last.Before(e.started) {
+		return e.store.RecordOutage(ctx, storage.Outage{From: last, To: e.started})
+	}
+	return nil
 }
 
 // named is the set of nodes the configuration file lists, which is what a tick acts on
@@ -264,6 +287,10 @@ const Interval = time.Minute
 // Run evaluates every `every` until ctx is cancelled. A pass that fails is logged and the
 // next one starts from the same snapshot, so nothing is retried by hand.
 func (e *Evaluator) Run(ctx context.Context, every time.Duration) {
+	var beating sync.WaitGroup
+	beating.Go(func() { e.beat(ctx, every) })
+	defer beating.Wait()
+
 	ticker := time.NewTicker(every)
 	defer ticker.Stop()
 	for {
@@ -273,6 +300,24 @@ func (e *Evaluator) Run(ctx context.Context, every time.Duration) {
 		case <-ticker.C:
 			if err := e.Tick(ctx); err != nil && ctx.Err() == nil {
 				slog.Error("evaluation pass", "error", err)
+			}
+		}
+	}
+}
+
+// beat records that the hub is up on the same schedule as the passes but apart from them,
+// so a pass held up by a channel that does not answer does not leave the mark behind: a hub
+// stopped in the middle of it was up, not down (docs/specs/evaluation.md#node-silence).
+func (e *Evaluator) beat(ctx context.Context, every time.Duration) {
+	ticker := time.NewTicker(every)
+	defer ticker.Stop()
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case <-ticker.C:
+			if err := e.store.SetLastTickAt(ctx, e.now()); err != nil && ctx.Err() == nil {
+				slog.Error("record that the hub is up", "error", err)
 			}
 		}
 	}

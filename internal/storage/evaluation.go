@@ -10,10 +10,15 @@ import (
 	"time"
 )
 
-// lastDigestKey is the one row the meta table holds today: the boundary of the digest
-// window. It is opened at the instant a hub first evaluates a database and moved forward
-// by every digest that goes out, so a reader is never told twice about one transition.
+// lastDigestKey is the boundary of the digest window. It is opened at the instant a hub
+// first evaluates a database and moved forward by every digest that goes out, so a reader
+// is never told twice about one transition.
 const lastDigestKey = "last_digest_at"
+
+// lastTickKey is the latest instant the hub recorded it was up — every pass, and every
+// minute in between: after a restart, the gap from it to the start is the hub's own outage,
+// which is no node's silence.
+const lastTickKey = "last_tick_at"
 
 // Subject is what has a level: one series — a node, a metric and the labels that pick
 // one of its instances (ADR 0033). A node's own silence is the subject whose metric is
@@ -93,6 +98,14 @@ type Snapshot struct {
 	// levels the caller named as owed. A later transition of a quieter kind must not hide
 	// it: a send that failed is owed whatever the subject has become since.
 	Newest []Transition
+	// Outages is every span the hub was down, oldest first.
+	Outages []Outage
+}
+
+// Outage is a span the hub was down: from the last tick recorded before a start to the
+// start.
+type Outage struct {
+	From, To time.Time
 }
 
 // Snapshot reads all three in one read-only transaction, which takes no write lock, so a
@@ -122,7 +135,50 @@ func (s *SQLite) Snapshot(ctx context.Context, owed []string) (Snapshot, error) 
 	if out.Excluded, err = readExclusions(ctx, tx); err != nil {
 		return Snapshot{}, err
 	}
+	if out.Outages, err = readOutages(ctx, tx); err != nil {
+		return Snapshot{}, err
+	}
 	return out, nil
+}
+
+func readOutages(ctx context.Context, from querier) ([]Outage, error) {
+	rows, err := from.QueryContext(ctx, `SELECT began, ended FROM outages ORDER BY began`)
+	if err != nil {
+		return nil, fmt.Errorf("read outages: %w", err)
+	}
+	defer func() { _ = rows.Close() }()
+
+	var out []Outage
+	for rows.Next() {
+		var began, ended string
+		if err := rows.Scan(&began, &ended); err != nil {
+			return nil, fmt.Errorf("read outages: %w", err)
+		}
+		var outage Outage
+		if outage.From, err = parseTime(began); err != nil {
+			return nil, fmt.Errorf("outage: %w", err)
+		}
+		if outage.To, err = parseTime(ended); err != nil {
+			return nil, fmt.Errorf("outage: %w", err)
+		}
+		out = append(out, outage)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("read outages: %w", err)
+	}
+	return out, nil
+}
+
+// RecordOutage keeps a span the hub was down. A hub that stopped again before its first
+// tick starts from the same last tick, so its outage is the same one, reaching further.
+func (s *SQLite) RecordOutage(ctx context.Context, outage Outage) error {
+	if _, err := s.db.ExecContext(ctx, `
+		INSERT INTO outages (began, ended) VALUES (?, ?)
+		ON CONFLICT(began) DO UPDATE SET ended = MAX(ended, excluded.ended)`,
+		formatTime(outage.From), formatTime(outage.To)); err != nil {
+		return fmt.Errorf("record an outage: %w", err)
+	}
+	return nil
 }
 
 func loadStates(ctx context.Context, from querier) ([]State, error) {
@@ -358,19 +414,7 @@ func readEvents(ctx context.Context, from querier, query string, args ...any) ([
 // opened at all. A database nothing has evaluated yet has none, and its first pass is what
 // opens one.
 func (s *SQLite) LastDigestAt(ctx context.Context) (time.Time, bool, error) {
-	var value string
-	err := s.db.QueryRowContext(ctx, `SELECT value FROM meta WHERE key = ?`, lastDigestKey).Scan(&value)
-	if errors.Is(err, sql.ErrNoRows) {
-		return time.Time{}, false, nil
-	}
-	if err != nil {
-		return time.Time{}, false, fmt.Errorf("read the digest mark: %w", err)
-	}
-	at, err := parseTime(value)
-	if err != nil {
-		return time.Time{}, false, fmt.Errorf("digest mark: %w", err)
-	}
-	return at, true, nil
+	return s.readMark(ctx, lastDigestKey, "digest mark")
 }
 
 // SetLastDigestAt moves the digest window's boundary. Its caller writes the instant a pass
@@ -378,11 +422,42 @@ func (s *SQLite) LastDigestAt(ctx context.Context) (time.Time, bool, error) {
 // earlier than what was already reported would fall inside the next window as well and be
 // said twice (docs/specs/evaluation.md#digest).
 func (s *SQLite) SetLastDigestAt(ctx context.Context, at time.Time) error {
+	return s.writeMark(ctx, lastDigestKey, "digest mark", at)
+}
+
+// LastTickAt is the latest instant the hub recorded it was up, and whether it ever has
+// (docs/specs/evaluation.md#node-silence).
+func (s *SQLite) LastTickAt(ctx context.Context) (time.Time, bool, error) {
+	return s.readMark(ctx, lastTickKey, "tick mark")
+}
+
+// SetLastTickAt records that the hub is up at at.
+func (s *SQLite) SetLastTickAt(ctx context.Context, at time.Time) error {
+	return s.writeMark(ctx, lastTickKey, "tick mark", at)
+}
+
+func (s *SQLite) readMark(ctx context.Context, key, name string) (time.Time, bool, error) {
+	var value string
+	err := s.db.QueryRowContext(ctx, `SELECT value FROM meta WHERE key = ?`, key).Scan(&value)
+	if errors.Is(err, sql.ErrNoRows) {
+		return time.Time{}, false, nil
+	}
+	if err != nil {
+		return time.Time{}, false, fmt.Errorf("read the %s: %w", name, err)
+	}
+	at, err := parseTime(value)
+	if err != nil {
+		return time.Time{}, false, fmt.Errorf("%s: %w", name, err)
+	}
+	return at, true, nil
+}
+
+func (s *SQLite) writeMark(ctx context.Context, key, name string, at time.Time) error {
 	if _, err := s.db.ExecContext(ctx, `
 		INSERT INTO meta (key, value) VALUES (?, ?)
 		ON CONFLICT(key) DO UPDATE SET value = excluded.value`,
-		lastDigestKey, formatTime(at)); err != nil {
-		return fmt.Errorf("record the digest mark: %w", err)
+		key, formatTime(at)); err != nil {
+		return fmt.Errorf("record the %s: %w", name, err)
 	}
 	return nil
 }

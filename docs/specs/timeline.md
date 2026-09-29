@@ -80,11 +80,12 @@ silent" on entering `critical`, followed by how long the node had not reported �
 `silence_after` as the configuration resolves it today, since the log does not record the
 one in force, written as the language writes a duration ("no report for 15.0 min") — and
 "reporting again" on leaving it. The instant of a silence is when
-the hub noticed it, one `silence_after` after the node's last report, which is why "now"
-names an earlier time for the same silence. Changes are listed newest first, the newest 50
-of the nodes that take part, grouped under the day they happened on in the reader's zone:
-"Today", "Yesterday", or the day and month as the reader's language writes them
-("21 September", "21 сентября"), with the year when it is not the current one.
+the hub noticed it, one `silence_after` after the node's last report — later by the time
+the hub itself was down in between ([evaluation](evaluation.md#node-silence)) — which is
+why "now" names an earlier time for the same silence. Changes are listed newest first, the
+newest 50 of the nodes that take part, grouped under the day they happened on in the
+reader's zone: "Today", "Yesterday", or the day and month as the reader's language writes
+them ("21 September", "21 сентября"), with the year when it is not the current one.
 
 ## Behaviour
 

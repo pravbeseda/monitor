@@ -334,6 +334,57 @@ func TestOpeningAPathWithURICharacters(t *testing.T) {
 	}
 }
 
+// spec: evaluation.md#persistence-and-restart — the instant of the last tick survives a
+// restart, and a database no hub has evaluated has none.
+func TestTheLastTickIsRecorded(t *testing.T) {
+	db := open(t)
+	ctx := context.Background()
+
+	if _, recorded, err := db.LastTickAt(ctx); err != nil || recorded {
+		t.Fatalf("a fresh database claims a tick: recorded=%v err=%v", recorded, err)
+	}
+	for _, at := range []time.Time{tickOne, tickTwo} {
+		if err := db.SetLastTickAt(ctx, at); err != nil {
+			t.Fatalf("SetLastTickAt: %v", err)
+		}
+	}
+	at, recorded, err := db.LastTickAt(ctx)
+	if err != nil || !recorded || !at.Equal(tickTwo) {
+		t.Fatalf("the last tick is %v (recorded=%v, err=%v)", at, recorded, err)
+	}
+	if digest, marked, err := db.LastDigestAt(ctx); err != nil || marked {
+		t.Fatalf("recording a tick moved the digest mark to %v (err=%v)", digest, err)
+	}
+}
+
+// spec: evaluation.md#persistence-and-restart — every outage survives a restart and comes
+// with the snapshot, oldest first, and one recorded again with a later end is one outage.
+func TestOutagesAreRecorded(t *testing.T) {
+	db := open(t)
+	ctx := context.Background()
+	later := tickOne.Add(2 * time.Hour)
+	first := Outage{From: tickOne, To: tickOne.Add(time.Hour)}
+	second := Outage{From: later, To: later.Add(time.Minute)}
+	for _, outage := range []Outage{second, first, {From: later, To: later.Add(2 * time.Minute)}} {
+		if err := db.RecordOutage(ctx, outage); err != nil {
+			t.Fatalf("RecordOutage: %v", err)
+		}
+	}
+	snap, err := db.Snapshot(ctx, nil)
+	if err != nil {
+		t.Fatalf("Snapshot: %v", err)
+	}
+	want := []Outage{first, {From: later, To: later.Add(2 * time.Minute)}}
+	if len(snap.Outages) != len(want) {
+		t.Fatalf("outages = %+v, want %+v", snap.Outages, want)
+	}
+	for i := range want {
+		if !snap.Outages[i].From.Equal(want[i].From) || !snap.Outages[i].To.Equal(want[i].To) {
+			t.Errorf("outage %d = %+v, want %+v", i, snap.Outages[i], want[i])
+		}
+	}
+}
+
 // spec: evaluation.md#digest — the window is read from the recorded transitions, and the
 // mark of the last digest survives a restart.
 func TestDigestWindow(t *testing.T) {

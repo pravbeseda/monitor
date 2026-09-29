@@ -2,6 +2,7 @@ package evaluate_test
 
 import (
 	"context"
+	"errors"
 	"path/filepath"
 	"sync/atomic"
 	"testing"
@@ -85,17 +86,31 @@ func evaluator(store evaluate.Store, at time.Time, targets ...evaluate.Target) *
 
 func evaluatorWith(store evaluate.Store, channel evaluate.Notifier, at time.Time, targets ...evaluate.Target) *evaluate.Evaluator {
 	// Started is the tick itself, so the digest of a database that has never digested is
-	// not due: these tests are about levels and messages, not about the daily summary.
+	// not due: these tests are about levels and messages, not about the daily summary. It
+	// also makes every evaluator a hub restarted at at, whose outage since the previous
+	// pass is no node's silence, so a test about silence across passes uses
+	// evaluatorSince.
+	return evaluatorSince(store, channel, at, at, targets...)
+}
+
+// evaluatorSince is a hub that started at started: the span from the last tick recorded
+// to started is its outage, left out of every node's quiet.
+func evaluatorSince(store evaluate.Store, channel evaluate.Notifier, started, at time.Time, targets ...evaluate.Target) *evaluate.Evaluator {
 	return evaluate.New(evaluate.Options{
 		Store: store, Notifier: channel, Targets: targets,
 		Digest:  evaluate.Schedule{Hour: 9, Location: time.UTC},
-		Started: at,
+		Started: started,
 		Now:     func() time.Time { return at },
 	})
 }
 
+// pass is one tick of a hub that has begun: every evaluator is a start, and records its
+// outage before it runs.
 func pass(t *testing.T, e *evaluate.Evaluator) {
 	t.Helper()
+	if err := e.Begin(context.Background()); err != nil {
+		t.Fatalf("Begin: %v", err)
+	}
 	if err := e.Tick(context.Background()); err != nil {
 		t.Fatalf("Tick: %v", err)
 	}
@@ -290,14 +305,14 @@ func TestASilentNodeResumesWhenItReports(t *testing.T) {
 	collect(t, db, tick, volume("/"), gb(3))
 
 	silent := tick.Add(silenceAfter + time.Minute)
-	pass(t, evaluator(db, silent, watching(t)))
+	pass(t, evaluatorSince(db, &recorder{}, tick, silent, watching(t)))
 	if got := levelOf(t, db, "disk.free_bytes", "/").Level; got != "" {
 		t.Fatalf("a silent node's volume was evaluated to %q", got)
 	}
 
 	back := silent.Add(time.Minute)
 	collect(t, db, back, volume("/"), gb(3))
-	pass(t, evaluator(db, back, watching(t)))
+	pass(t, evaluatorSince(db, &recorder{}, tick, back, watching(t)))
 
 	var changes []storage.Transition
 	for _, event := range logged(t, db) {
@@ -335,14 +350,14 @@ func TestAWidenedSilenceWindowRecoversTheNode(t *testing.T) {
 	db := open(t)
 	beat(t, db, tick)
 	silent := tick.Add(silenceAfter + time.Minute)
-	pass(t, evaluator(db, silent, watching(t)))
+	pass(t, evaluatorSince(db, &recorder{}, tick, silent, watching(t)))
 	if got := levelOf(t, db, "silence", "").Level; got != "critical" {
 		t.Fatalf("the node is %q past its window, want critical", got)
 	}
 
 	widened := watching(t)
 	widened.SilenceAfter = 24 * time.Hour
-	pass(t, evaluator(db, silent.Add(time.Minute), widened))
+	pass(t, evaluatorSince(db, &recorder{}, tick, silent.Add(time.Minute), widened))
 
 	if got := levelOf(t, db, "silence", "").Level; got != "ok" {
 		t.Fatalf("widening the window left the node at %q, want ok", got)
@@ -415,6 +430,25 @@ func TestALoweredIntervalFreezesAHealthySubject(t *testing.T) {
 
 	if got := levelOf(t, db, "disk.free_bytes", "/").Level; got != "" {
 		t.Fatalf("a subject older than the shrunk window was evaluated to %q", got)
+	}
+}
+
+// unreadable fails every snapshot, as a pass that cannot read its data does.
+type unreadable struct{ evaluate.Store }
+
+func (unreadable) Snapshot(context.Context, []string) (storage.Snapshot, error) {
+	return storage.Snapshot{}, errors.New("database is locked")
+}
+
+// spec: evaluation.md#node-silence — the hub records the instant of a tick whether or not
+// the pass succeeds: a hub that is up is not down.
+func TestAFailedPassStillRecordsItsTick(t *testing.T) {
+	db := open(t)
+	if err := evaluator(unreadable{db}, tick).Tick(context.Background()); err == nil {
+		t.Fatal("a pass that cannot read its data succeeded")
+	}
+	if at, recorded, err := db.LastTickAt(context.Background()); err != nil || !recorded || !at.Equal(tick) {
+		t.Fatalf("the last tick is %v (recorded=%v, err=%v), want %v", at, recorded, err, tick)
 	}
 }
 

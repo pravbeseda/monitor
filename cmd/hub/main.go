@@ -95,6 +95,10 @@ func run(args []string, out io.Writer) error {
 		return err
 	}
 
+	// The start is taken before a request can arrive: the hub's outage ends here, and a
+	// report stored after it must not be read as one from before (evaluate.Options).
+	started := time.Now()
+
 	// The address is taken before it is announced: a journal that claims a port the hub
 	// never got is read by whoever is hunting for the one it could not take.
 	listener, err := net.Listen("tcp", opts.listen)
@@ -105,6 +109,22 @@ func run(args []string, out io.Writer) error {
 	// A signal cancels the context, which stops the evaluation pass and the server
 	// together: a change already recorded stays recorded, an in-flight send is abandoned.
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
+
+	evaluator := evaluate.New(evaluate.Options{
+		Store:    store,
+		Notifier: channel,
+		Targets:  cfg.Targets(),
+		Digest:   cfg.Digest(),
+		Started:  started,
+		Now:      time.Now,
+	})
+	// The outage is recorded before a request is served, so the state never counts it as
+	// silence. A hub that cannot record it does not start: nothing has moved the last mark,
+	// so the next start records it (docs/specs/evaluation.md#persistence-and-restart).
+	if err := evaluator.Begin(ctx); err != nil {
+		stop()
+		return errors.Join(fmt.Errorf("record the outage: %w", err), listener.Close())
+	}
 
 	if _, err := fmt.Fprintf(out, "monitor-hub %s listening on %s (nodes: %d, notify: %s)\n",
 		version.Current, listener.Addr(), len(cfg.Nodes()), cfg.Notify().Channel); err != nil {
@@ -132,14 +152,7 @@ func run(args []string, out io.Writer) error {
 
 	go func() {
 		defer close(evaluating)
-		evaluate.New(evaluate.Options{
-			Store:    store,
-			Notifier: channel,
-			Targets:  cfg.Targets(),
-			Digest:   cfg.Digest(),
-			Started:  time.Now(),
-			Now:      time.Now,
-		}).Run(ctx, evaluate.Interval)
+		evaluator.Run(ctx, evaluate.Interval)
 	}()
 	go func() {
 		defer close(collecting)

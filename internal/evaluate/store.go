@@ -26,6 +26,9 @@ type Store interface {
 	EventsBetween(ctx context.Context, from, to time.Time) ([]storage.Transition, error)
 	LastDigestAt(ctx context.Context) (time.Time, bool, error)
 	SetLastDigestAt(ctx context.Context, at time.Time) error
+	LastTickAt(ctx context.Context) (time.Time, bool, error)
+	SetLastTickAt(ctx context.Context, at time.Time) error
+	RecordOutage(ctx context.Context, outage storage.Outage) error
 }
 
 // The hub's storage has to satisfy it, and the compiler is what says so.
