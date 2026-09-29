@@ -7,6 +7,7 @@ entry point to every document in the project.
 
 | Document | Contents |
 |---|---|
+| [../README.md](../README.md) | The repository's front page: what Monitor is and does, how to install and develop it |
 | [concept.md](concept.md) | Idea, architectural principles, planned skins, domains, roadmap |
 | [poc.md](poc.md) | POC spec: scope, terminology, wire format, work plan, answered questions |
 | [install.md](install.md) | Install guide: one command, then the manual path — the hub host, install and verify a node, upgrade by hand or from a timer, uninstall, watching Google Drive |
