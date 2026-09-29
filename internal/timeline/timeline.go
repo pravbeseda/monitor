@@ -1,6 +1,7 @@
 // Package timeline summarises a node's last 24 hours into hourly cells from what the hub
-// already keeps: the levels evaluation stored, the log of their changes, and the stamps of
-// the points each series sent (ADR 0038, docs/specs/timeline.md#model).
+// already keeps: the levels evaluation stored, the log of their changes, the anomalies it
+// recorded, and the stamps of the points each series sent (ADRs 0038 and 0042,
+// docs/specs/timeline.md#model).
 package timeline
 
 import (
@@ -23,6 +24,7 @@ const (
 	NoFreshData
 	Critical
 	Warning
+	Unusual
 	OK
 	Reporting
 )
@@ -51,11 +53,12 @@ type Span struct {
 	Level evaluate.Level
 }
 
-// Series is one series of a node as a lane reads it: when it was fresh, and the levels it
-// held — none for a series nothing ever watched.
+// Series is one series of a node as a lane reads it: when it was fresh, the levels it held —
+// none for a series nothing ever watched — and when it was unusual.
 type Series struct {
-	Fresh []Interval
-	Spans []Span
+	Fresh   []Interval
+	Spans   []Span
+	Unusual []Interval
 }
 
 // Node is one lane's input. Silent holds the stretches its silence subject stood critical.
@@ -117,6 +120,11 @@ func cellOf(node Node, cell Interval) Cell {
 			for _, span := range series.Spans {
 				if held, ok := span.intersect(window); ok && held.overlaps(cell) {
 					worst = min(worst, cellFor(span.Level))
+				}
+			}
+			for _, unusual := range series.Unusual {
+				if held, ok := unusual.intersect(window); ok && held.overlaps(cell) {
+					worst = min(worst, Unusual)
 				}
 			}
 		}
@@ -203,6 +211,25 @@ func Spans(states []storage.State, events []storage.Transition, now time.Time) (
 		if to, known := evaluate.ParseLevel(event.To); known && !begun[begin{keys[i], event.At.UnixNano()}] {
 			out[keys[i]] = append(out[keys[i]], Span{Interval: closed(event.At, event.At), Level: to})
 		}
+	}
+	return out, nil
+}
+
+// Anomalies turns the recorded anomalies into when each series was unusual, keyed as
+// storage keys subjects: from the start up to, and not including, the end or the
+// withdrawal, or to now while one is open (docs/specs/timeline.md#model).
+func Anomalies(records []storage.Anomaly, now time.Time) (map[string][]Interval, error) {
+	out := map[string][]Interval{}
+	for _, record := range records {
+		key, err := record.Key()
+		if err != nil {
+			return nil, err
+		}
+		span := closed(record.Began, now)
+		if !record.Ended.IsZero() {
+			span = Interval{From: record.Began, To: record.Ended}
+		}
+		out[key] = append(out[key], span)
 	}
 	return out, nil
 }

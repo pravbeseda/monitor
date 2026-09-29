@@ -186,6 +186,26 @@ var migrations = []string{
 		began TEXT PRIMARY KEY,
 		ended TEXT NOT NULL
 	) WITHOUT ROWID;`,
+
+	// When a series became unusual and came back (ADR 0042), apart from the level events a
+	// message or the digest reads. An empty ended is an anomaly still open; a NULL back on
+	// an ended one is a withdrawal, which no value ended.
+	`CREATE TABLE IF NOT EXISTS anomalies (
+		id     INTEGER PRIMARY KEY,
+		node   TEXT NOT NULL,
+		metric TEXT NOT NULL,
+		labels TEXT NOT NULL,
+		began  TEXT NOT NULL,
+		value  REAL NOT NULL,
+		low    REAL NOT NULL,
+		high   REAL NOT NULL,
+		ended  TEXT NOT NULL DEFAULT '',
+		back   REAL,
+		UNIQUE (node, metric, labels, began)
+	);
+
+	CREATE UNIQUE INDEX IF NOT EXISTS anomalies_open ON anomalies (node, metric, labels) WHERE ended = '';
+	CREATE INDEX IF NOT EXISTS anomalies_ended ON anomalies (ended);`,
 }
 
 // querier is what a database handle and a transaction both offer, so one read runs either

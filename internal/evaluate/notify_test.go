@@ -410,7 +410,7 @@ func TestTheQuietLeavesOutTheHubsOutage(t *testing.T) {
 	now := start
 	channel := &recorder{}
 	hub := evaluate.New(evaluate.Options{
-		Store: db, Notifier: channel, Targets: []evaluate.Target{watching(t)},
+		Store: db, Notifier: channel, Targets: []evaluate.Target{watching(t)}, Norms: normsOf(db),
 		Digest: evaluate.Schedule{Hour: 9, Location: time.UTC}, Started: start,
 		Now: func() time.Time { return now },
 	})

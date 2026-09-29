@@ -97,7 +97,7 @@ func evaluatorWith(store evaluate.Store, channel evaluate.Notifier, at time.Time
 // to started is its outage, left out of every node's quiet.
 func evaluatorSince(store evaluate.Store, channel evaluate.Notifier, started, at time.Time, targets ...evaluate.Target) *evaluate.Evaluator {
 	return evaluate.New(evaluate.Options{
-		Store: store, Notifier: channel, Targets: targets,
+		Store: store, Notifier: channel, Targets: targets, Norms: normsOf(store),
 		Digest:  evaluate.Schedule{Hour: 9, Location: time.UTC},
 		Started: started,
 		Now:     func() time.Time { return at },

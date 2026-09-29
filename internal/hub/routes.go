@@ -5,7 +5,6 @@ import (
 	"net/http"
 	"time"
 
-	"github.com/pravbeseda/monitor/internal/anomaly"
 	"github.com/pravbeseda/monitor/internal/config"
 	"github.com/pravbeseda/monitor/internal/ingest"
 	"github.com/pravbeseda/monitor/internal/storage"
@@ -21,12 +20,12 @@ type Store interface {
 }
 
 // Routes mounts every endpoint the hub serves. The version prefix is part of the
-// contract: every new endpoint keeps it.
-func Routes(cfg *config.Config, store Store, now func() time.Time) *http.ServeMux {
+// contract: every new endpoint keeps it. norms is where the state finds each series' norm.
+func Routes(cfg *config.Config, store Store, norms NormReader, now func() time.Time) *http.ServeMux {
 	mux := http.NewServeMux()
 	mux.Handle("POST /api/v1/ingest", ingest.NewHandler(cfg, store, now))
 	mux.Handle(ingest.AgentPrefix, ingest.NewAgentHandler(cfg))
-	current := ReadState(store, targetOf(cfg), anomaly.NewNorms(store), now)
+	current := ReadState(store, targetOf(cfg), norms, now)
 	mux.Handle("GET /{$}", Root())
 	mux.Handle("GET /timeline", Timeline(current, store, targetOf(cfg)))
 	mux.Handle("GET /debug", Debug(current))

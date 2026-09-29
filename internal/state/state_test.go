@@ -8,6 +8,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/pravbeseda/monitor/internal/anomaly"
 	"github.com/pravbeseda/monitor/internal/evaluate"
 	"github.com/pravbeseda/monitor/internal/history"
 	"github.com/pravbeseda/monitor/internal/state"
@@ -733,6 +734,7 @@ func TestLevelsFollowTheTick(t *testing.T) {
 	evaluator := evaluate.New(evaluate.Options{
 		Store:    db,
 		Notifier: quiet{},
+		Norms:    anomaly.NewNorms(db),
 		Targets:  []evaluate.Target{target},
 		Digest:   evaluate.Schedule{Hour: 9, Location: time.UTC},
 		Started:  now,

@@ -57,7 +57,7 @@ func spansOf(t *testing.T, states []storage.State, events []storage.Transition) 
 
 var letters = map[timeline.Cell]string{
 	timeline.Silent: "S", timeline.NoFreshData: "_", timeline.Critical: "C",
-	timeline.Warning: "W", timeline.OK: "o", timeline.Reporting: ".",
+	timeline.Warning: "W", timeline.Unusual: "u", timeline.OK: "o", timeline.Reporting: ".",
 }
 
 // lane writes a lane as one letter per cell, from 16:00 yesterday to 15:00 today.
@@ -274,5 +274,102 @@ func TestTheCellsStayOnTheHourAcrossAHalfHourShift(t *testing.T) {
 				}
 			}
 		}
+	}
+}
+
+// unusualOf reads the volume's anomalies as a lane does.
+func unusualOf(t *testing.T, records ...storage.Anomaly) []timeline.Interval {
+	t.Helper()
+	all, err := timeline.Anomalies(records, now)
+	if err != nil {
+		t.Fatalf("Anomalies: %v", err)
+	}
+	key, err := volume.Key()
+	if err != nil {
+		t.Fatalf("Key: %v", err)
+	}
+	return all[key]
+}
+
+func unusualFrom(began, ended time.Time) storage.Anomaly {
+	back := 50.0
+	record := storage.Anomaly{Subject: volume, Began: began, Ended: ended}
+	if !ended.IsZero() {
+		record.Back = &back
+	}
+	return record
+}
+
+// spec: timeline.md#lanes — an anomaly paints the hours its series was unusual while
+// fresh, above ok and below a level.
+func TestAnAnomalyPaintsItsHours(t *testing.T) {
+	withdrawn := unusualFrom(at(10, 20), at(11, 30))
+	withdrawn.Back = nil
+	staleThrough := append(every(now.Add(-30*time.Hour), at(10, 40)), every(at(13, 0), now)...)
+	silent := []timeline.Interval{{From: at(11, 0), To: now.Add(time.Nanosecond)}}
+	for _, tc := range []struct {
+		name string
+		node func(unusual []timeline.Interval) timeline.Node
+		from []storage.Anomaly
+		want string
+	}{
+		{"unusual 10:20 to 12:40, nothing watched",
+			func(u []timeline.Interval) timeline.Node {
+				return timeline.Node{Series: []timeline.Series{{Fresh: throughout(), Unusual: u}}}
+			},
+			[]storage.Anomaly{unusualFrom(at(10, 20), at(12, 40))}, hours(map[int]string{-8: ".", 10: "u", 13: "."})},
+		{"the same series watched and ok all day",
+			func(u []timeline.Interval) timeline.Node {
+				spans := spansOf(t, []storage.State{state("ok", now.Add(-30*time.Hour))}, nil)
+				return timeline.Node{Series: []timeline.Series{{Fresh: throughout(), Spans: spans, Unusual: u}}}
+			},
+			[]storage.Anomaly{unusualFrom(at(10, 20), at(12, 40))}, hours(map[int]string{-8: "o", 10: "u", 13: "o"})},
+		{"the same series at warning from 11:00",
+			func(u []timeline.Interval) timeline.Node {
+				spans := spansOf(t, []storage.State{state("warning", at(11, 0))},
+					[]storage.Transition{change(at(11, 0), "ok", "warning", now.Add(-30*time.Hour))})
+				return timeline.Node{Series: []timeline.Series{{Fresh: throughout(), Spans: spans, Unusual: u}}}
+			},
+			[]storage.Anomaly{unusualFrom(at(10, 20), time.Time{})}, hours(map[int]string{-8: "o", 10: "u", 11: "W"})},
+		{"unusual since yesterday and still",
+			func(u []timeline.Interval) timeline.Node {
+				return timeline.Node{Series: []timeline.Series{{Fresh: throughout(), Unusual: u}}}
+			},
+			[]storage.Anomaly{unusualFrom(now.Add(-30*time.Hour), time.Time{})}, hours(map[int]string{-8: "u"})},
+		{"unusual 10:20 to exactly 11:00",
+			func(u []timeline.Interval) timeline.Node {
+				return timeline.Node{Series: []timeline.Series{{Fresh: throughout(), Unusual: u}}}
+			},
+			[]storage.Anomaly{unusualFrom(at(10, 20), at(11, 0))}, hours(map[int]string{-8: ".", 10: "u", 11: "."})},
+		{"unusual 10:20 to 10:40",
+			func(u []timeline.Interval) timeline.Node {
+				return timeline.Node{Series: []timeline.Series{{Fresh: throughout(), Unusual: u}}}
+			},
+			[]storage.Anomaly{unusualFrom(at(10, 20), at(10, 40))}, hours(map[int]string{-8: ".", 10: "u", 11: "."})},
+		{"stale from 11:00 beside a fresh unwatched series",
+			func(u []timeline.Interval) timeline.Node {
+				stale := timeline.Fresh(every(now.Add(-30*time.Hour), at(10, 40)), bound)
+				return timeline.Node{Series: []timeline.Series{{Fresh: stale, Unusual: u}, {Fresh: throughout()}}}
+			},
+			[]storage.Anomaly{unusualFrom(at(10, 20), time.Time{})}, hours(map[int]string{-8: ".", 10: "u", 11: "."})},
+		{"every series stale from 11:00 to 13:00",
+			func(u []timeline.Interval) timeline.Node {
+				return timeline.Node{Series: []timeline.Series{{Fresh: timeline.Fresh(staleThrough, bound), Unusual: u}}}
+			},
+			[]storage.Anomaly{unusualFrom(at(10, 20), time.Time{})}, hours(map[int]string{-8: ".", 10: "u", 11: "_", 13: "u"})},
+		{"the node silent from 11:00",
+			func(u []timeline.Interval) timeline.Node {
+				return timeline.Node{Silent: silent, Series: []timeline.Series{{Fresh: throughout(), Unusual: u}}}
+			},
+			[]storage.Anomaly{unusualFrom(at(10, 20), time.Time{})}, hours(map[int]string{-8: ".", 10: "u", 11: "S"})},
+		{"withdrawn at 11:30",
+			func(u []timeline.Interval) timeline.Node {
+				return timeline.Node{Series: []timeline.Series{{Fresh: throughout(), Unusual: u}}}
+			},
+			[]storage.Anomaly{withdrawn}, hours(map[int]string{-8: ".", 10: "u", 12: "."})},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			check(t, lane(tc.node(unusualOf(t, tc.from...))), tc.want)
+		})
 	}
 }
