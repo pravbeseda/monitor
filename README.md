@@ -50,7 +50,8 @@ Finance and health come once they have sources that report on their own; the roa
   response ([ADR 0010](docs/decisions/0010-agent-configuration.md)).
 - **Go and SQLite, pages rendered by the hub**
   ([ADR 0005](docs/decisions/0005-poc-stack.md)).
-- **Signed releases** that the hub, and optionally its agents, pull and install themselves
+- **Signed releases**, pulled and installed by an updater of their own on each machine once
+  a version to follow is named — the hub's on its host, an agent's by the hub
   ([ADR 0022](docs/decisions/0022-updates-are-pulled.md)).
 
 Every decision is recorded in [docs/decisions/](docs/decisions/), each saying what was
@@ -100,7 +101,7 @@ the design notes behind them.
 ## This repository is public
 
 It holds tooling only. Node names, addresses, thresholds, tokens and measurements live on
-the server that runs the hub, never here; examples use invented names such as `laptop-a`
+the machines that run Monitor, never here; examples use invented names such as `laptop-a`
 and `hub.example.com`. The rules and the checks that enforce them are in
 [ADR 0007](docs/decisions/0007-public-repository.md).
 
