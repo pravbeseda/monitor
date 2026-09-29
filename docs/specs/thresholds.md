@@ -13,7 +13,8 @@
   [0029](../decisions/0029-pages-refresh-by-fetching-their-own-address.md),
   [0032](../decisions/0032-thresholds-are-set-in-the-interface.md),
   [0033](../decisions/0033-a-subject-is-a-series.md),
-  [0036](../decisions/0036-an-anomaly-is-a-value-outside-its-weeks-band.md)
+  [0036](../decisions/0036-an-anomaly-is-a-value-outside-its-weeks-band.md),
+  [0042](../decisions/0042-an-anomalys-start-and-end-are-recorded.md)
 
 ## Purpose
 
@@ -104,7 +105,7 @@ One row = one test. Anchors: `spec: thresholds.md#<heading>`.
 | a save for a series the hub has never stored | `404`; nothing is stored |
 | a save whose `Origin` is another site, or a cross-site form post | refused as a page before anything is read, whatever address it names and whether or not that series exists; nothing is stored |
 | a save with no `Origin` at all — an old browser, a hand-made request | refused the same way: the form's own saves always carry one |
-| the switch turned off | the series is excluded: from the next answer on it carries no anomaly, and the timeline shows it as unusual no more |
+| the switch turned off | the series is excluded: from the next answer on it carries no anomaly, and from the next tick the timeline shows it as unusual no more; the hours it already was keep their colour ([anomaly](anomaly.md#record)) |
 | the switch turned off, both values blank | the threshold removed and the exclusion stored: the two are separate |
 | the switch turned on again | the exclusion removed: the next answer ranks the series again if it is unusual |
 | the switch turned off in a save refused for its values | nothing stored, the exclusion included; the form shows the switch as the reader left it |
@@ -120,7 +121,7 @@ One row = one test. Anchors: `spec: thresholds.md#<heading>`.
 | a threshold set on a series that is already past it | the next tick transitions it, and a critical is announced at once ([evaluation.md](evaluation.md#notifications)) |
 | a threshold set or cleared | no agent is affected and no `config_version` changes ([hub-config.md](hub-config.md#configuration-version)) |
 | a threshold cleared for a subject standing in `critical` | no recovery message: the question was withdrawn, not answered ([evaluation.md](evaluation.md#configuration-changes)) |
-| an exclusion set or cleared | no level, event or message changes, and the series stays watched or unwatched as it was |
+| an exclusion set or cleared | no level, event or message changes, and the series stays watched or unwatched as it was; an anomaly still open is withdrawn by the next tick, with no end listed ([anomaly](anomaly.md#record)) |
 | any save | the hub restarts nothing and rereads no file |
 
 ## Invariants

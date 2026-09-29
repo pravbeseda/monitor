@@ -1,6 +1,7 @@
 # 0036. An anomaly is a value outside the band its series kept the week before
 
-- **Status:** accepted
+- **Status:** accepted, amended by [0042](0042-an-anomalys-start-and-end-are-recorded.md) —
+  an anomaly is held until its score falls back to 1.6, and its start and end are recorded
 - **Date:** 2026-09-23
 - **Amends:** [0030](0030-the-state-api-reports-the-stored-verdict.md) — the State API now
   computes each series' anomaly on read, beside staleness; it still evaluates no level

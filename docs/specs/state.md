@@ -18,7 +18,8 @@
   [0033](../decisions/0033-a-subject-is-a-series.md),
   [0034](../decisions/0034-a-series-without-a-sensor-still-ages.md),
   [0035](../decisions/0035-mission-control-is-rendered-by-the-hub.md),
-  [0036](../decisions/0036-an-anomaly-is-a-value-outside-its-weeks-band.md)
+  [0036](../decisions/0036-an-anomaly-is-a-value-outside-its-weeks-band.md),
+  [0042](../decisions/0042-an-anomalys-start-and-end-are-recorded.md)
 
 ## Purpose
 
@@ -31,10 +32,12 @@ It judges no level. The level it reports is the one evaluation last stored
 ([0015](../decisions/0015-evaluation-on-a-tick.md)); reading the state never evaluates a
 level and never writes. Besides staleness, the one thing it computes on read is each
 series' anomaly
-([0036](../decisions/0036-an-anomaly-is-a-value-outside-its-weeks-band.md)), which is no
-level and leads to no event. The debug view `/debug` is its first consumer: it shows every subject with its
-level, and nothing the endpoint would not return. The timeline's list of what needs
-attention is its second ([attention.md](attention.md)).
+([0036](../decisions/0036-an-anomaly-is-a-value-outside-its-weeks-band.md)), judged
+against the anomaly evaluation holds open for it
+([0042](../decisions/0042-an-anomalys-start-and-end-are-recorded.md)), which is no level
+and leads to no event. The debug view `/debug` is its first consumer: it shows every
+subject with its level, and nothing the endpoint would not return. The timeline's list of
+what needs attention is its second ([attention.md](attention.md)).
 
 Each series also carries its anomaly — how far its newest value lies from its own norm —
 which [anomaly.md](anomaly.md) owns. Health 0–100, trend and forecasts belong to the
@@ -230,7 +233,7 @@ Names and labels are compared byte by byte; labels are rendered as history rende
 | a node whose silence subject is `critical` | the node marked silent in the reader's language, beside its last-seen time |
 | a stale series still shown | its level beside the "no fresh data" mark |
 | a series with an anomaly rank | marked as unusual in the reader's language, with its usual value — the norm — in its unit, so the series the timeline's "now" leaves off past its fifth anomaly can be found ([attention.md](attention.md#order)) |
-| a series with an anomaly and no rank | no mark: its value is within its usual band |
+| a series with an anomaly and no rank | no mark: it is not unusual ([anomaly](anomaly.md#model)) |
 | `/debug` | the tabs, the timeline among them ([web](web.md#skins)) |
 | `/debug?lang=ru` | every level word and the silent mark in Russian, the language kept on every link |
 

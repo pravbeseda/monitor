@@ -55,7 +55,7 @@ Each principle below is recorded in full, with its alternatives, in the linked A
 | Skin | What it is |
 |---|---|
 | Debug view | A table of every metric, at `/debug`. The first skin; it proves the State API is sufficient and stays as the debugging mode. |
-| Timeline | The primary view, at `/timeline`: what needs attention now — empty while all is well, anomalies surfacing on their own ([spec](specs/attention.md)) — each node's last 24 hours, and the levels that changed ([spec](specs/timeline.md)). It absorbed mission control, the board that showed only the first part ([ADR 0041](decisions/0041-mission-control-folds-into-the-timeline.md)). |
+| Timeline | The primary view, at `/timeline`: what needs attention now — empty while all is well, anomalies surfacing on their own ([spec](specs/attention.md)) — each node's last 24 hours, and the levels and anomalies that changed ([spec](specs/timeline.md)). It absorbed mission control, the board that showed only the first part ([ADR 0041](decisions/0041-mission-control-folds-into-the-timeline.md)). |
 | Advisors | Per-domain summaries in plain language (an LLM over aggregates). |
 | City | Isometric city: districts are life areas, buildings are metrics. |
 | Organism | Metrics as body systems, with one overall "pulse" number. |

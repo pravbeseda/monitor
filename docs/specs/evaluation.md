@@ -4,11 +4,12 @@
 - **Owns:** `internal/evaluate` (hub): the tick, thresholds, hysteresis, silence detection
   and the notification boundary. The channels behind that boundary — the log line and the
   Telegram bot — are `internal/notify`, which formats and delivers but never decides.
-  Persistence of thresholds, levels, events, the digest mark and the hub's outages stays
-  with `internal/storage`; the `digest`, `notify` and `silence_after` keys are parsed and
-  validated by `internal/config`, which keeps owning the file. Editing a threshold is the
-  page's business ([thresholds.md](thresholds.md)); this spec owns what a stored threshold
-  means.
+  Persistence of thresholds, levels, events, anomalies, the digest mark and the hub's
+  outages stays with `internal/storage`; what an anomaly is and when one starts and ends
+  is [anomaly.md](anomaly.md#record)'s, and this pass is only where it is recorded; the
+  `digest`, `notify` and `silence_after` keys are parsed and validated by
+  `internal/config`, which keeps owning the file. Editing a threshold is the page's
+  business ([thresholds.md](thresholds.md)); this spec owns what a stored threshold means.
 - **Decisions:** [0001](../decisions/0001-semantic-core-and-skins.md),
   [0006](../decisions/0006-alerting-rules.md),
   [0007](../decisions/0007-public-repository.md),
@@ -17,7 +18,8 @@
   [0016](../decisions/0016-leaving-critical-is-instant.md),
   [0032](../decisions/0032-thresholds-are-set-in-the-interface.md),
   [0033](../decisions/0033-a-subject-is-a-series.md),
-  [0034](../decisions/0034-a-series-without-a-sensor-still-ages.md)
+  [0034](../decisions/0034-a-series-without-a-sensor-still-ages.md),
+  [0042](../decisions/0042-an-anomalys-start-and-end-are-recorded.md)
 
 ## Purpose
 
@@ -112,6 +114,13 @@ Two ticks never run at once: a tick that would start while the previous one is s
 running is skipped, and the skip is logged. A notifier that does not return cannot hold
 evaluation open — the send is abandoned, counted as a failure, and the event is retried on
 a later tick.
+
+The same pass records anomalies ([anomaly](anomaly.md#record)) last, after the digest,
+against the same snapshot and the same instant, with the norms of the tick's hour read at
+that point. Anomalies are kept apart from the event log: no message and no
+digest reads them. A pass that cannot read the norms, or fails to record an anomaly,
+records none after it and logs why; its levels, messages and digest have gone out as ever,
+and the next tick judges again.
 
 ## Configuration
 

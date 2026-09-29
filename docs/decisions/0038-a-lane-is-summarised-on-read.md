@@ -1,6 +1,7 @@
 # 0038. A timeline lane is summarised on read from the event log and the stored points
 
-- **Status:** accepted
+- **Status:** accepted, amended by [0042](0042-an-anomalys-start-and-end-are-recorded.md) —
+  a lane also reads the anomalies evaluation records
 - **Date:** 2026-09-24
 - **Source:** [timeline spec](../specs/timeline.md#model),
   [design notes](../log/2026-09-24-timeline.md)
