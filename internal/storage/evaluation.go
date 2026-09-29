@@ -100,6 +100,9 @@ type Snapshot struct {
 	Newest []Transition
 	// Outages is every span the hub was down, oldest first.
 	Outages []Outage
+	// Unusual is every anomaly still open: what the tick and the state judge a series'
+	// newest value against (ADR 0042).
+	Unusual []Anomaly
 }
 
 // Outage is a span the hub was down: from the last tick recorded before a start to the
@@ -136,6 +139,9 @@ func (s *SQLite) Snapshot(ctx context.Context, owed []string) (Snapshot, error) 
 		return Snapshot{}, err
 	}
 	if out.Outages, err = readOutages(ctx, tx); err != nil {
+		return Snapshot{}, err
+	}
+	if out.Unusual, err = readAnomalies(ctx, tx, `WHERE ended = ''`); err != nil {
 		return Snapshot{}, err
 	}
 	return out, nil

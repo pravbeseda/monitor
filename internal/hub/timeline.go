@@ -27,13 +27,18 @@ const shownChanges = 50
 // labelEvery is how many cells apart the hours under the lanes are written.
 const labelEvery = 4
 
-// EventLog is what the timeline reads of the log of level changes, declared where it is
-// consumed.
+// EventLog is what the timeline reads of the log of level changes and of the anomalies
+// recorded beside it, declared where it is consumed.
 type EventLog interface {
 	// EventsBetween returns the changes recorded after from and up to to, oldest first.
 	EventsBetween(ctx context.Context, from, to time.Time) ([]storage.Transition, error)
 	// RecentEvents returns the newest changes of the named nodes, newest first.
 	RecentEvents(ctx context.Context, nodes []string, limit int) ([]storage.Transition, error)
+	// AnomaliesSince returns every anomaly open, or ended after from.
+	AnomaliesSince(ctx context.Context, from time.Time) ([]storage.Anomaly, error)
+	// RecentAnomalies returns the anomalies of the named nodes that hold their newest
+	// limit starts and ends.
+	RecentAnomalies(ctx context.Context, nodes []string, limit int) ([]storage.Anomaly, error)
 }
 
 // TimelineStore is what the lanes and the changes read beside the state.
@@ -83,6 +88,8 @@ type changeView struct {
 	Link  string
 	Move  string
 	Value string
+	// Usual is the band an anomaly's start was judged against.
+	Usual string
 }
 
 // cellNames name each cell state on the page, by its class and its word, in the order of
@@ -92,6 +99,7 @@ var cellNames = [...]struct{ class, word string }{
 	timeline.NoFreshData: {"no-data", "value.stale"},
 	timeline.Critical:    {"critical", "level.critical"},
 	timeline.Warning:     {"warning", "level.warning"},
+	timeline.Unusual:     {"unusual", "timeline.unusual"},
 	timeline.OK:          {"ok", "level.ok"},
 	timeline.Reporting:   {"reporting", "cell.reporting"},
 }
@@ -133,7 +141,12 @@ func Timeline(read StateReader, store TimelineStore, targets func(node string) (
 			storageFailure(w, printer, err)
 			return
 		}
-		view.addChanges(printer, changes, targets, current.At, lang)
+		anomalies, err := store.RecentAnomalies(r.Context(), nodes, shownChanges)
+		if err != nil {
+			storageFailure(w, printer, err)
+			return
+		}
+		view.addChanges(printer, changes, anomalies, targets, current.At, lang)
 
 		shellHeaders(w)
 		if err := timelineTemplate.Execute(w, view); err != nil {
@@ -182,6 +195,14 @@ func (v *timelineView) addLanes(ctx context.Context, printer *i18n.Printer, stor
 	if err != nil {
 		return err
 	}
+	records, err := store.AnomaliesSince(ctx, starts[0])
+	if err != nil {
+		return err
+	}
+	unusual, err := timeline.Anomalies(records, now)
+	if err != nil {
+		return err
+	}
 	values := map[string][]storage.Value{}
 	for _, node := range snap.Nodes {
 		values[node.Node] = node.Values
@@ -189,7 +210,7 @@ func (v *timelineView) addLanes(ctx context.Context, printer *i18n.Printer, stor
 
 	for _, node := range nodes {
 		target, _ := targets(node)
-		lane, err := laneOf(ctx, store, target, values[node], spans, starts[0], now)
+		lane, err := laneOf(ctx, store, target, values[node], spans, unusual, starts[0], now)
 		if err != nil {
 			return err
 		}
@@ -203,11 +224,11 @@ func (v *timelineView) addLanes(ctx context.Context, printer *i18n.Printer, stor
 	return nil
 }
 
-// laneOf gathers one node's silence and, for every series it sends, when it was fresh and
-// the levels it held. A series is read back only as far as a point can still be fresh at the
-// window's start.
+// laneOf gathers one node's silence and, for every series it sends, when it was fresh, the
+// levels it held and when it was unusual. A series is read back only as far as a point can
+// still be fresh at the window's start.
 func laneOf(ctx context.Context, store TimelineStore, target evaluate.Target, values []storage.Value,
-	spans map[string][]timeline.Span, from, now time.Time,
+	spans map[string][]timeline.Span, unusual map[string][]timeline.Interval, from, now time.Time,
 ) (timeline.Node, error) {
 	var out timeline.Node
 	silence, err := storage.Subject{Node: target.Node, Metric: evaluate.SilenceMetric}.Key()
@@ -237,29 +258,103 @@ func laneOf(ctx context.Context, store TimelineStore, target evaluate.Target, va
 		if err != nil {
 			return out, err
 		}
-		out.Series = append(out.Series, timeline.Series{Fresh: timeline.Fresh(stamps, lasting), Spans: spans[key]})
+		out.Series = append(out.Series, timeline.Series{Fresh: timeline.Fresh(stamps, lasting), Spans: spans[key], Unusual: unusual[key]})
 	}
 	return out, nil
 }
 
-func (v *timelineView) addChanges(printer *i18n.Printer, changes []storage.Transition,
+// entry is one change the list may show, with what orders it.
+type entry struct {
+	at time.Time
+	// anomaly is true for an anomaly's start or end, which the tick records after the
+	// levels, so it lists above a transition of the same instant.
+	anomaly bool
+	key     string
+	view    changeView
+}
+
+func (v *timelineView) addChanges(printer *i18n.Printer, changes []storage.Transition, anomalies []storage.Anomaly,
 	targets func(node string) (evaluate.Target, bool), now time.Time, lang string,
 ) {
+	entries := make([]entry, 0, len(changes)+2*len(anomalies))
 	for _, change := range changes {
-		label := printer.Date(change.At, now)
+		entries = append(entries, entry{at: change.At, view: changeOf(printer, change, targets, lang)})
+	}
+	for _, record := range anomalies {
+		key, err := record.Key()
+		if err != nil {
+			slog.Error("identify an anomaly", "node", record.Node, "metric", record.Metric, "error", err)
+			continue
+		}
+		entries = append(entries, entry{at: record.Began, anomaly: true, key: key, view: startOf(printer, record, lang)})
+		if record.Back != nil {
+			entries = append(entries, entry{at: record.Ended, anomaly: true, key: key, view: endOf(printer, record, lang)})
+		}
+	}
+	// Transitions come newest first already, ties as the log recorded them; anomalies are
+	// put in the same order: newest first, then the reverse of the order a tick walks.
+	sort.SliceStable(entries, func(i, j int) bool {
+		a, b := entries[i], entries[j]
+		switch {
+		case !a.at.Equal(b.at):
+			return a.at.After(b.at)
+		case a.anomaly != b.anomaly:
+			return a.anomaly
+		case a.anomaly:
+			return a.key > b.key
+		}
+		return false
+	})
+	if len(entries) > shownChanges {
+		entries = entries[:shownChanges]
+	}
+
+	for _, one := range entries {
+		label := printer.Date(one.at, now)
 		if n := len(v.Days); n == 0 || v.Days[n-1].Label != label {
 			v.Days = append(v.Days, dayView{Label: label})
 		}
 		day := &v.Days[len(v.Days)-1]
-		day.Changes = append(day.Changes, changeOf(printer, change, targets, lang))
+		day.Changes = append(day.Changes, one.view)
 	}
+}
+
+// seriesChange is what every change of a series shows: when, which series, and a link to
+// its chart.
+func seriesChange(printer *i18n.Printer, at time.Time, subject storage.Subject, class, lang string) changeView {
+	out := changeView{Time: printer.Clock(at), Class: class, Node: subject.Node, Name: subject.Metric,
+		Link: historyLink(subject.Node, subject.Metric, subject.Labels, lang, "")}
+	if named := notify.Naming(subject.Labels); named != "" {
+		out.Name += " · " + named
+	}
+	return out
+}
+
+// startOf is an anomaly's start: the value it was recorded with and the band it was judged
+// against (docs/specs/timeline.md#changes).
+func startOf(printer *i18n.Printer, record storage.Anomaly, lang string) changeView {
+	out := seriesChange(printer, record.Began, record.Subject, "unusual", lang)
+	out.Move, out.Value = printer.T("timeline.unusual"), format(printer, record.Metric, record.Value)
+	low, high := format(printer, record.Metric, record.Low), format(printer, record.Metric, record.High)
+	if low == high {
+		out.Usual = fmt.Sprintf(printer.T("timeline.usually"), low)
+	} else {
+		out.Usual = fmt.Sprintf(printer.T("timeline.usually_between"), low, high)
+	}
+	return out
+}
+
+// endOf is an anomaly's end: the value it came back at.
+func endOf(printer *i18n.Printer, record storage.Anomaly, lang string) changeView {
+	out := seriesChange(printer, record.Ended, record.Subject, "usual", lang)
+	out.Move, out.Value = printer.T("timeline.usual_again"), format(printer, record.Metric, *record.Back)
+	return out
 }
 
 func changeOf(printer *i18n.Printer, change storage.Transition, targets func(node string) (evaluate.Target, bool), lang string) changeView {
 	to, _ := evaluate.ParseLevel(change.To)
-	out := changeView{Time: printer.Clock(change.At), Class: to.String(), Node: change.Node}
 	if change.Metric == evaluate.SilenceMetric {
-		out.Link = pageLink("/debug", lang)
+		out := changeView{Time: printer.Clock(change.At), Class: to.String(), Node: change.Node, Link: pageLink("/debug", lang)}
 		if to == evaluate.OK {
 			out.Name = printer.T("timeline.reporting")
 			return out
@@ -271,10 +366,7 @@ func changeOf(printer *i18n.Printer, change storage.Transition, targets func(nod
 		return out
 	}
 
-	out.Name, out.Link = change.Metric, historyLink(change.Node, change.Metric, change.Labels, lang, "")
-	if named := notify.Naming(change.Labels); named != "" {
-		out.Name += " · " + named
-	}
+	out := seriesChange(printer, change.At, change.Subject, to.String(), lang)
 	from, _ := evaluate.ParseLevel(change.From)
 	out.Move = printer.T("level."+from.String()) + " → " + printer.T("level."+to.String())
 	if reading, found := change.Readings[change.Metric]; found {

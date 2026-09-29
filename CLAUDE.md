@@ -199,7 +199,8 @@ Each line is an index into the ADR that owns it.
 - **Evaluation runs on the hub's own tick**, never inside an ingest request: one writer of
   the event log, and silence, digest and repeat are the same pass. → 0015
 - **An anomaly is shown, never notified**: a series' newest value against the band it kept
-  the week before yesterday, computed on read, never stored and never a level. → 0036
+  the week before yesterday, scored on read and never a level; the tick records when one
+  starts (a score of 2) and ends (back to 1.6), apart from the event log. → 0036, 0042
 - **Hysteresis is relative**: recovery is the entry comparison negated and shifted by 20%
   of the threshold's magnitude, whatever the unit. → 0013, 0033
 - **Stack**: Go for both binaries, SQLite (`modernc.org/sqlite`, no CGO) behind a `Storage`

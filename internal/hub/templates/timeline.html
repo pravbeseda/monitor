@@ -20,6 +20,7 @@
     i.cell-ok { background: color-mix(in srgb, var(--accent) 55%, transparent); }
     i.cell-warning { background: var(--warn); }
     i.cell-critical { background: var(--bad); }
+    i.cell-unusual { background: var(--unusual); }
     i.cell-silent { background: repeating-linear-gradient(45deg, var(--bad) 0 3px, transparent 3px 6px); }
     i.cell-reporting { background: color-mix(in srgb, var(--muted) 35%, transparent); }
     i.cell-no-data { border: 1px solid var(--rule); background: transparent; }
@@ -34,7 +35,9 @@
     i.dot-ok { background: var(--accent); }
     i.dot-warning { background: var(--warn); }
     i.dot-critical { background: var(--bad); }
-    li.change .node, li.change .move, li.change .value { color: var(--muted); }
+    i.dot-unusual { background: var(--unusual); }
+    i.dot-usual { background: var(--muted); }
+    li.change .node, li.change .move, li.change .value, li.change .usual { color: var(--muted); }
     li.change .value { font-variant-numeric: tabular-nums; }
     p.quiet { color: var(--muted); }
   </style>
@@ -59,7 +62,7 @@
         {{ range .Days }}
           <h3 class="day">{{ .Label }}</h3>
           <ol class="changes">
-            {{ range .Changes }}<li class="change"><span class="when">{{ .Time }}</span><i class="dot dot-{{ .Class }}"></i><span><span class="node">{{ .Node }}</span> · <a href="{{ .Link }}">{{ .Name }}</a>{{ with .Move }} <span class="move">{{ . }}</span>{{ end }}{{ with .Value }} <span class="value">{{ . }}</span>{{ end }}</span></li>
+            {{ range .Changes }}<li class="change"><span class="when">{{ .Time }}</span><i class="dot dot-{{ .Class }}"></i><span><span class="node">{{ .Node }}</span> · <a href="{{ .Link }}">{{ .Name }}</a>{{ with .Move }} <span class="move">{{ . }}</span>{{ end }}{{ with .Value }} <span class="value">{{ . }}</span>{{ end }}{{ with .Usual }} <span class="usual">{{ . }}</span>{{ end }}</span></li>
             {{ end }}
           </ol>
         {{ else }}

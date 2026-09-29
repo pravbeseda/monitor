@@ -1,6 +1,6 @@
 // Package anomaly says how unlike its own week a series' newest value is: the norm of every
 // series, the score of its newest value against it, and the rank of the unusual ones
-// (docs/specs/anomaly.md, ADR 0036). It judges no level and writes nothing.
+// (docs/specs/anomaly.md, ADRs 0036 and 0042). It judges no level and writes nothing.
 package anomaly
 
 import (
@@ -15,6 +15,11 @@ import (
 // cutoff is the score, in either direction, at which a value is unusual: twice as far from
 // the norm as the edge of the band.
 const cutoff = 2
+
+// settle is the score an unusual series has to come back to before it is usual again: the
+// cut-off less the 20% margin levels clear by (ADRs 0013 and 0042). The band's own edge
+// would never be reached by a series that climbs at a steady pace.
+const settle = 1.6
 
 // A norm needs this much history before anything can be unusual against it.
 const (
@@ -36,6 +41,8 @@ type Norm struct {
 	median float64
 	above  float64
 	below  float64
+	// low and high are the band as the series reported it: its 1st and 99th percentiles.
+	low, high float64
 }
 
 // NormOf draws the norm from the points of a norm period. It is false when they are too
@@ -60,11 +67,17 @@ func NormOf(points []storage.Point) (Norm, bool) {
 	}
 	slices.Sort(values)
 
-	median := percentile(values, 50)
+	median, low, high := percentile(values, 50), percentile(values, 1), percentile(values, 99)
 	floor := 0.01 * math.Abs(median)
-	above := width(percentile(values, 99)-median, values[len(values)-1]-median, floor, smallestStep(values, median, math.Inf(1)))
-	below := width(median-percentile(values, 1), median-values[0], floor, smallestStep(values, math.Inf(-1), median))
-	return Norm{median: median, above: above, below: below}, true
+	above := width(high-median, values[len(values)-1]-median, floor, smallestStep(values, median, math.Inf(1)))
+	below := width(median-low, median-values[0], floor, smallestStep(values, math.Inf(-1), median))
+	return Norm{median: median, above: above, below: below, low: low, high: high}, true
+}
+
+// Band is the range the series usually keeps: its 1st and 99th percentiles, both values it
+// really reported.
+func (n Norm) Band() (low, high float64) {
+	return n.low, n.high
 }
 
 // percentile is the p-th percentile by nearest rank: a value the series really reported.
@@ -98,22 +111,32 @@ func smallestStep(sorted []float64, from, to float64) float64 {
 }
 
 // Anomaly is a series' newest value against its norm. A nil Score is a value off a side of
-// no width, which is as unusual as a value can be. Rank is zero when it is not unusual.
+// no width, which is as unusual as a value can be. Held says the series was unusual already
+// and has not come back since. Rank is zero when it is not unusual.
 type Anomaly struct {
 	Norm  float64
 	Score *float64
+	Held  bool
 	Rank  int
 }
 
-// Unusual is whether the value ranks at all.
+// Unusual is whether the value ranks at all: a series starts being unusual at the cut-off,
+// and one that already is stays so until it comes back to settle.
 func (a Anomaly) Unusual() bool {
-	return a.Score == nil || math.Abs(*a.Score) >= cutoff
+	if a.Score == nil {
+		return true
+	}
+	if a.Held {
+		return math.Abs(*a.Score) > settle
+	}
+	return math.Abs(*a.Score) >= cutoff
 }
 
 // Judge scores a value in widths of the side of the norm it lies on, rounded to two
-// decimals: the rounded score is the one reported, and the one compared.
-func (n Norm) Judge(value float64) Anomaly {
-	out := Anomaly{Norm: n.median}
+// decimals: the rounded score is the one reported, and the one compared. held is whether
+// the series is unusual already, which is what it has to come back from.
+func (n Norm) Judge(value float64, held bool) Anomaly {
+	out := Anomaly{Norm: n.median, Held: held}
 	var score float64
 	switch {
 	case value > n.median && n.above == 0, value < n.median && n.below == 0:

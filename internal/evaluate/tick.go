@@ -22,6 +22,7 @@ var sendTimeout = 10 * time.Second
 type Evaluator struct {
 	store    Store
 	notifier Notifier
+	norms    NormReader
 	now      func() time.Time
 	// targets is the configuration as evaluation reads it, resolved once at startup: the
 	// file is never re-read while the hub runs.
@@ -40,8 +41,10 @@ type Evaluator struct {
 type Options struct {
 	Store    Store
 	Notifier Notifier
-	Targets  []Target
-	Digest   Schedule
+	// Norms is what anomalies are judged against (ADR 0042).
+	Norms   NormReader
+	Targets []Target
+	Digest  Schedule
 	// Started is when this hub started, which is where the digest window begins on a
 	// database that has never digested — history is never replayed — and where the hub's
 	// latest outage ends: the hub's own downtime is no node's silence.
@@ -55,6 +58,7 @@ func New(o Options) *Evaluator {
 	return &Evaluator{
 		store:    o.Store,
 		notifier: o.Notifier,
+		norms:    o.Norms,
 		now:      o.Now,
 		targets:  o.Targets,
 		schedule: o.Digest,
@@ -130,8 +134,12 @@ func (e *Evaluator) Tick(ctx context.Context) error {
 		event, recorded := newest[key]
 		e.deliver(ctx, subject, event, recorded, now)
 	}
-	// The digest runs last, so a warning this pass recorded is in the window it closes.
-	return e.digest(ctx, subjects, watch, since, now)
+	// The digest runs after the levels, so a warning this pass recorded is in the window it
+	// closes; anomalies come last, so nothing they fail on costs a level or a message.
+	if err := e.digest(ctx, subjects, watch, since, now); err != nil {
+		return err
+	}
+	return e.anomalies(ctx, snapshot, now)
 }
 
 // Begin records the outage that ended at this start — the span from the last instant the

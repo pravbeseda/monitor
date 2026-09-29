@@ -57,12 +57,13 @@ One decision per file, each stating what was rejected and why. New records start
 | [0033](decisions/0033-a-subject-is-a-series.md) | A subject is a series, and a threshold is one comparison per level | accepted, amended by [0034](decisions/0034-a-series-without-a-sensor-still-ages.md) |
 | [0034](decisions/0034-a-series-without-a-sensor-still-ages.md) | A series that names no sensor ages by its node's longest interval | accepted |
 | [0035](decisions/0035-mission-control-is-rendered-by-the-hub.md) | Mission control is rendered by the hub; TypeScript waits for a skin that needs a client | accepted, amended by [0037](decisions/0037-skins-are-tabs-and-the-root-opens-the-last-one.md) and [0041](decisions/0041-mission-control-folds-into-the-timeline.md) |
-| [0036](decisions/0036-an-anomaly-is-a-value-outside-its-weeks-band.md) | An anomaly is a value outside the band its series kept the week before | accepted |
+| [0036](decisions/0036-an-anomaly-is-a-value-outside-its-weeks-band.md) | An anomaly is a value outside the band its series kept the week before | accepted, amended by [0042](decisions/0042-an-anomalys-start-and-end-are-recorded.md) |
 | [0037](decisions/0037-skins-are-tabs-and-the-root-opens-the-last-one.md) | Skins are tabs, each at its own address; `/` opens the one last chosen | accepted, amended by [0041](decisions/0041-mission-control-folds-into-the-timeline.md) |
-| [0038](decisions/0038-a-lane-is-summarised-on-read.md) | A timeline lane is summarised on read from the event log and the stored points | accepted |
+| [0038](decisions/0038-a-lane-is-summarised-on-read.md) | A timeline lane is summarised on read from the event log and the stored points | accepted, amended by [0042](decisions/0042-an-anomalys-start-and-end-are-recorded.md) |
 | [0039](decisions/0039-the-hub-collects-a-service-node.md) | The hub collects a service node itself, through the same path an agent reports on | accepted |
 | [0040](decisions/0040-the-hub-serves-its-public-pages-open.md) | The hub serves the public pages itself, under `/public/`, without a credential | accepted |
 | [0041](decisions/0041-mission-control-folds-into-the-timeline.md) | Mission control folds into the timeline, which becomes the primary view | accepted |
+| [0042](decisions/0042-an-anomalys-start-and-end-are-recorded.md) | An anomaly's start and end are recorded by the evaluation tick | accepted |
 
 ## Behaviour specs
 
@@ -83,9 +84,9 @@ can see ([ADR 0017](decisions/0017-one-spec-and-decision-gates.md)). New specs s
 | [evaluation.md](specs/evaluation.md) | Levels, hysteresis, the event log, silence, digests and the notifier boundary | approved |
 | [history.md](specs/history.md) | The history series, `/api/v1/series`, `/api/v1/history` and the drill-down page | approved |
 | [state.md](specs/state.md) | `/api/v1/state`: subjects, stored levels, staleness and anomalies, and the levels on `/debug` | approved |
-| [anomaly.md](specs/anomaly.md) | Each series' norm, how far its newest value lies from it, and the anomaly rank | approved |
+| [anomaly.md](specs/anomaly.md) | Each series' norm, how far its newest value lies from it, the anomaly rank, and the record of when a series became unusual and came back | approved |
 | [attention.md](specs/attention.md) | What needs attention now, in what order, under what headline — the timeline's "Now" | approved |
-| [timeline.md](specs/timeline.md) | `/timeline`: what needs attention now, each node's last 24 hours, and the levels that changed | approved |
+| [timeline.md](specs/timeline.md) | `/timeline`: what needs attention now, each node's last 24 hours, and the levels and anomalies that changed | approved |
 | [thresholds.md](specs/thresholds.md) | The page that sets what a series is judged by — what may be stored as a threshold, and whether it may be shown as unusual | approved |
 | [release.md](specs/release.md) | How a merge tags itself, what a tag publishes, how a release is signed, and how an artifact is checked | approved |
 | [installer.md](specs/installer.md) | One command that installs or upgrades a hub or an agent from a signed release, the hub following the version its host names, and an agent following the one the hub names | approved |
@@ -116,6 +117,7 @@ Reasoning from working sessions, including options that were rejected.
 | [2026-09-27](log/2026-09-27-cloud-storage.md) | Cloud storage: why not rclone, whose series a Drive is, and how a dead token shows |
 | [2026-09-28](log/2026-09-28-mission-control-folds.md) | Mission control folds into the timeline: why the board was one phrase, and what was kept |
 | [2026-09-28](log/2026-09-28-silence-after-a-restart.md) | Silence after the hub restarts: why a grace window after every start was dropped for leaving out the hub's own outages |
+| [2026-09-29](log/2026-09-29-anomaly-log.md) | Anomalies in the log: where an anomaly ends, why a table of its own, and why a stale series holds one |
 
 ## Not written yet
 

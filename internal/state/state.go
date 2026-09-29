@@ -57,8 +57,9 @@ type Subject struct {
 	Unit  history.Unit
 	Value *float64
 	TS    time.Time
-	// Anomaly is how unlike its norm the newest value is, nil when the subject carries none:
-	// stale, excluded, without a norm, or a node's silence (docs/specs/anomaly.md).
+	// Anomaly is how unlike its norm the newest value is, judged against the anomaly the
+	// record holds open, nil when the subject carries none: stale, excluded, without a
+	// norm, or a node's silence (docs/specs/anomaly.md).
 	Anomaly *anomaly.Anomaly
 }
 
@@ -89,6 +90,13 @@ func Build(targets func(node string) (evaluate.Target, bool), snap storage.Snaps
 	excluded := make(map[string]struct{}, len(snap.Excluded))
 	for _, ref := range snap.Excluded {
 		excluded[seriesKey(ref.Node, ref.Metric, ref.Labels)] = struct{}{}
+	}
+
+	// An anomaly the record holds open keeps its series unusual until it comes back, by
+	// the rule the tick records it by (ADR 0042).
+	held := make(map[string]bool, len(snap.Unusual))
+	for _, record := range snap.Unusual {
+		held[seriesKey(record.Node, record.Metric, record.Labels)] = true
 	}
 
 	// Evaluation's own subjects, so the state lists and freezes exactly what a tick would.
@@ -147,7 +155,7 @@ func Build(targets func(node string) (evaluate.Target, bool), snap storage.Snaps
 			one.Unit, one.Value, one.TS = history.UnitOf(value.Metric), &value.Value, value.TS
 			if _, isExcluded := excluded[key]; !isExcluded && !one.Stale {
 				if norm, ok := norms[key]; ok {
-					found := norm.Judge(value.Value)
+					found := norm.Judge(value.Value, held[key])
 					one.Anomaly = &found
 				}
 			}

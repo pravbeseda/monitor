@@ -2,15 +2,18 @@
 
 - **Status:** approved
 - **Owns:** `internal/anomaly` (hub) — the norm of every series, how far its newest value
-  lies from that norm, and which series are unusual enough to rank — and the `anomaly`
-  field every subject of [`/api/v1/state`](state.md#wire-format) carries. Reading stored
-  points stays with `internal/storage`; which subjects exist and whether they are stale
+  lies from that norm, which series are unusual enough to rank, and when a series became
+  unusual and came back — and the `anomaly` field every subject of
+  [`/api/v1/state`](state.md#wire-format) carries. Reading and keeping stored points and
+  anomalies stays with `internal/storage`; the pass that records them is
+  [evaluation](evaluation.md#the-tick)'s; which subjects exist and whether they are stale
   stays with [state](state.md); excluding a series is set on
   [its own page](thresholds.md).
 - **Decisions:** [0001](../decisions/0001-semantic-core-and-skins.md),
   [0030](../decisions/0030-the-state-api-reports-the-stored-verdict.md),
   [0033](../decisions/0033-a-subject-is-a-series.md),
-  [0036](../decisions/0036-an-anomaly-is-a-value-outside-its-weeks-band.md)
+  [0036](../decisions/0036-an-anomaly-is-a-value-outside-its-weeks-band.md),
+  [0042](../decisions/0042-an-anomalys-start-and-end-are-recorded.md)
 
 ## Purpose
 
@@ -20,8 +23,10 @@ every series, with nothing set. It is what lets the timeline's "now" surface a l
 times its usual on a machine nobody wrote a threshold for
 ([attention.md](attention.md)).
 
-It judges no level, writes no event and sends no message: an anomaly is shown, never
-notified ([0036](../decisions/0036-an-anomaly-is-a-value-outside-its-weeks-band.md)). It
+It judges no level and sends no message: an anomaly is shown, never notified
+([0036](../decisions/0036-an-anomaly-is-a-value-outside-its-weeks-band.md)). When a series
+became unusual and when it came back are recorded, so the timeline can show them in the
+past ([0042](../decisions/0042-an-anomalys-start-and-end-are-recorded.md)). It
 knows nothing about any metric: a disk, a load average and an uptime are judged by the same
 rule, against their own history. Unusual is either way: a failure fixed today is as unusual
 as one that started today.
@@ -80,11 +85,44 @@ norm is zero and the period never left it on that side, as a count of failed ser
 at zero on a good week. A value off that norm on that side has no score, reported as
 `null`.
 
-**A value is anomalous** when its score is 2 or more in either direction, or `null`.
+**An anomaly starts** when a series that is not unusual scores 2 or more in either
+direction, or `null`, and **ends** when an unusual series' score is 1.6 or less in
+magnitude — the cut-off less the 20% margin levels clear by
+([0013](../decisions/0013-relative-hysteresis.md)). In between, the series stays unusual,
+so one that hovers around twice its band does not start and end over and over
+([0042](../decisions/0042-an-anomalys-start-and-end-are-recorded.md)). The end is not the
+band's edge on purpose: a series that climbs at a steady pace sits about 1.3 widths above a
+norm that ended a day ago, and would never come back to 1. Whether a series is unusual
+already is what [the record](#record) holds open for it.
+
+**A value is anomalous** when, by that rule, its series is unusual with it: a score of 2 or
+more, or `null`; or, for a series the record holds unusual, any score above 1.6 in
+magnitude.
 
 **The rank** orders the anomalous subjects of one answer, 1 the most unusual: `null`
 scores first, then by the magnitude of the score, largest first; ties keep the order of
 [state](state.md#ordering). A subject that is not anomalous has no rank.
+
+**The record.** Evaluation's tick ([evaluation](evaluation.md#the-tick)) judges every
+series of the nodes the configuration names, with the newest value it holds and the norm of
+the tick's hour, against the anomaly the record holds open for it, and takes the first of
+these that applies:
+
+1. the series is excluded ([thresholds](thresholds.md#saving)) — an open anomaly is
+   *withdrawn*: closed at the tick's instant with no value, whatever the values say;
+2. the series is stale — nothing changes: stale values judge nothing, and freezing holds an
+   anomaly as it holds a level ([evaluation](evaluation.md#freezing));
+3. the series has no norm — an open anomaly is withdrawn;
+4. otherwise, by the rule above: a series that starts an anomaly opens a record with the
+   tick's instant, the value, and the band — `low` and `high` — it was judged against; a
+   series that ends one closes it with the tick's instant and the value.
+
+A series of a node the configuration no longer names is not judged, and its record is left
+as it is until the node is named again. A node's silence has no value and no record. A tick
+that cannot read the norms records nothing about anomalies; the next one judges again. The
+record is never read by a message or the digest. It is seen on the timeline
+([timeline](timeline.md#changes)): a start as "unusual" with its value and band, an end as
+"usual again" with its value, a withdrawal as no end at all.
 
 **Which subjects carry one.** Every series subject that is not stale and has a norm. A stale
 value judges nothing here, as it judges nothing in evaluation
@@ -105,7 +143,9 @@ Each subject of `/api/v1/state` carries `anomaly`, an object or `null`:
 ```
 
 `norm` is in the unit of the series, as `value` is. `score` is a number with at most two
-decimals, or `null`; `rank` is a positive integer or `null`. `anomaly` is `null` exactly when
+decimals, or `null`; `rank` is a positive integer or `null`, present for an anomalous
+value by [the rule above](#model), so a series still unusual since it scored 2 carries a
+rank at a score of 1.8. `anomaly` is `null` exactly when
 the subject carries none — a stale series, a series with no norm, an excluded series, a
 node's silence, or any series when its stored points could not be read
 ([reading](#reading)).
@@ -236,22 +276,81 @@ The norm period holds only −5:
 | no anomalous series | every `rank` is `null` |
 | ranks of one answer | 1, 2, 3 … with no gap and no repeat |
 
+The norm period holds the values 1, 2, …, 100, as [above](#score):
+
+| Series | Newest value | Anomaly |
+|---|---|---|
+| unusual in the record since it scored 2.4 | 140, score 1.84 | a rank: it has not come back to 1.6 |
+| not unusual in the record | 140, score 1.84 | no rank |
+| unusual in the record, a new value arriving before the next tick | 125, score 1.53 | no rank: the answer judges its newest value by the rule the tick will |
+| not unusual in the record, a new value arriving before the next tick | 170, score 2.45 | a rank: an answer is at most one tick ahead of the record |
+| unusual in the record and scoring 1.84, beside one scoring 2.5 | | 2.5 is 1, 1.84 is 2: ranked by the score like any other |
+| unusual in the record, then stale | its last value, far outside the band | `null`: a stale series carries none, though its record stays open |
+| unusual in the record, the hub restarted and no tick run yet | 140, score 1.84 | a rank: the record survives a restart |
+
 ### Reading {#reading}
 
 | Situation | Anomaly |
 |---|---|
-| two answers in one hour, nothing reported between them | the same anomalies |
-| a new value arrives | scored in the next answer, against the norm of that answer's hour |
+| two answers in one hour, nothing reported or recorded between them | the same anomalies |
+| a new value arrives | scored in the next answer, against the norm of that answer's hour and the record as it stands |
 | the stored points cannot be read for a norm | the rest of the state answered as ever, every `anomaly` `null`; the next answer tries again |
+| the record cannot be read | no answer: the state fails as it does when its levels cannot be read ([state](state.md#endpoint)) |
+
+### The record {#record}
+
+The record is seen on the timeline ([timeline](timeline.md#changes)), so a row says what
+its changes and lanes show. Unless a row says otherwise, the norm period holds the values
+1, 2, …, 100, so the band runs from 1 to 99; the series reports every 5 minutes, so it is
+stale 15 minutes after its last point; the tick runs at 10:20 on the 23rd on a series fresh
+and not excluded; and "open" means the record holds the series unusual.
+
+| Before the tick | Newest value | Seen afterwards |
+|---|---|---|
+| nothing open | 148, score 2 | a start at 10:20 with 148 and the band 1 to 99 |
+| nothing open | 147, score 1.98 | nothing |
+| nothing open | −48, score −2 | a start: the same bound below |
+| open | 140, score 1.84 | no end; the next answer ranks it |
+| open | 129, score 1.61 | no end: 1.61 has not come back to 1.6 |
+| open | 128.4, score 1.6 | an end at 10:20 with 128.4: the bound is inclusive |
+| open | −28.4, score −1.6 | an end: the same bound below |
+| open, started above | −48, score −2 | no end: one anomaly, whichever side it lies on |
+| ended at 10:20 | 148 at 10:40 | a second start at 10:40 |
+| nothing open, a period of only zeros | 1, score `null` | a start with the band 0 to 0 |
+| open, a period of only zeros | 1 again | no end |
+| open, a period of only zeros | 0 | an end: its score is 0 |
+| nothing open, reporting a value that scores 1.9 against the norm of 10:00 and 2.1 against that of 11:00 | that value, still | a start at 11:00: a new hour moves the norm |
+| open, reporting a value that scores 1.9 against the norm of 10:00 and 1.5 against that of 11:00 | that value, still | an end at 11:00 with that value; the start keeps the band it was recorded with |
+| open, the series' last point at 09:50, so stale from just after 10:05 | its value of 09:50, far outside the band | no end; the lane shows no "unusual" over the hours it is stale |
+| open, the same series fresh again at 13:00 | 50 | an end at the first tick that finds it fresh |
+| nothing open, the series stale | its value far outside the band | nothing |
+| nothing open, the node silent, its last value far outside the band | the same | nothing: a silent node's series are stale |
+| open, the series excluded at 10:15 | 148 | no end; from 10:20 the lane shows it unusual no more |
+| open, the series excluded while stale | any | the same: an exclusion withdraws whatever the values |
+| the exclusion removed at 10:30 | 148 at 10:31 | a new start at 10:31 |
+| nothing open, the series excluded | 148 | nothing |
+| open, the series fresh again after nine days away, its norm period holding fewer than 24 points | any | no end; from that tick the lane shows it unusual no more: without a norm it cannot be judged |
+| open, the series never reports again — its sensor switched off | — | its start, and no end for as long as the record is kept; no "unusual" cell after its last fresh hour |
+| open, its node dropped from the configuration from 11:00 to 15:00, then named again with 50 | 50 | nothing while it is not named; an end at the first tick after 15:00 |
+| open, the hub down from 11:00 to 13:30, the series at 50 on its return | 50 | an end at the first tick after 13:30, not at 11:00 |
+| the norms cannot be read at 10:20 | 148 | nothing at 10:20, the levels judged as ever; a start at the first tick that reads them |
+| two series starting at 10:20, the first of them failing to be recorded | 148 each | neither start at 10:20, the levels, messages and digest of that tick as ever; both at the next tick that records them |
+| a watched series at `critical` | 148 | a start: a level and an anomaly are independent |
+| two ticks at 10:20 over the same data | 148 | one start |
+| a start at a tick that also crosses `digest.at` | 148 | no message and no digest line: an anomaly is shown, never notified |
 
 ## Invariants
 
 - `norm` is a value the series really reported inside its norm period; nothing is
   interpolated.
-- `rank` is present exactly when the reported score is 2 or more in magnitude, or `null`.
+- `rank` is present exactly when the value is anomalous: a score of 2 or more in
+  magnitude, or `null`, or above 1.6 in magnitude for a series the record holds unusual.
 - The ranks of one answer are 1 to the number of anomalous subjects, each once.
 - A stale subject, an excluded one and a silence subject never carry an anomaly.
-- Computing an anomaly writes nothing, sends nothing and changes no level.
+- Computing an anomaly for an answer writes nothing; only the tick records one. Neither
+  sends anything or changes a level.
+- A series has at most one open record, and a closed record never reopens: a new anomaly
+  is a new record.
 
 ## Edge cases
 
@@ -263,7 +362,13 @@ The norm period holds only −5:
   and at a constant pace scores about −1.3: it does not rank. Filling about 3.4
   times faster than the week before, for a whole day, does.
 - **A change that lasts** — a load that stays five times higher — ranks for about a day
-  and then becomes its own norm. A lasting state is a threshold's business.
+  and then becomes its own norm, and its record ends when its band widens to take the new
+  value in. A lasting state is a threshold's business.
+- **A series that climbs or falls at a steady pace** — an uptime, a disk filling evenly —
+  reporting throughout scores about 1.3 against a norm that ended a day ago, whatever the pace, so a record it
+  opens ends once its pace is back to the week's.
+- **A new hour** moves the norm period with no new value, so a record can start or end on
+  the hour's first tick.
 - **A laptop's uptime** keeps counting through sleep while the laptop reports only when
   awake, so after a weekend asleep its first value is far above a band drawn from working
   hours: it scores about 2.2 to 2.7 and ranks for about a day each week, until the reader
@@ -286,8 +391,11 @@ The norm period holds only −5:
   ([0013](../decisions/0013-relative-hysteresis.md)); a series that should not rank at all
   is excluded instead.
 - **Trend, forecast and health 0–100** — the semantic engine's other fields, not built yet.
-- **Anomalies in the past** — `at=` time travel is refused by the State API until it is
-  designed ([state](state.md#endpoint)).
+- **Anomalies in the past in the state** — `at=` time travel is refused by the State API
+  until it is designed ([state](state.md#endpoint)); the timeline reads the record
+  ([timeline](timeline.md#model)).
+- **Recording the peak** of an anomaly: the record keeps how it started and how it ended;
+  the history page draws what happened in between.
 
 ## Open questions
 

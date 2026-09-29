@@ -93,7 +93,7 @@ func TestThePeriodBoundsAreInclusive(t *testing.T) {
 			}
 			// Inside, 5 is the period's highest value and the side above reaches it, so 9
 			// scores 2; outside, the side above is the floor of 1% and 9 scores 800.
-			got := *norm.Judge(9).Score
+			got := *norm.Judge(9, false).Score
 			if inside := got == 2; inside != tc.inside {
 				t.Fatalf("score of 9 = %v: inside = %v, want %v", got, inside, tc.inside)
 			}

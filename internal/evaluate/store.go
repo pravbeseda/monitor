@@ -4,6 +4,7 @@ import (
 	"context"
 	"time"
 
+	"github.com/pravbeseda/monitor/internal/anomaly"
 	"github.com/pravbeseda/monitor/internal/storage"
 )
 
@@ -29,6 +30,14 @@ type Store interface {
 	LastTickAt(ctx context.Context) (time.Time, bool, error)
 	SetLastTickAt(ctx context.Context, at time.Time) error
 	RecordOutage(ctx context.Context, outage storage.Outage) error
+
+	OpenAnomaly(ctx context.Context, record storage.Anomaly) error
+	CloseAnomaly(ctx context.Context, subject storage.Subject, at time.Time, back *float64) error
+}
+
+// NormReader is where the pass finds each series' norm for the hour it runs in.
+type NormReader interface {
+	For(ctx context.Context, now time.Time, refs []storage.SeriesRef) (map[string]anomaly.Norm, error)
 }
 
 // The hub's storage has to satisfy it, and the compiler is what says so.

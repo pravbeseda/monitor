@@ -542,3 +542,11 @@ func (s stored) EventsBetween(context.Context, time.Time, time.Time) ([]storage.
 func (s stored) RecentEvents(context.Context, []string, int) ([]storage.Transition, error) {
 	return nil, s.err
 }
+
+func (s stored) AnomaliesSince(context.Context, time.Time) ([]storage.Anomaly, error) {
+	return nil, s.err
+}
+
+func (s stored) RecentAnomalies(context.Context, []string, int) ([]storage.Anomaly, error) {
+	return nil, s.err
+}

@@ -26,7 +26,7 @@ func (c *counting) Snapshot(ctx context.Context, owed []string) (storage.Snapsho
 func TestRunEvaluatesUntilTheHubStops(t *testing.T) {
 	store := &counting{Store: open(t)}
 	e := evaluate.New(evaluate.Options{
-		Store: store, Notifier: &recorder{},
+		Store: store, Notifier: &recorder{}, Norms: normsOf(store),
 		Digest: schedule, Started: time.Now(), Now: time.Now,
 	})
 
@@ -64,7 +64,7 @@ func TestBeginRecordsTheOutage(t *testing.T) {
 		t.Fatal(err)
 	}
 	e := evaluate.New(evaluate.Options{
-		Store: db, Notifier: &recorder{},
+		Store: db, Notifier: &recorder{}, Norms: normsOf(db),
 		Digest: schedule, Started: started, Now: time.Now,
 	})
 	if err := e.Begin(context.Background()); err != nil {
@@ -86,7 +86,7 @@ func TestTheHubIsMarkedUpDuringALongPass(t *testing.T) {
 	// Buffered, so the passes after the held one do not wait for a reader.
 	held := &blocking{Store: db, entered: make(chan struct{}, 1000), release: make(chan struct{})}
 	e := evaluate.New(evaluate.Options{
-		Store: held, Notifier: &recorder{},
+		Store: held, Notifier: &recorder{}, Norms: normsOf(held),
 		Digest: schedule, Started: time.Now(), Now: time.Now,
 	})
 	ctx, stop := context.WithCancel(context.Background())

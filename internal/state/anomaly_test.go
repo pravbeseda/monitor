@@ -221,3 +221,44 @@ func TestTiedScoresRankInTheStatesOrder(t *testing.T) {
 		}
 	}
 }
+
+// spec: anomaly.md#rank — a series the record holds unusual ranks until its score comes
+// back to 1.6; one it does not hold ranks only from 2.
+func TestAHeldAnomalyRanksUntilItComesBackTo1Point6(t *testing.T) {
+	held := []storage.Anomaly{{Subject: storage.Subject{Node: "server-b", Metric: "disk.free_bytes", Labels: volume("/")}, Began: now.Add(-time.Hour)}}
+	for _, tc := range []struct {
+		name   string
+		held   []storage.Anomaly
+		value  float64
+		ranked bool
+	}{
+		{"held, score 1.8", held, 57.64e9, true},
+		{"not held, score 1.8", nil, 57.64e9, false},
+		{"held, score 1.6", held, 55.68e9, false},
+		{"not held, score 2.45", nil, 64.01e9, true},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			snap := storage.Snapshot{Nodes: []storage.NodeState{heard("server-b", 0, unusual(volume("/"), tc.value))}, Unusual: tc.held}
+			got := withNorms(t, snap, usually).Subjects[1].Anomaly
+			if got == nil {
+				t.Fatal("no anomaly")
+			}
+			if tc.value == 55.68e9 && *got.Score != 1.6 {
+				t.Fatalf("score = %v, want exactly 1.6: the bound is what this case is about", *got.Score)
+			}
+			if ranked := got.Rank > 0; ranked != tc.ranked {
+				t.Fatalf("rank = %d at score %v, want ranked %v", got.Rank, *got.Score, tc.ranked)
+			}
+		})
+	}
+}
+
+// spec: anomaly.md#rank — a stale series carries no anomaly, though its record stays open.
+func TestAHeldAnomalyOnAStaleSeriesIsNull(t *testing.T) {
+	held := []storage.Anomaly{{Subject: storage.Subject{Node: "server-b", Metric: "disk.free_bytes", Labels: volume("/")}, Began: now.Add(-time.Hour)}}
+	stale := storage.Value{Metric: "disk.free_bytes", Sensor: "disk", Labels: volume("/"), Value: 5e9, TS: now.Add(-staleAfter - time.Millisecond)}
+	snap := storage.Snapshot{Nodes: []storage.NodeState{heard("server-b", 0, stale)}, Unusual: held}
+	if got := withNorms(t, snap, usually).Subjects[1].Anomaly; got != nil {
+		t.Errorf("anomaly = %+v, want none", got)
+	}
+}

@@ -20,7 +20,7 @@ var (
 // yesterday, so the most recent 09:00 is later than where the window began.
 func digesting(store evaluate.Store, channel evaluate.Notifier, at time.Time, targets ...evaluate.Target) *evaluate.Evaluator {
 	return evaluate.New(evaluate.Options{
-		Store: store, Notifier: channel, Targets: targets,
+		Store: store, Notifier: channel, Targets: targets, Norms: normsOf(store),
 		Digest:  schedule,
 		Started: yesterday.Add(-time.Hour),
 		Now:     func() time.Time { return at },
@@ -91,7 +91,7 @@ func TestADatabaseThatHasNeverDigestedReplaysNothing(t *testing.T) {
 
 	channel := &recorder{}
 	fresh := evaluate.New(evaluate.Options{
-		Store: db, Notifier: channel, Targets: []evaluate.Target{watching(t)},
+		Store: db, Notifier: channel, Targets: []evaluate.Target{watching(t)}, Norms: normsOf(db),
 		Digest:  schedule,
 		Started: occurrence.Add(time.Hour),
 		Now:     func() time.Time { return occurrence.Add(2 * time.Hour) },
@@ -457,7 +457,7 @@ func TestTheFirstStartSurvivesARestart(t *testing.T) {
 	recorded := started.Add(time.Hour)
 	collect(t, db, recorded, volume("/data"), gb(9))
 	pass(t, evaluate.New(evaluate.Options{
-		Store: db, Notifier: &recorder{}, Targets: []evaluate.Target{watching(t)},
+		Store: db, Notifier: &recorder{}, Targets: []evaluate.Target{watching(t)}, Norms: normsOf(db),
 		Digest: schedule, Started: started, Now: func() time.Time { return recorded },
 	}))
 
@@ -467,7 +467,7 @@ func TestTheFirstStartSurvivesARestart(t *testing.T) {
 	collect(t, db, at, volume("/data"), gb(40))
 	channel := &recorder{}
 	pass(t, evaluate.New(evaluate.Options{
-		Store: db, Notifier: channel, Targets: []evaluate.Target{watching(t)},
+		Store: db, Notifier: channel, Targets: []evaluate.Target{watching(t)}, Norms: normsOf(db),
 		Digest: schedule, Started: at, Now: func() time.Time { return at },
 	}))
 
@@ -492,7 +492,7 @@ func TestAnInterruptedFirstPassStillOpensTheWindow(t *testing.T) {
 	defer cancel()
 	stopping := &cancelling{Store: db, cancel: cancel}
 	interrupted := evaluate.New(evaluate.Options{
-		Store: stopping, Notifier: &recorder{}, Targets: []evaluate.Target{watching(t)},
+		Store: stopping, Notifier: &recorder{}, Targets: []evaluate.Target{watching(t)}, Norms: normsOf(stopping),
 		Digest: schedule, Started: started, Now: func() time.Time { return recorded },
 	})
 	if err := interrupted.Tick(ctx); err == nil {
@@ -504,7 +504,7 @@ func TestAnInterruptedFirstPassStillOpensTheWindow(t *testing.T) {
 	collect(t, db, at, volume("/"), gb(40))
 	channel := &recorder{}
 	pass(t, evaluate.New(evaluate.Options{
-		Store: db, Notifier: channel, Targets: []evaluate.Target{watching(t)},
+		Store: db, Notifier: channel, Targets: []evaluate.Target{watching(t)}, Norms: normsOf(db),
 		Digest: schedule, Started: at, Now: func() time.Time { return at },
 	}))
 

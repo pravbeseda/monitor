@@ -99,7 +99,7 @@ func TestAValueIsScoredInWidthsOfTheSideItIsOn(t *testing.T) {
 			if !ok {
 				t.Fatal("no norm")
 			}
-			got := norm.Judge(tc.newest)
+			got := norm.Judge(tc.newest, false)
 			switch {
 			case tc.score == nil && got.Score != nil:
 				t.Fatalf("score = %v, want none", *got.Score)
@@ -119,7 +119,7 @@ func TestAValueIsScoredInWidthsOfTheSideItIsOn(t *testing.T) {
 // rank, the lower of the two middles for an even count.
 func TestTheNormIsAValueTheSeriesReported(t *testing.T) {
 	norm, _ := anomaly.NormOf(week(upTo(100)...))
-	if got := norm.Judge(50).Norm; got != 50 {
+	if got := norm.Judge(50, false).Norm; got != 50 {
 		t.Fatalf("norm = %v, want 50", got)
 	}
 }
@@ -127,7 +127,7 @@ func TestTheNormIsAValueTheSeriesReported(t *testing.T) {
 // spec: anomaly.md#model — −0 is reported as 0.
 func TestANegligibleScoreIsNotNegativeZero(t *testing.T) {
 	norm, _ := anomaly.NormOf(week(upTo(100)...))
-	got := norm.Judge(49.9995).Score
+	got := norm.Judge(49.9995, false).Score
 	if got == nil || *got != 0 || 1 / *got < 0 {
 		t.Fatalf("score = %v, want +0", got)
 	}
@@ -236,6 +236,68 @@ func TestTheMostUnusualRanksFirst(t *testing.T) {
 				if got != tc.ranks[i] {
 					t.Fatalf("rank of %d = %d, want %d", i, got, tc.ranks[i])
 				}
+			}
+		})
+	}
+}
+
+// spec: anomaly.md#rank — a series the record holds unusual stays so until its score comes
+// back to 1.6; one that is not starts only at 2.
+func TestAnUnusualSeriesStaysSoUntilItComesBackTo1Point6(t *testing.T) {
+	norm, _ := anomaly.NormOf(week(upTo(100)...))
+	zeros, _ := anomaly.NormOf(week(repeat(0, 100)...))
+	for _, tc := range []struct {
+		name    string
+		norm    anomaly.Norm
+		held    bool
+		newest  float64
+		unusual bool
+	}{
+		{"held, not back yet", norm, true, 140, true},
+		{"not held, short of 2", norm, false, 140, false},
+		{"held, a hair above 1.6", norm, true, 129, true},
+		{"held, back to 1.6 exactly", norm, true, 128.4, false},
+		{"held, back to −1.6 exactly", norm, true, -28.4, false},
+		{"held, back well inside", norm, true, 125, false},
+		{"held, the other side past 2", norm, true, -48, true},
+		{"held, off a side of no width", zeros, true, 1, true},
+		{"held, back at the norm of zeros", zeros, true, 0, false},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			got := tc.norm.Judge(tc.newest, tc.held)
+			if got.Unusual() != tc.unusual {
+				t.Fatalf("unusual = %v, want %v (score %v)", got.Unusual(), tc.unusual, got.Score)
+			}
+		})
+	}
+}
+
+// spec: anomaly.md#rank — a held series scoring 1.84 ranks after one scoring 2.5.
+func TestAHeldAnomalyRanksByItsScore(t *testing.T) {
+	held := &anomaly.Anomaly{Score: num(1.84), Held: true}
+	fresh := &anomaly.Anomaly{Score: num(2.5)}
+	anomaly.Rank([]*anomaly.Anomaly{held, fresh})
+	if held.Rank != 2 || fresh.Rank != 1 {
+		t.Fatalf("ranks = %d, %d; want 2, 1", held.Rank, fresh.Rank)
+	}
+}
+
+// spec: anomaly.md#record — the band a start is recorded with is the 1st and 99th
+// percentiles, values the series reported.
+func TestTheBandIsWhatTheSeriesReported(t *testing.T) {
+	for _, tc := range []struct {
+		name      string
+		values    []float64
+		low, high float64
+	}{
+		{"one to a hundred", upTo(100), 1, 99},
+		{"zeros all week", repeat(0, 100), 0, 0},
+		{"an idle machine with a nightly job", joined(repeat(0.1, 95), repeat(2.0, 5)), 0.1, 2.0},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			norm, _ := anomaly.NormOf(week(tc.values...))
+			if low, high := norm.Band(); low != tc.low || high != tc.high {
+				t.Fatalf("band = %v to %v, want %v to %v", low, high, tc.low, tc.high)
 			}
 		})
 	}

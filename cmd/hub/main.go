@@ -19,6 +19,7 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/pravbeseda/monitor/internal/anomaly"
 	"github.com/pravbeseda/monitor/internal/collect"
 	"github.com/pravbeseda/monitor/internal/config"
 	"github.com/pravbeseda/monitor/internal/evaluate"
@@ -110,9 +111,12 @@ func run(args []string, out io.Writer) error {
 	// together: a change already recorded stays recorded, an in-flight send is abandoned.
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 
+	// One cache of norms for the tick and the pages, so a norm is read once an hour.
+	norms := anomaly.NewNorms(store)
 	evaluator := evaluate.New(evaluate.Options{
 		Store:    store,
 		Notifier: channel,
+		Norms:    norms,
 		Targets:  cfg.Targets(),
 		Digest:   cfg.Digest(),
 		Started:  started,
@@ -133,7 +137,7 @@ func run(args []string, out io.Writer) error {
 	}
 
 	server := &http.Server{
-		Handler:           hub.Routes(cfg, store, time.Now),
+		Handler:           hub.Routes(cfg, store, norms, time.Now),
 		ReadHeaderTimeout: readHeaderTimeout,
 	}
 	evaluating := make(chan struct{})

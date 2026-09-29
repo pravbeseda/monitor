@@ -10,6 +10,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/pravbeseda/monitor/internal/anomaly"
 	"github.com/pravbeseda/monitor/internal/config"
 	"github.com/pravbeseda/monitor/internal/hub"
 	"github.com/pravbeseda/monitor/internal/storage"
@@ -35,7 +36,7 @@ func routesWith(t *testing.T, store hub.Store, now func() time.Time) http.Handle
 	if err != nil {
 		t.Fatalf("load config: %v", err)
 	}
-	return hub.Routes(cfg, store, now)
+	return hub.Routes(cfg, store, anomaly.NewNorms(store), now)
 }
 
 func TestIngestIsMountedOnItsVersionedPath(t *testing.T) {
