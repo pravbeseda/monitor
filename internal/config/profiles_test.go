@@ -28,7 +28,7 @@ func intervals(t *testing.T, body string) map[string]time.Duration {
 	return out
 }
 
-// spec: hub-config.md#resolution — the compiled-in profiles and the host sensors' intervals.
+// spec: hub-config.md#resolution — the compiled-in profiles and their sensors' intervals.
 func TestResolveCompiledInProfiles(t *testing.T) {
 	tests := []struct {
 		class string
@@ -40,7 +40,7 @@ func TestResolveCompiledInProfiles(t *testing.T) {
 		}},
 		{"laptop", map[string]time.Duration{
 			"disk": time.Hour, "load": 5 * time.Minute, "memory": 5 * time.Minute,
-			"uptime": 15 * time.Minute,
+			"uptime": 15 * time.Minute, "timemachine": time.Hour,
 		}},
 	}
 	for _, tt := range tests {
@@ -65,6 +65,7 @@ func TestResolveRaisesACompiledInIntervalToTheTick(t *testing.T) {
 	body := withClass("laptop", "classes:\n  laptop:\n    base_tick: 1h\n")
 	want := map[string]time.Duration{
 		"disk": time.Hour, "load": time.Hour, "memory": time.Hour, "uptime": time.Hour,
+		"timemachine": time.Hour,
 	}
 	if got := intervals(t, body); !maps.Equal(got, want) {
 		t.Fatalf("sensors = %v, want %v", got, want)

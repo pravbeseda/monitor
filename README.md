@@ -12,8 +12,8 @@ off, history behind every value, and silence until something needs you.
 
 ## What it does
 
-- **Agents** on Linux and macOS nodes report free disk space, load, memory, uptime and
-  failed systemd units to the hub.
+- **Agents** on Linux and macOS nodes report free disk space, load, memory, uptime,
+  failed systemd units and the age of the latest Time Machine backup to the hub.
 - **The hub** collects online services itself — free space on Google Drive is the first.
 - **Thresholds** are set per series on the hub's `/thresholds` page; no series alerts until
   its threshold is set.
