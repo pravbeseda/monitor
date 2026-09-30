@@ -1,6 +1,7 @@
 # Publishing rules from docs/specs/release.md. Only a tag releases — pushed, or named when the
 # run is started by hand or by auto-tag.yml — and a run either publishes nine files or
-# publishes nothing.
+# publishes nothing. Every action is pinned by commit: the publish job signs what the build
+# jobs produce, so the chain is only as pinned as its least pinned link.
 name: Release
 
 on:
@@ -22,7 +23,7 @@ jobs:
     outputs:
       version: ${{ steps.tag.outputs.version }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
         with:
           fetch-depth: 0
 
@@ -66,8 +67,8 @@ jobs:
     needs: guard
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-go@v5
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+      - uses: actions/setup-go@40f1582b2485089dde7abd97c1529aa768e1baff # v5.6.0
         with:
           go-version-file: go.mod
 
@@ -89,7 +90,7 @@ jobs:
             done
           done
 
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
           name: linux
           path: dist/
@@ -102,8 +103,8 @@ jobs:
     # it; the amd64 slice cross-compiles from the arm64 runner with the same toolchain.
     runs-on: macos-latest
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-go@v5
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+      - uses: actions/setup-go@40f1582b2485089dde7abd97c1529aa768e1baff # v5.6.0
         with:
           go-version-file: go.mod
 
@@ -121,7 +122,7 @@ jobs:
               -o "dist/monitor-agent-$VERSION-darwin-$arch" ./cmd/agent
           done
 
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
           name: darwin
           path: dist/
@@ -141,8 +142,7 @@ jobs:
       VERSION: ${{ needs.guard.outputs.version }}
       GH_TOKEN: ${{ github.token }}
     steps:
-      # Pinned by commit, because these two run beside the signing key.
-      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.2.2
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
 
       - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
         with:
