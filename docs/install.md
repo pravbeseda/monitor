@@ -404,11 +404,12 @@ entered again nothing alerts. Do it in this order:
    its own ([ADR 0034](decisions/0034-a-series-without-a-sensor-still-ages.md)): marked, or
    hidden when removable, later than it should be rather than never.
 
-### Host sensors and a file that names its own profile
+### New sensors and a file that names its own profile
 
 The release that brings the [host sensors](specs/host-sensors.md) — `load`, `memory`,
 `uptime` and `systemd` — adds them to the compiled-in profiles of `laptop` and `server`, and
-a node that takes its profile from code starts collecting them once its agent has updated.
+the one that brings [`timemachine`](specs/timemachine-sensor.md) adds it to `laptop`; a node
+that takes its profile from code starts collecting them once its agent has updated.
 **A class whose `profile` is written in `hub.yaml` keeps exactly that list**: a profile in the
 file replaces the compiled-in one ([hub-config.md](specs/hub-config.md#resolution)). A file
 copied from an older example says `profile: [disk]` and never runs the new sensors; delete

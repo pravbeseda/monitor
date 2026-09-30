@@ -24,17 +24,18 @@ const (
 )
 
 var defaultSensors = map[string]fileSensor{
-	"disk":    {Interval: "15m"},
-	"load":    {Interval: "5m"},
-	"memory":  {Interval: "5m"},
-	"uptime":  {Interval: "15m"},
-	"systemd": {Interval: "15m"},
-	"gdrive":  {Interval: "1h"},
+	"disk":        {Interval: "15m"},
+	"load":        {Interval: "5m"},
+	"memory":      {Interval: "5m"},
+	"uptime":      {Interval: "15m"},
+	"systemd":     {Interval: "15m"},
+	"timemachine": {Interval: "1h"},
+	"gdrive":      {Interval: "1h"},
 }
 
 var defaultClasses = map[string]fileClass{
 	"laptop": {
-		Profile:      []string{"disk", "load", "memory", "uptime"},
+		Profile:      []string{"disk", "load", "memory", "uptime", "timemachine"},
 		SilenceAfter: "48h",
 		Sensors:      map[string]fileSensor{"disk": {Interval: "1h"}},
 	},

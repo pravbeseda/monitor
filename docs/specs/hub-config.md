@@ -44,7 +44,7 @@ classes:
   laptop:
     # A written profile replaces the compiled-in one, so the class misses the sensors
     # later releases add to it; leave it out to follow them.
-    profile: [disk, load, memory, uptime]
+    profile: [disk, load, memory, uptime, timemachine]
     silence_after: 48h
     agent_target: 1.4.0
     sensors:
@@ -67,8 +67,8 @@ nodes:
 **Product defaults** (compiled in, overridable at every layer): `base_tick` 5m, the
 filesystem allow-list and the skip list above, `disk` every 15m, the
 [host sensors](host-sensors.md) `load` and `memory` every 5m and `uptime` and `systemd` every
-15m, `gdrive` every 1h, and classes
-`laptop` (profile `[disk, load, memory, uptime]`, disk every 1h), `server` (profile
+15m, [`timemachine`](timemachine-sensor.md) and `gdrive` every 1h, and classes
+`laptop` (profile `[disk, load, memory, uptime, timemachine]`, disk every 1h), `server` (profile
 `[disk, load, memory, uptime, systemd]`) and `service` (no profile, `silence_after` 3h), whose
 nodes the hub collects itself ([services.md](services.md)). A compiled-in interval never stops the hub
 starting: where it is shorter than the tick a node resolves to, the sensor collects every
@@ -159,7 +159,7 @@ The node is listed in `nodes`; the layers apply most-specific-last.
 | `skip_mounts` set to an empty list | nothing is skipped: an empty list is a value, not an omission |
 | a sensor no layer mentions | absent from the delivered configuration |
 | a node of the compiled-in `server` class, the file setting no `profile` for it | `load` and `memory` every 5m; `disk`, `uptime` and `systemd` every 15m |
-| a node of the compiled-in `laptop` class, the file setting no `profile` for it | `load` and `memory` every 5m, `uptime` every 15m, `disk` every 1h |
+| a node of the compiled-in `laptop` class, the file setting no `profile` for it | `load` and `memory` every 5m, `uptime` every 15m, `disk` and `timemachine` every 1h |
 | the file sets `profile: [disk]` for a compiled-in class | only `disk`: a profile in the file replaces the compiled-in one, it does not add to it |
 | the file sets `base_tick: 1h` for `laptop`, and no interval for the host sensors | the hub starts, and `load`, `memory` and `uptime` collect every 1h: a compiled-in interval below the tick is raised to it |
 | top-level `agent_target` | the node's target |

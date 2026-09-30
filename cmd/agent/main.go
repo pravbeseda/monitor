@@ -21,6 +21,7 @@ import (
 	"github.com/pravbeseda/monitor/internal/sensor/load"
 	"github.com/pravbeseda/monitor/internal/sensor/memory"
 	"github.com/pravbeseda/monitor/internal/sensor/systemd"
+	"github.com/pravbeseda/monitor/internal/sensor/timemachine"
 	"github.com/pravbeseda/monitor/internal/sensor/uptime"
 	"github.com/pravbeseda/monitor/internal/version"
 )
@@ -92,6 +93,7 @@ func run(ctx context.Context, args []string, out io.Writer) error {
 			memory.New(memory.System(), time.Now),
 			uptime.New(uptime.System(), time.Now),
 			systemd.New(systemd.System(), time.Now),
+			timemachine.New(timemachine.System(), time.Now),
 		},
 		Client: agent.NewHTTPClient(opts.hub, opts.token, requestTimeout),
 		Now:    time.Now,

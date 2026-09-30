@@ -81,6 +81,7 @@ can see ([ADR 0017](decisions/0017-one-spec-and-decision-gates.md)). New specs s
 | [disk-sensor.md](specs/disk-sensor.md) | The disk sensor: enumeration, filtering and the label contract of its metrics | approved |
 | [services.md](specs/services.md) | Service nodes the hub collects itself, when one falls silent, and the Google Drive sensor | approved |
 | [host-sensors.md](specs/host-sensors.md) | The load, memory, uptime and failed-units sensors: what each reads on Linux and macOS, and the metrics it reports | approved |
+| [timemachine-sensor.md](specs/timemachine-sensor.md) | The Time Machine sensor: where a Mac's backup dates are read from, and the age it reports per destination | approved |
 | [agent.md](specs/agent.md) | The agent: local configuration, tick loop, delivery and configuration application | approved |
 | [evaluation.md](specs/evaluation.md) | Levels, hysteresis, the event log, silence, digests and the notifier boundary | approved |
 | [history.md](specs/history.md) | The history series, `/api/v1/series`, `/api/v1/history` and the drill-down page | approved |
@@ -119,6 +120,7 @@ Reasoning from working sessions, including options that were rejected.
 | [2026-09-28](log/2026-09-28-mission-control-folds.md) | Mission control folds into the timeline: why the board was one phrase, and what was kept |
 | [2026-09-28](log/2026-09-28-silence-after-a-restart.md) | Silence after the hub restarts: why a grace window after every start was dropped for leaving out the hub's own outages |
 | [2026-09-29](log/2026-09-29-anomaly-log.md) | Anomalies in the log: where an anomaly ends, why a table of its own, and why a stale series holds one |
+| [2026-09-30](log/2026-09-30-time-machine.md) | Time Machine: why it needs no parameter, why not `tmutil`, one series per destination, and what fails per destination |
 
 ## Not written yet
 
