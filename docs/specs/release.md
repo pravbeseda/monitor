@@ -282,7 +282,9 @@ what `/usr/bin/openssl` is on macOS, prints `Verified OK` on runs that fail.
 - The private key never leaves the release environment's secrets: no artifact carries it, no
   job that does not sign ever sees it, it is written outside the workspace and removed
   whatever the run's outcome, and the only actions running beside it are `actions/checkout`
-  and `actions/download-artifact`, pinned by commit.
+  and `actions/download-artifact`.
+- Every action the release workflow runs is pinned by commit, not by tag: the build jobs'
+  output is what the publish job signs.
 - The version a published binary reports equals the tag without its `v`, and no source edit
   is part of releasing.
 - An existing *published* release is never rewritten by a run: a fix is a new tag. A
