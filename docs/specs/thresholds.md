@@ -56,8 +56,12 @@ threshold belongs to one series and not to a family of them.
 ([history.md](history.md#wire-format)): a `_bytes` metric takes a size, a `_pct` metric a
 percentage number, a `_seconds` metric a duration in seconds, anything else a plain number.
 The form says which it is asking for. A size may be written with a decimal unit — `10GB` is
-10 000 000 000, as sizes are written everywhere in this project — and everything else is a
-plain number; what is stored is always the number in the series' own unit.
+10 000 000 000, as sizes are written everywhere in this project — and a duration with one of
+`s`, `m` (minutes), `h` or `d` — `36h` is 129 600; everything else is a plain number. A size
+unit or a duration unit is read regardless of case and of a space before it, and is written
+in the Latin letters listed here in both languages — not as pages render a duration, `90 min`
+or `36 ч`. A value takes one unit, never a sum of them, and what is stored is
+always the number in the series' own unit.
 
 **A save is refused unless the browser says it came from this page.** The hub has no
 session and no login of its own ([0023](../decisions/0023-proxy-holds-the-web-perimeter.md)),
@@ -76,6 +80,7 @@ One row = one test. Anchors: `spec: thresholds.md#<heading>`.
 |---|---|
 | a series with nothing configured | an empty form: direction `below`, both values blank, and a line saying the series has no level until a value is set |
 | a series with a configuration | its direction and values as stored, in the unit the metric implies |
+| a `_seconds` series | the field asks for seconds and names the units it also takes, saying that `m` is minutes, with an example: `36h` |
 | any series | a switch saying the series may be shown as unusual, on unless the series is excluded |
 | a series whose stored threshold this build cannot read | the switch as stored: an exclusion is read on its own |
 | any series the hub has values for | the same form, whatever the metric: nothing about it is particular to disks |
@@ -99,7 +104,14 @@ One row = one test. Anchors: `spec: thresholds.md#<heading>`.
 | a `_bytes` value written `10GB` | accepted and stored as 10 000 000 000; the form shows it back as a size |
 | a `_bytes` value written as a bare number | accepted as that many bytes, which is what the field says it is asking for |
 | a `_bytes` value no round size names — 20 123 456 789 | shown back as that number, not rounded to a size: redrawing the form must not rewrite the threshold |
-| a `_pct` value written `12%`, or any value with a unit the metric does not take | refused, naming the field; nothing is stored |
+| a `_seconds` value written `36h`, `36H` or `36 h` | accepted and stored as 129 600; the form shows it back as `36h` |
+| a `_seconds` value written as a bare number | accepted as that many seconds, which is what the field says it is asking for |
+| a `_seconds` value written `1.5h` | accepted and stored as 5 400; the form shows it back as `90m` |
+| a `_seconds` value a whole number of days, hours or minutes | shown back in the largest of them that names it whole: 86 400 as `1d`, −3 600 as `-1h` |
+| a `_seconds` value no whole minute names — 129 601, or 30 — or zero | shown back as the bare number: `129601`, `30`, `0` |
+| a duration written as a sum — `1d12h` — in a unit the form does not list — `2w`, `90min` — or in Cyrillic — `36ч` | refused, naming the field; nothing is stored |
+| a value that is finite only before its unit is applied — `1e300GB`, `1e305d` | refused as not a finite number; nothing is stored |
+| a `_pct` value written `12%`, a `_bytes` value written `36h`, a `_seconds` value written `10GB`, or any value with a unit the metric does not take | refused, naming the field; nothing is stored |
 | `critical` not strictly beyond `warning` in the chosen direction | refused, naming both fields; nothing is stored |
 | a direction that is neither `below` nor `above` | refused; nothing is stored |
 | a save for a series the hub has never stored | `404`; nothing is stored |

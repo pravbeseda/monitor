@@ -739,3 +739,133 @@ func TestThresholdFormFailsWhenTheExclusionCannotBeRead(t *testing.T) {
 		t.Fatalf("status = %d, want 500: %s", status, body)
 	}
 }
+
+// ageSeries is a duration: what the page takes for it is not particular to sizes either.
+var ageSeries = storage.SeriesRef{
+	Node:   "laptop-a",
+	Metric: "timemachine.backup_age_seconds",
+	Labels: map[string]string{"destination": "Backups"},
+}
+
+const ageAddress = "/thresholds?label.destination=Backups&metric=timemachine.backup_age_seconds&node=laptop-a"
+
+// spec: thresholds.md#form — a `_seconds` field names the units it takes, minutes spelled
+// out so that `m` is not read as months.
+func TestThresholdFormNamesTheDurationUnits(t *testing.T) {
+	for lang, words := range map[string][]string{"en": {"seconds", "minutes"}, "ru": {"секунды", "минуты"}} {
+		_, body := openForm(t, holding(ageSeries), ageAddress+"&lang="+lang)
+
+		for _, want := range append(words, "36h") {
+			if !strings.Contains(body, want) {
+				t.Errorf("%s page = %q, want the units it takes and an example, %q among them", lang, body, want)
+			}
+		}
+	}
+}
+
+// spec: thresholds.md#saving — a `_seconds` value may be written with a unit, in either
+// case and with a space before it, and is stored in seconds.
+func TestThresholdSaveTakesADurationOnASecondsSeries(t *testing.T) {
+	tests := []struct {
+		written string
+		stored  float64
+		shown   string
+	}{
+		{"36h", 129600, "36h"},
+		{"36H", 129600, "36h"},
+		{"36 h", 129600, "36h"},
+		{"1.5h", 5400, "90m"},
+		{"7200", 7200, "2h"},
+		{"45s", 45, "45"},
+		{"2d", 172800, "2d"},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.written, func(t *testing.T) {
+			store := holding(ageSeries)
+
+			rec := saveForm(t, store, ageAddress, url.Values{
+				"direction": {"above"}, "warning": {tc.written}, "anomalies": {"show"},
+			}, "")
+
+			if rec.Code != http.StatusSeeOther {
+				t.Fatalf("status = %d, want 303: %s", rec.Code, rec.Body)
+			}
+			if held := store.held[key(ageSeries)]; held.Warning == nil || *held.Warning != tc.stored {
+				t.Fatalf("stored %+v, want %v seconds", held, tc.stored)
+			}
+			_, body := openForm(t, store, ageAddress)
+			if got := valueOf(t, body, "warning"); got != tc.shown {
+				t.Errorf("warning = %q, want %q", got, tc.shown)
+			}
+		})
+	}
+}
+
+// spec: thresholds.md#saving — a duration is shown back in the largest unit that names it
+// whole, and as the bare number when no minute does.
+func TestThresholdFormShowsADurationItWouldAccept(t *testing.T) {
+	tests := []struct {
+		stored float64
+		shown  string
+	}{
+		{86400, "1d"},
+		{-3600, "-1h"},
+		{129601, "129601"},
+		{30, "30"},
+		{0, "0"},
+		{2.238601951404291e18, "2238601951404291000"},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.shown, func(t *testing.T) {
+			store := holding(ageSeries)
+			warning := tc.stored
+			store.held[key(ageSeries)] = storage.Threshold{Series: ageSeries, Direction: storage.Above, Warning: &warning}
+
+			_, body := openForm(t, store, ageAddress)
+
+			if got := valueOf(t, body, "warning"); got != tc.shown {
+				t.Errorf("warning = %q, want %q", got, tc.shown)
+			}
+		})
+	}
+}
+
+// spec: thresholds.md#saving — a duration takes one Latin unit the form lists, and a unit
+// the metric does not take is refused.
+func TestThresholdSaveRefusesADurationItCannotRead(t *testing.T) {
+	tests := []struct {
+		series  storage.SeriesRef
+		address string
+		written string
+	}{
+		{ageSeries, ageAddress, "1d12h"},
+		{ageSeries, ageAddress, "2w"},
+		{ageSeries, ageAddress, "90min"},
+		{ageSeries, ageAddress, "36ч"},
+		{ageSeries, ageAddress, "10GB"},
+		{ageSeries, ageAddress, "1e305d"},
+		{dataSeries, dataAddress, "36h"},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.series.Metric+" "+tc.written, func(t *testing.T) {
+			store := holding(tc.series)
+
+			rec := saveForm(t, store, tc.address, url.Values{
+				"direction": {"above"}, "warning": {tc.written}, "anomalies": {"show"},
+			}, "")
+
+			if rec.Code != http.StatusBadRequest {
+				t.Fatalf("status = %d, want 400: %s", rec.Code, rec.Body)
+			}
+			if !strings.Contains(rec.Body.String(), "The warning value is not a number.") {
+				t.Errorf("page = %q, want it to name the field", rec.Body)
+			}
+			if len(store.held) != 0 {
+				t.Errorf("store = %+v, want nothing stored", store.held)
+			}
+		})
+	}
+}

@@ -286,16 +286,13 @@ func sameOrigin(r *http.Request) bool {
 }
 
 // parseValue reads one field of the form. An empty field is a level with no value; a size
-// may be written with a decimal unit, and everything else is a plain number.
+// or a duration may be written with a unit, and everything else is a plain number.
 func parseValue(metric, written string) (*float64, error) {
 	text := strings.TrimSpace(written)
 	if text == "" {
 		return nil, nil
 	}
-	scale := 1.0
-	if history.UnitOf(metric) == history.Bytes {
-		text, scale = splitUnit(text)
-	}
+	text, scale := splitUnit(text, writtenUnits[history.UnitOf(metric)])
 	value, err := number(text)
 	if err != nil {
 		return nil, err
@@ -324,47 +321,56 @@ func number(text string) (float64, error) {
 	return value, nil
 }
 
-// sizeUnits are decimal, the way disks are sold and the way every size in this project is
-// written (docs/specs/thresholds.md#model). "b" comes last so that "10gb" matches "gb".
-var sizeUnits = []struct {
+type writtenUnit struct {
 	suffix string
 	scale  float64
-}{{"kb", 1e3}, {"mb", 1e6}, {"gb", 1e9}, {"tb", 1e12}, {"pb", 1e15}, {"b", 1}}
+}
 
-// splitUnit takes the unit off a size and returns what it scales by. A size written with
-// no unit is a count of bytes.
-func splitUnit(text string) (string, float64) {
+// writtenUnits are the units a value of a metric may be typed in
+// (docs/specs/thresholds.md#model). Each list runs from the smallest unit to the largest,
+// so that typed can walk it backwards, with the unit a bare number already counts in last,
+// so that "10gb" is not read as "10g" and a "b". Sizes are decimal, the way disks are sold
+// and the way every size in this project is written.
+var writtenUnits = map[history.Unit][]writtenUnit{
+	history.Bytes:    {{"KB", 1e3}, {"MB", 1e6}, {"GB", 1e9}, {"TB", 1e12}, {"PB", 1e15}, {"B", 1}},
+	history.Duration: {{"m", 60}, {"h", 60 * 60}, {"d", 24 * 60 * 60}, {"s", 1}},
+}
+
+// splitUnit cuts the first of units that ends the value off it, whatever its case, and
+// returns what it scales by. A value written with no unit is already in the metric's own.
+func splitUnit(text string, units []writtenUnit) (string, float64) {
 	lowered := strings.ToLower(text)
-	for _, unit := range sizeUnits {
-		if written, found := strings.CutSuffix(lowered, unit.suffix); found {
+	for _, unit := range units {
+		if written, found := strings.CutSuffix(lowered, strings.ToLower(unit.suffix)); found {
 			return written, unit.scale
 		}
 	}
-	return lowered, 1
+	return text, 1
 }
 
 // typed renders a stored value back into the field it was typed in, exactly and in a
-// spelling this same form accepts: a size takes the largest unit that divides it without
-// a remainder, and anything else is the plain number. Rendering it the way a page renders
-// a reading would round it, and a reader who saved the form as drawn would store the
-// rounding (docs/specs/thresholds.md#saving).
+// spelling this same form accepts: a size or a duration takes the largest unit that
+// divides it without a remainder, and anything else is the plain number. Rendering it the
+// way a page renders a reading would round it, and a reader who saved the form as drawn
+// would store the rounding (docs/specs/thresholds.md#saving).
 func typed(metric string, value *float64) string {
 	if value == nil {
 		return ""
 	}
 	plain := strconv.FormatFloat(*value, 'f', -1, 64)
-	if history.UnitOf(metric) != history.Bytes || *value == 0 {
-		return plain
-	}
-	// Largest unit first, so a size reads the way it was written rather than in the
+	// Largest unit first, so a value reads the way it was written rather than in the
 	// smallest unit that happens to divide it.
-	for i := len(sizeUnits) - 1; i >= 0; i-- {
-		unit := sizeUnits[i]
+	units := writtenUnits[history.UnitOf(metric)]
+	for i := len(units) - 1; i >= 0; i-- {
+		unit := units[i]
 		if unit.scale == 1 {
 			continue
 		}
-		if whole := *value / unit.scale; whole == math.Trunc(whole) && math.Abs(whole) >= 1 {
-			return strconv.FormatFloat(whole, 'f', -1, 64) + strings.ToUpper(unit.suffix)
+		// Multiplying back is what a save does, so it must give the stored value again: past
+		// 2^53 a quotient can round to a whole number the stored one is not a multiple of.
+		whole := *value / unit.scale
+		if whole == math.Trunc(whole) && math.Abs(whole) >= 1 && whole*unit.scale == *value {
+			return strconv.FormatFloat(whole, 'f', -1, 64) + unit.suffix
 		}
 	}
 	return plain
