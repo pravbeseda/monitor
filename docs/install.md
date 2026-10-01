@@ -243,6 +243,11 @@ printf %s "$token" | sudo ./deploy/install-agent.sh \
 unset token
 ```
 
+**`--hub` names the hub, not the host it runs on.** Every agent keeps that one address, so it
+decides what moving the hub costs: a name of the hub's own, like `hub.example.com`, follows
+it with one DNS record, while the host's own name means re-installing every node
+([Restore on another host](#restore-on-another-host)).
+
 Copy the binary and `deploy/` together: the service definitions pass `--env-file`, which an
 agent built before them does not know, and the install would report success on a service that
 exits every time it starts.
@@ -592,6 +597,75 @@ sudo systemctl daemon-reload
 That leaves the configuration and the measurements — `/etc/monitor/hub.yaml`,
 `/etc/monitor/hub.env` and `/var/lib/monitor` — standing. Removing them is a separate,
 deliberate step: the database is the whole history.
+
+## Restore on another host
+
+A lost hub host is rebuilt from three things: `hub.yaml` and `hub.env`, which describe the
+installation, and a snapshot of the database, which holds the history and the thresholds.
+How that snapshot is taken and kept off the host is
+[hub-backup-requirements.md](hub-backup-requirements.md). The hub stays stopped until its
+database is the snapshot: one that starts on an empty database takes the agents' buffered
+measurements into a file about to be replaced. Address the new host by its own name until
+step 4 moves the hub's.
+
+1. Install the hub as in [section 0](#0-the-short-way-one-command) — its first run only,
+   since step 3 brings the configuration — or [section 2](#2-set-up-the-hub-host), up to
+   its `daemon-reload` and without its `enable --now`, at the version the old host's `hub.target` named —
+   `hub --version X.Y.Z` in section 0's command — or the newest when it named `latest` or
+   there was none. A hub opens a database any older hub wrote and refuses one a newer hub
+   wrote, naming both schema versions, so a target older than what is installed would leave
+   the hub refusing to start. Then make sure the hub is not running, whatever the path:
+
+   ```sh
+   sudo systemctl disable --now monitor-hub.service
+   ```
+
+2. Put the snapshot in place, removing the `-wal` and `-shm` files of whatever database was
+   there before, which would otherwise be read as part of this one:
+
+   ```sh
+   sudo rm -f /var/lib/monitor/monitor.db-wal /var/lib/monitor/monitor.db-shm
+   sudo install -o monitor -g monitor -m 0600 monitor.db /var/lib/monitor/monitor.db
+   ```
+
+3. Put `hub.yaml` and `hub.env` back with the owners and modes of section 2. When the old
+   host kept the hub upgraded unattended, place the kept script, the two units and
+   `hub.target` as [that section](#keeping-the-hub-upgraded-unattended) does, with the old
+   target's value instead of `latest`, and stop before its `enable --now`.
+4. Give the new host the proxy and a certificate for the hub's name
+   ([The proxy in front of the hub](#the-proxy-in-front-of-the-hub)), and point that name's
+   DNS record at it. Until the hub starts, agents are answered with an error and keep their
+   measurements for the next tick.
+5. Start the hub, and its update timer when step 3 placed one:
+
+   ```sh
+   sudo systemctl enable --now monitor-hub.service
+   sudo systemctl enable --now monitor-hub-update.timer
+   ```
+
+   When the hub host is also a node, install its agent again as in
+   [section 3](#3-install-a-node), with `--hub` the hub's own loopback address
+   ([hub-host-node-requirements.md](hub-host-node-requirements.md), requirement 4).
+
+The other nodes need nothing when their `--hub` named the hub rather than the host
+([section 3](#3-install-a-node)): their tokens are the same, and each agent delivers what it
+collected while the hub was away — up to the 10 000 measurements its buffer holds, oldest
+dropped first, and nothing when it restarted in the meantime
+([specs/agent.md](specs/agent.md#delivering)). What is lost is what the old hub stored after
+its last snapshot. The restored hub counts the time since that snapshot as its own outage,
+so no node is announced silent for it; a node is, when it does not reach the new hub within
+its `silence_after` of the start ([specs/evaluation.md](specs/evaluation.md#node-silence)) —
+the reason the name moves before the hub starts.
+
+Check the result. On `/debug` every node turns fresh within a base tick once the DNS change
+reaches it, and the page does not say that nothing here is being judged yet — said after a
+restore, it means a database without its thresholds.
+
+**Without `hub.env`** every node needs a new token: generate one per node, write them into
+the new `hub.env`, and re-install each node with its own ([section 5](#5-upgrade-a-node-rotate-its-token))
+— a visit to every machine that `ssh` does not reach. **Without the database** the hub runs,
+with no history and no thresholds: every series reports and none has a level until it is
+set again on `/thresholds`.
 
 ## Watching Google Drive
 

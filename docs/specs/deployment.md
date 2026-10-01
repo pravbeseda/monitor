@@ -233,6 +233,10 @@ makes the behaviour above testable without touching the machine running the test
 - Building, publishing or verifying the binary: the script takes one that exists, and
   [release.md](release.md) owns where it comes from.
 - Uninstalling: the commands in the install guide, not a mode of the script.
+- Backing up and restoring the hub host: the host's provisioning keeps the database
+  ([0043](../decisions/0043-the-hub-hosts-backup-belongs-to-its-provisioning.md),
+  [hub-backup-requirements.md](../hub-backup-requirements.md)), and the install guide has the
+  restore.
 - Installing as an act — what a run downloads, checks and calls:
   [installer.md](installer.md). This spec owns the result on disk, for the hub as for the
   agent.

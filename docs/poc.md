@@ -176,9 +176,9 @@ rest are recorded here, which is where they belong.
 7. **Retention** — keep every raw point; no downsampling is written. Tens of megabytes a year
    grows slower than storage gets cheaper, aggregation is irreversible, and a long series is
    what makes trends work. When it does become a problem it gets its own ADR. A daily
-   `sqlite3 monitor.db ".backup /path/backup.db"` to the second server guards the history
-   against the likelier accident — a plain `cp` is not equivalent, because in WAL mode the
-   most recent transactions live in the `-wal` file and copying the database alone can lose
-   them or corrupt the copy.
+   snapshot of the database, encrypted and kept off the host, guards the history against the
+   likelier accident: what it must be is [hub-backup-requirements.md](hub-backup-requirements.md),
+   and why the host's provisioning takes it is
+   [0043](decisions/0043-the-hub-hosts-backup-belongs-to-its-provisioning.md).
 8. **Storage** — SQLite behind the `Storage` interface, not the MySQL already on that host.
    → [0005](decisions/0005-poc-stack.md).
