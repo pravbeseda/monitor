@@ -12,7 +12,7 @@
 
 Backups are the reading that fails silently: a Mac that stopped backing up says nothing. This
 sensor reports how long ago each Time Machine destination last received a backup, so a
-threshold such as `above 172800` (two days) turns a backup that stopped into an alert. Like
+threshold such as `above 2d` turns a backup that stopped into an alert. Like
 every sensor it decides nothing: the series has no level until someone sets one on its page
 ([thresholds.md](thresholds.md)).
 

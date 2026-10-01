@@ -113,7 +113,7 @@ var catalogue = map[string]map[Locale]string{
 	// The unit a metric id declares, as the form names the field's unit …
 	"unit.bytes":    {English: "bytes, e.g. 10GB", Russian: "байты, например 10GB"},
 	"unit.percent":  {English: "percent", Russian: "проценты"},
-	"unit.duration": {English: "seconds", Russian: "секунды"},
+	"unit.duration": {English: "seconds, or m (minutes), h, d, e.g. 36h", Russian: "секунды, или m (минуты), h, d, например 36h"},
 	"unit.number":   {English: "number", Russian: "число"},
 	// … and the suffixes a rendered duration is written with.
 	"unit.seconds": {English: "s", Russian: "с"},
