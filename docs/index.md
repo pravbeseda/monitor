@@ -10,10 +10,11 @@ entry point to every document in the project.
 | [../README.md](../README.md) | The repository's front page: what Monitor is and does, how to install and develop it |
 | [concept.md](concept.md) | Idea, architectural principles, planned skins, domains, roadmap |
 | [poc.md](poc.md) | POC spec: scope, terminology, wire format, work plan, answered questions |
-| [install.md](install.md) | Install guide: one command, then the manual path — the hub host, install and verify a node, upgrade by hand or from a timer, uninstall, watching Google Drive |
+| [install.md](install.md) | Install guide: one command, then the manual path — the hub host, install and verify a node, upgrade by hand or from a timer, uninstall, restore the hub on another host, watching Google Drive |
 | [../public/](../public/) | The project's public pages — a homepage, a privacy policy and terms of service — that an OAuth consent screen links to; the hub serves them at `/public/` |
 | [nginx-requirements.md](nginx-requirements.md) | What the hub needs from the reverse proxy in front of it, handed to the Ansible repository that owns that host |
 | [hub-host-node-requirements.md](hub-host-node-requirements.md) | What the Ansible play must do to install the agent on the hub host too and keep it on the hub's target, and how to check it |
+| [hub-backup-requirements.md](hub-backup-requirements.md) | What a backup of the hub host has to keep — a safe snapshot of the database, off the host and encrypted — and how a restore proves it, handed to the Ansible repository |
 | [plans/stage-1-skeleton.md](plans/stage-1-skeleton.md) | Step plan for POC stage 1, kept as a record; plans now live in the task and the pull request ([0017](decisions/0017-one-spec-and-decision-gates.md)) |
 
 ## Architecture decisions
@@ -65,6 +66,7 @@ One decision per file, each stating what was rejected and why. New records start
 | [0040](decisions/0040-the-hub-serves-its-public-pages-open.md) | The hub serves the public pages itself, under `/public/`, without a credential | accepted |
 | [0041](decisions/0041-mission-control-folds-into-the-timeline.md) | Mission control folds into the timeline, which becomes the primary view | accepted |
 | [0042](decisions/0042-an-anomalys-start-and-end-are-recorded.md) | An anomaly's start and end are recorded by the evaluation tick | accepted |
+| [0043](decisions/0043-the-hub-hosts-backup-belongs-to-its-provisioning.md) | The hub host's backup belongs to its provisioning; the repository states what it must keep | accepted |
 
 ## Behaviour specs
 

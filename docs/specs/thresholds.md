@@ -179,7 +179,7 @@ One row = one test. Anchors: `spec: thresholds.md#<heading>`.
   later. Until then the counts on `/debug` and in the digest ([state.md](state.md#page),
   [evaluation.md](evaluation.md#digest)) are what keeps a forgotten volume visible.
 - Exporting the stored thresholds to a file, or restoring them from one → the database is
-  the record, and backing it up is [issue #19](https://github.com/pravbeseda/monitor/issues/19).
+  the record, and backing it up is [hub-backup-requirements.md](../hub-backup-requirements.md).
 - Editing thresholds from a skin other than this page → the store is the contract
   ([0001](../decisions/0001-semantic-core-and-skins.md)); only this page writes it today.
 

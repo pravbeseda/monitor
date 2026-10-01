@@ -6,7 +6,7 @@ No vhost lives here — a second copy would drift out of sync with the real one 
 [ADR 0007](decisions/0007-public-repository.md) no host name, domain or credential may enter
 this repository at all.
 
-`hub.example.com` below stands for the public name of the hub host, the same placeholder
+`hub.example.com` below stands for the public name of the hub, the same placeholder
 [install.md](install.md) uses. The real one is a deployment setting and lives on the server.
 
 Related: [install.md](install.md) covers everything up to the point the proxy takes over,
