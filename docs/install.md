@@ -659,9 +659,7 @@ the reason the name moves before the hub starts.
 
 Check the result. On `/debug` every node turns fresh within a base tick once the DNS change
 reaches it, and the page does not say that nothing here is being judged yet — said after a
-restore, it means a database without its thresholds. On the host, `curl -s http://127.0.0.1:8080/api/v1/state` (the
-hub's listen address) carries a top-level `watched` count that is not 0 — the count the last
-restore drill saw, less the thresholds set after the snapshot.
+restore, it means a database without its thresholds.
 
 **Without `hub.env`** every node needs a new token: generate one per node, write them into
 the new `hub.env`, and re-install each node with its own ([section 5](#5-upgrade-a-node-rotate-its-token))
