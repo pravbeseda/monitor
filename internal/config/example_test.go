@@ -18,7 +18,7 @@ func TestExampleFileResolves(t *testing.T) {
 	if err != nil {
 		t.Fatalf("config.example.yaml does not load: %v", err)
 	}
-	if len(cfg.Nodes()) != 3 {
-		t.Fatalf("the example resolved %d nodes, want 3", len(cfg.Nodes()))
+	if len(cfg.Nodes()) != 4 {
+		t.Fatalf("the example resolved %d nodes, want 4", len(cfg.Nodes()))
 	}
 }

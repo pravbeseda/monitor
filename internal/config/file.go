@@ -50,6 +50,7 @@ type fileNode struct {
 	Sensors     map[string]fileSensor `yaml:"sensors"`
 	Rules       map[string]yaml.Node  `yaml:"rules"`
 	Volumes     map[string]yaml.Node  `yaml:"volumes"`
+	Sites       map[string]fileSite   `yaml:"sites"`
 }
 
 type fileDigest struct {

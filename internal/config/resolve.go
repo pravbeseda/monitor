@@ -25,9 +25,9 @@ func resolve(f file, name string, entry fileNode) (Node, error) {
 
 	service := entry.Class == ServiceClass
 	var secret string
-	if service {
+	if why, tokenless := reservedFor[entry.Class]; tokenless {
 		if entry.TokenEnv != "" {
-			return Node{}, fmt.Errorf("node %s: a token_env would let an agent speak for it, and %s", name, reserved)
+			return Node{}, fmt.Errorf("node %s: a token_env would let an agent speak for it, and %s", name, why)
 		}
 	} else {
 		var err error
@@ -53,9 +53,15 @@ func resolve(f file, name string, entry fileNode) (Node, error) {
 	skipMounts := lastList(defaultSkipMounts, f.SkipMounts, custom.SkipMounts, entry.SkipMounts)
 
 	profile := lastList(builtin.Profile, custom.Profile)
-	sensors, err := resolveSensors(profile, baseTick,
+	// The sites node's own tick carries nothing: its sensor runs on its hosts, whose ticks
+	// deliverSites holds the interval to.
+	sensorTick := baseTick
+	if entry.Class == SitesClass {
+		sensorTick = 0
+	}
+	sensors, err := resolveSensors(profile, sensorTick,
 		[]map[string]fileSensor{defaultSensors, builtin.Sensors},
-		[]map[string]fileSensor{forHost(service, f.Sensors), custom.Sensors, entry.Sensors})
+		[]map[string]fileSensor{forHost(entry.Class, f.Sensors), custom.Sensors, entry.Sensors})
 	if err != nil {
 		return Node{}, fmt.Errorf("node %s: %w", name, err)
 	}
@@ -184,6 +190,10 @@ func version(a Agent) (string, error) {
 	type sensorJSON struct {
 		Enabled  bool   `json:"enabled"`
 		Interval string `json:"interval"`
+		// Empty for every sensor without parameters, so a release that adds them leaves
+		// those configurations' versions as they were.
+		Node  string `json:"node,omitempty"`
+		Sites []Site `json:"sites,omitempty"`
 	}
 	payload := struct {
 		BaseTick    string                `json:"base_tick"`
@@ -197,7 +207,9 @@ func version(a Agent) (string, error) {
 		Sensors:     make(map[string]sensorJSON, len(a.Sensors)),
 	}
 	for name, sensor := range a.Sensors {
-		payload.Sensors[name] = sensorJSON{Enabled: sensor.Enabled, Interval: sensor.Interval.String()}
+		payload.Sensors[name] = sensorJSON{
+			Enabled: sensor.Enabled, Interval: sensor.Interval.String(), Node: sensor.Node, Sites: sensor.Sites,
+		}
 	}
 
 	// json.Marshal sorts map keys, so the same configuration always hashes the same.

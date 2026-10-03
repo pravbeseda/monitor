@@ -97,6 +97,7 @@ lands in the right place in history.
 | any | a configuration it cannot parse | the working one is kept and the failure logged |
 | the configuration changes the base tick | applied | the new tick starts after the current one ends |
 | the configuration disables the only sensor | applied | the agent keeps ticking: the heartbeat is the point |
+| the configuration no longer enables a sensor that holds something between collections — open logs | applied | the sensor releases it, since nothing calls it any more to notice ([site-traffic.md](site-traffic.md#rotation)) |
 
 ## Invariants
 

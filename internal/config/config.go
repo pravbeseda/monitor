@@ -20,10 +20,14 @@ import (
 // minTokenLength keeps the security of ADR 0007 rule 5 on the token, not on obscurity.
 const minTokenLength = 32
 
-// Sensor is one sensor as the agent receives it.
+// Sensor is one sensor as the agent receives it, with its parameters (ADR 0044).
 type Sensor struct {
 	Enabled  bool
 	Interval time.Duration
+	// Node is the node the sensor's measurements belong to, when not the agent's own.
+	Node string
+	// Sites are access_log's: the sites the host serves.
+	Sites []Site
 }
 
 // Agent is the flat configuration an agent applies: the hub resolves the layers, the
@@ -68,10 +72,12 @@ func (n Node) String() string {
 // Config is the resolved file: one entry per listed node, plus the hub-wide settings that
 // belong to no node.
 type Config struct {
-	nodes  map[string]Node
-	digest evaluate.Schedule
-	notify Notify
-	gdrive GoogleDrive
+	nodes map[string]Node
+	// siteHosts holds the host of each site of the sites node.
+	siteHosts map[string]string
+	digest    evaluate.Schedule
+	notify    Notify
+	gdrive    GoogleDrive
 }
 
 // String keeps tokens out of a debug print, whatever verb is used on the configuration.
@@ -126,7 +132,7 @@ func Load(path string) (*Config, error) {
 		if err != nil {
 			return nil, err
 		}
-		if node.Service() {
+		if node.Service() || node.SitesNode() {
 			nodes[name] = node
 			continue
 		}
@@ -140,11 +146,15 @@ func Load(path string) (*Config, error) {
 		holder[node.Token] = name
 		nodes[name] = node
 	}
+	sites, err := deliverSites(f, nodes)
+	if err != nil {
+		return nil, fmt.Errorf("%s: %w", path, err)
+	}
 	gdrive, err := resolveGoogleDrive(nodes)
 	if err != nil {
 		return nil, fmt.Errorf("%s: %w", path, err)
 	}
-	return &Config{nodes: nodes, digest: digest, notify: notify, gdrive: gdrive}, nil
+	return &Config{nodes: nodes, siteHosts: sites, digest: digest, notify: notify, gdrive: gdrive}, nil
 }
 
 // Node returns the resolved configuration of one node.

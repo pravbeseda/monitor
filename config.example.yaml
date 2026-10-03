@@ -47,6 +47,12 @@ nodes:
     token_env: MONITOR_TOKEN_SERVER_B
     sensors:
       disk: { interval: 5m }
+  # Every web site, whichever server serves it: the agent of each site's host reads its
+  # access log and reports for this node, so it has no token (docs/specs/site-traffic.md).
+  sites:
+    class: sites
+    sites:
+      blog-a: { host: server-b, log: /var/log/nginx/blog-a.access.log }
   # An online service rather than a machine: the hub collects it itself, so it has no token.
   # Its credentials are read from MONITOR_GDRIVE_* (docs/install.md#watching-google-drive).
   cloud:

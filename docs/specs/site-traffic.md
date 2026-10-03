@@ -1,7 +1,7 @@
 # Spec: Site traffic
 
 - **Status:** approved
-- **Owns:** `internal/accesslog` (the analyzer), `internal/sensor/accesslog` (agent), the
+- **Owns:** `internal/weblog` (the analyzer), `internal/sensor/accesslog` (agent), the
   `sites` class in the hub's file, and what ingest accepts for the sites node
 - **Decisions:** [0002](../decisions/0002-push-not-pull.md),
   [0007](../decisions/0007-public-repository.md),
@@ -155,7 +155,7 @@ One row = one test. Anchors: `spec: site-traffic.md#<heading>`.
 | a top-level `sensors.<s>.enabled: true` | it never reaches the `sites` class, as it never reaches `service` ([services.md](services.md#startup)) |
 | an `access_log` interval the file writes for the sites class or node, shorter than the `base_tick` a host resolves | startup error naming the host: its sites would collect once a tick, later than the interval promises |
 | no interval and no `silence_after` written, a host resolving `base_tick: 15m` | the hub starts; the sites node's `access_log` runs every 15m and its `silence_after` is 75m |
-| a `silence_after` the file writes for the sites class or node, shorter than twice its `access_log` interval plus three of the longest `base_tick` among its hosts | startup error naming the node: one missed collection would make it fall silent |
+| a `silence_after` the file writes for the sites class, shorter than twice its `access_log` interval plus three of the longest `base_tick` among its hosts | startup error naming the node: one missed collection would make it fall silent |
 
 ### Configuration
 
@@ -227,6 +227,8 @@ The agent's clock reads 12:00:00, in UTC.
 | a page view whose minute is ahead of the agent's clock's minute | counted once the clock reaches that minute |
 | the agent restarts at 12:00 | once reading back ends, the page views in the window found in the current log and the rotated ones |
 | the rotated files reach back only to 14:00 yesterday — `dateext` names, or rotation by size | the page views they hold, and a warning naming the site and how far back the window reaches |
+| no file holds a request yet — a new site | 0, and the same warning |
+| the log renamed while reading back runs | each line counted once: the file just read is not read again as `<log>.1` |
 | the clock set back since the previous collection | `pageviews_24h` as usual; no interval metric this collection |
 
 ### Rotation
@@ -235,9 +237,9 @@ The agent's clock reads 12:00:00, in UTC.
 |---|---|
 | the first collection of a site the sensor has not read yet | nothing for the site; reading back starts, and the interval metrics start with the next collection, counting from the end of the log as it was found |
 | the first collection after reading back ends | `pageviews_24h` and `response_p95_seconds` join the interval metrics |
-| the log renamed and a new one created (logrotate's default) | the lines appended to the renamed file, which the sensor keeps open, until a collection finds it unchanged with a new file in its place; then the new file from its start |
+| the log renamed and a new one created (logrotate's default) | the new file from its start, and beside it the lines appended to the renamed file, which the sensor keeps open until a collection finds it unchanged |
 | the renamed file compressed and deleted while held open | the rest of it still read through the open file |
-| two rotations between collections | the same: the renamed file is followed by what it is, not by its name |
+| two rotations between collections | the file the sensor held, followed by what it is rather than by its name, and the newest; the lines of the file between them are not counted |
 | the log truncated in place (`copytruncate`), and `<log>.1` holding at least what was read | the lines `<log>.1` holds past the point read, then the file from its start |
 | a site moved away from this host | its position dropped; nothing more is read for it |
 

@@ -23,6 +23,8 @@ type Sensor interface {
 	Name() string
 	// Applicable reports whether this machine can produce the reading at all.
 	Applicable() bool
+	// Collect may return measurements beside an error when one of several things it reads
+	// failed: the agent logs the error and posts the measurements.
 	Collect(ctx context.Context) ([]Measurement, error)
 }
 

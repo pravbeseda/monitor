@@ -70,3 +70,16 @@ file on the node or a free-form map, which the hub could not validate — the sa
   writing to it, and a half-written last line waits for its end.
 - **Startup refuses a host whose tick is longer than the sites interval**, and a sites
   `silence_after` one missed collection would trip.
+
+## What the code reviews changed
+
+- **A sensor the configuration stops running is told to release what it holds.** A host
+  whose last site moved away was no longer asked to collect, so nothing noticed, and it kept
+  the log open — and a deleted log's disk space — until the agent restarted.
+- **Reading back cannot count a line twice** when the log is renamed, compressed or
+  truncated while it runs: a rotated file that begins no earlier than the one read before it
+  is that file again, and a truncated log is read from its copy.
+- **The sites interval answers to its hosts' ticks only**; the sites node's own tick, which
+  carries nothing, was refusing intervals the hosts could honour.
+- **The analyzer became `internal/weblog`**, and its figures split into aggregators of the
+  interval and windows over a span, instead of a span of zero standing for "interval".

@@ -12,6 +12,9 @@ import (
 // Measurement is one reading of one metric, as it was collected. Sensor names what
 // produced it, and is empty when the agent is too old to say (docs/specs/ingest.md).
 type Measurement struct {
+	// Node is the node the reading belongs to when it is not the request's: the sites node
+	// a host reports for (ADR 0045). Empty means the request's node.
+	Node   string
 	Metric string
 	Sensor string
 	Labels map[string]string
@@ -62,7 +65,9 @@ type Value struct {
 // consume one, so adding to those costs these callers nothing.
 type Storage interface {
 	// SaveIngest stores one request atomically — measurements, manifest and last-seen —
-	// skipping measurements already stored under the same node, metric, labels and ts.
+	// skipping measurements already stored under the same node, metric, labels and ts. A
+	// node a measurement names apart from the request's is seen by it too, and nothing else
+	// of it changes.
 	SaveIngest(ctx context.Context, in Ingest) error
 	// IntroduceNode records a node as SaveIngest would, without measurements; of a node
 	// already on record it updates the versions and manifest, never last-seen.

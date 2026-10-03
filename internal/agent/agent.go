@@ -59,6 +59,8 @@ type configuration struct {
 type sensorSetting struct {
 	enabled  bool
 	interval time.Duration
+	node     string
+	sites    []api.Site
 }
 
 // New builds an agent that has no configuration yet: the first tick asks for one.
@@ -81,6 +83,9 @@ func (a *Agent) Filesystems() []string { return a.config.filesystems }
 
 // SkipMounts are the mount-point prefixes the disk sensor leaves alone.
 func (a *Agent) SkipMounts() []string { return a.config.skipMounts }
+
+// Sites are the sites the hub last delivered in a sensor's entry.
+func (a *Agent) Sites(sensor string) []api.Site { return a.config.sensors[sensor].sites }
 
 // Run ticks until the context ends.
 func (a *Agent) Run(ctx context.Context) error {
@@ -152,9 +157,12 @@ func (a *Agent) collect(ctx context.Context, now time.Time) []api.Measurement {
 		measurements, err := a.collectOne(ctx, s)
 		if err != nil {
 			slog.Error("sensor failed", "sensor", s.Name(), "error", err)
-			continue
 		}
 		name := s.Name()
+		var node *string
+		if setting.node != "" {
+			node = &setting.node
+		}
 		for _, m := range measurements {
 			value := m.Value
 			out = append(out, api.Measurement{
@@ -163,6 +171,7 @@ func (a *Agent) collect(ctx context.Context, now time.Time) []api.Measurement {
 				Value:  &value,
 				TS:     m.TS.UTC().Format(time.RFC3339),
 				Sensor: &name,
+				Node:   node,
 			})
 		}
 	}
@@ -221,9 +230,25 @@ func (a *Agent) apply(resp api.Response) error {
 	if err != nil {
 		return fmt.Errorf("configuration %s: %w", resp.ConfigVersion, err)
 	}
+	a.release(parsed)
 	a.config = parsed
 	a.version = resp.ConfigVersion
 	return nil
+}
+
+// releaser is a sensor that holds something between collections — open files — and lets
+// it go when the configuration stops running it, since it is no longer called to notice.
+type releaser interface {
+	Close()
+}
+
+func (a *Agent) release(next configuration) {
+	for _, s := range a.sensors {
+		held, ok := s.(releaser)
+		if ok && a.config.sensors[s.Name()].enabled && !next.sensors[s.Name()].enabled {
+			held.Close()
+		}
+	}
 }
 
 func parse(delivered api.AgentConfig) (configuration, error) {
@@ -242,7 +267,7 @@ func parse(delivered api.AgentConfig) (configuration, error) {
 		if err != nil {
 			return configuration{}, fmt.Errorf("sensor %s: interval %q is not a duration", name, s.Interval)
 		}
-		out.sensors[name] = sensorSetting{enabled: s.Enabled, interval: interval}
+		out.sensors[name] = sensorSetting{enabled: s.Enabled, interval: interval, node: s.Node, sites: s.Sites}
 	}
 	return out, nil
 }

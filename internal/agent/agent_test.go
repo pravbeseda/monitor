@@ -1,9 +1,11 @@
 package agent_test
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"errors"
+	"log/slog"
 	"net/http"
 	"strings"
 	"testing"
@@ -573,5 +575,126 @@ func TestAFailedSensorWaitsItsInterval(t *testing.T) {
 
 	if failing.calls != 1 {
 		t.Errorf("the sensor was asked %d times in 15 minutes, want once", failing.calls)
+	}
+}
+
+// spec: agent.md#ticking — a sensor that returns measurements and an error posts the
+// measurements: one thing it reads failing costs the others nothing.
+func TestMeasurementsBesideAnErrorStillPost(t *testing.T) {
+	var logged bytes.Buffer
+	before := slog.Default()
+	slog.SetDefault(slog.New(slog.NewTextHandler(&logged, nil)))
+	t.Cleanup(func() { slog.SetDefault(before) })
+	h, c := &hub{}, &clock{at: start}
+	h.answers = []answer{{response: configure("v1", "5m", map[string]api.SensorConfig{
+		"access_log": {Enabled: true, Interval: "5m"},
+	})}}
+	partial := &stub{name: "access_log", measurements: []sensor.Measurement{reading("site.pageviews_24h", 3)},
+		err: errors.New("site shop-c: missing")}
+	a := newAgent(t, h, c, partial)
+
+	if err := a.Tick(context.Background()); err != nil {
+		t.Fatalf("first tick: %v", err)
+	}
+	c.advance(5 * time.Minute)
+	if err := a.Tick(context.Background()); err != nil {
+		t.Fatalf("second tick: %v", err)
+	}
+	if got := measurements(h.last()); len(got) != 1 || got[0].Metric != "site.pageviews_24h" {
+		t.Errorf("measurements = %+v, want the reading returned beside the error", got)
+	}
+	if !strings.Contains(logged.String(), "shop-c: missing") {
+		t.Errorf("logged %q, want the error", logged.String())
+	}
+}
+
+// spec: agent.md#ticking — a sensor whose entry names a node posts each measurement with
+// that node; one whose entry names none posts without it.
+func TestASensorEntryNamesTheNodeOfItsMeasurements(t *testing.T) {
+	h, c := &hub{}, &clock{at: start}
+	h.answers = []answer{{response: configure("v1", "5m", map[string]api.SensorConfig{
+		"access_log": {Enabled: true, Interval: "5m", Node: "sites"},
+		"disk":       {Enabled: true, Interval: "5m"},
+	})}}
+	a := newAgent(t, h, c,
+		&stub{name: "access_log", measurements: []sensor.Measurement{reading("site.pageviews_24h", 3)}},
+		&stub{name: "disk", measurements: []sensor.Measurement{reading("disk.free_bytes", 1)}})
+
+	if err := a.Tick(context.Background()); err != nil {
+		t.Fatalf("first tick: %v", err)
+	}
+	c.advance(5 * time.Minute)
+	if err := a.Tick(context.Background()); err != nil {
+		t.Fatalf("second tick: %v", err)
+	}
+	sent := measurements(h.last())
+	if len(sent) != 2 {
+		t.Fatalf("measurements = %+v, want both sensors' readings", sent)
+	}
+	for _, m := range sent {
+		switch m.Metric {
+		case "site.pageviews_24h":
+			if m.Node == nil || *m.Node != "sites" {
+				t.Errorf("%s: node %v, want sites", m.Metric, m.Node)
+			}
+		case "disk.free_bytes":
+			if m.Node != nil {
+				t.Errorf("%s: node %q, want none", m.Metric, *m.Node)
+			}
+		}
+	}
+}
+
+// spec: site-traffic.md#the-file — the agent hands a sensor the sites its entry carries.
+func TestSitesComeFromTheSensorEntry(t *testing.T) {
+	h, c := &hub{}, &clock{at: start}
+	sites := []api.Site{{Name: "blog-a", Log: "/var/log/nginx/blog-a.access.log"}}
+	h.answers = []answer{{response: configure("v1", "5m", map[string]api.SensorConfig{
+		"access_log": {Enabled: true, Interval: "5m", Node: "sites", Sites: sites},
+	})}}
+	a := newAgent(t, h, c)
+	if got := a.Sites("access_log"); len(got) != 0 {
+		t.Fatalf("sites before any configuration: %v", got)
+	}
+	if err := a.Tick(context.Background()); err != nil {
+		t.Fatalf("Tick: %v", err)
+	}
+	if got := a.Sites("access_log"); len(got) != 1 || got[0] != sites[0] {
+		t.Errorf("sites = %v, want %v", got, sites)
+	}
+}
+
+// closing is a sensor that records being told to release what it holds.
+type closing struct {
+	stub
+	closed int
+}
+
+func (c *closing) Close() { c.closed++ }
+
+// spec: agent.md#applying-configuration — a sensor the new configuration no longer enables
+// releases what it holds; one still enabled keeps it.
+func TestASensorNoLongerEnabledIsReleased(t *testing.T) {
+	h, c := &hub{}, &clock{at: start}
+	h.answers = []answer{
+		{response: configure("v1", "5m", map[string]api.SensorConfig{
+			"access_log": {Enabled: true, Interval: "5m"},
+			"disk":       {Enabled: true, Interval: "5m"},
+		})},
+		{response: configure("v2", "5m", map[string]api.SensorConfig{
+			"disk": {Enabled: true, Interval: "5m"},
+		})},
+	}
+	traffic := &closing{stub: stub{name: "access_log"}}
+	volumes := &closing{stub: stub{name: "disk"}}
+	a := newAgent(t, h, c, traffic, volumes)
+	for range 2 {
+		if err := a.Tick(context.Background()); err != nil {
+			t.Fatalf("Tick: %v", err)
+		}
+		c.advance(5 * time.Minute)
+	}
+	if traffic.closed != 1 || volumes.closed != 0 {
+		t.Errorf("closed access_log %d and disk %d times, want 1 and 0", traffic.closed, volumes.closed)
 	}
 }

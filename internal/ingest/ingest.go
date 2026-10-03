@@ -82,6 +82,9 @@ func (h *Handler) Accept(ctx context.Context, node config.Node, req api.Request)
 	if in.Node != node.Name {
 		return api.Response{}, api.StatusError{Status: http.StatusForbidden, Message: "the node does not belong to this token"}
 	}
+	if in.Measurements, err = h.owned(node, in.Measurements); err != nil {
+		return api.Response{}, err
+	}
 	// A service node cannot sleep, so only a stored measurement is a sign of life; an empty
 	// report merely makes it known, so that it can fall silent before it ever stores one.
 	save := h.store.SaveIngest
@@ -99,6 +102,33 @@ func (h *Handler) Accept(ctx context.Context, node config.Node, req api.Request)
 	// is the only place the two can be compared.
 	slog.Info("deliver a configuration", "node", node.Name, "from", req.ConfigVersion, "to", node.Version)
 	return api.Response{ConfigVersion: node.Version, Config: deliver(node.Agent)}, nil
+}
+
+// owned keeps the measurements node may store: its own, and the sites node's for the sites
+// it serves. One of the sites node's for any other site is dropped alone, so that a host
+// still holding an old list of sites gets the 200 that carries its new one (ADR 0045); one
+// naming any other node refuses the request.
+func (h *Handler) owned(node config.Node, measurements []storage.Measurement) ([]storage.Measurement, error) {
+	kept := make([]storage.Measurement, 0, len(measurements))
+	for _, m := range measurements {
+		if m.Node == node.Name {
+			m.Node = ""
+		}
+		if m.Node != "" {
+			if other, _ := h.config.Node(m.Node); !other.SitesNode() {
+				return nil, api.StatusError{Status: http.StatusForbidden,
+					Message: fmt.Sprintf("measurement %s names node %s, which does not belong to this token", m.Metric, m.Node)}
+			}
+			site, labelled := m.Labels["site"]
+			if host, ok := h.config.HostOf(site); !labelled || !ok || host != node.Name {
+				slog.Warn("drop a measurement of a site the node does not serve",
+					"node", node.Name, "for", m.Node, "site", site, "labelled", labelled, "metric", m.Metric)
+				continue
+			}
+		}
+		kept = append(kept, m)
+	}
+	return kept, nil
 }
 
 // authenticate resolves the bearer token to its node, comparing in constant time so that
@@ -196,6 +226,12 @@ func validateMeasurement(m api.Measurement, sent time.Time) (storage.Measurement
 			return storage.Measurement{}, fmt.Errorf("metric %s: sensor %q is not an id of [a-z0-9_.]", m.Metric, sensor)
 		}
 	}
+	var node string
+	if m.Node != nil {
+		if node = *m.Node; node == "" {
+			return storage.Measurement{}, fmt.Errorf("metric %s: node is empty", m.Metric)
+		}
+	}
 
 	collected := sent
 	if m.TS != "" {
@@ -204,7 +240,7 @@ func validateMeasurement(m api.Measurement, sent time.Time) (storage.Measurement
 			return storage.Measurement{}, err
 		}
 	}
-	return storage.Measurement{Metric: m.Metric, Sensor: sensor, Labels: m.Labels, Value: *m.Value, TS: collected}, nil
+	return storage.Measurement{Node: node, Metric: m.Metric, Sensor: sensor, Labels: m.Labels, Value: *m.Value, TS: collected}, nil
 }
 
 func timestamp(key, value string) (time.Time, error) {
@@ -240,9 +276,15 @@ func deliver(agent config.Agent) *api.AgentConfig {
 		Sensors:     make(map[string]api.SensorConfig, len(agent.Sensors)),
 	}
 	for name, sensor := range agent.Sensors {
+		var sites []api.Site
+		for _, site := range sensor.Sites {
+			sites = append(sites, api.Site{Name: site.Name, Log: site.Log})
+		}
 		out.Sensors[name] = api.SensorConfig{
 			Enabled:  sensor.Enabled,
 			Interval: api.FormatDuration(sensor.Interval),
+			Node:     sensor.Node,
+			Sites:    sites,
 		}
 	}
 	return out

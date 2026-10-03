@@ -74,12 +74,12 @@ func (s *spy) Points(context.Context, storage.SeriesRef, time.Time, time.Time) i
 
 func (s *spy) Close() error { return nil }
 
-func loadConfig(t *testing.T) *config.Config {
+func loadConfig(t *testing.T, body string) *config.Config {
 	t.Helper()
 	t.Setenv(tokenEnv, token)
 
 	path := filepath.Join(t.TempDir(), "config.yaml")
-	if err := os.WriteFile(path, []byte(configBody), 0o600); err != nil {
+	if err := os.WriteFile(path, []byte(body), 0o600); err != nil {
 		t.Fatalf("write config: %v", err)
 	}
 	cfg, err := config.Load(path)
@@ -91,7 +91,7 @@ func loadConfig(t *testing.T) *config.Config {
 
 func newHandler(t *testing.T) (http.Handler, *spy, config.Node) {
 	t.Helper()
-	cfg := loadConfig(t)
+	cfg := loadConfig(t, configBody)
 	node, ok := cfg.Node("laptop-a")
 	if !ok {
 		t.Fatal("laptop-a is missing from the configuration")
@@ -457,7 +457,7 @@ func TestRateLimit(t *testing.T) {
 // it writes keeps that name. The assertion goes through the real store, because the name
 // ends up on the series rather than on the request.
 func TestStoresTheSensorOfAMeasurement(t *testing.T) {
-	cfg := loadConfig(t)
+	cfg := loadConfig(t, configBody)
 	db, err := storage.OpenSQLite(filepath.Join(t.TempDir(), "monitor.db"))
 	if err != nil {
 		t.Fatalf("OpenSQLite: %v", err)

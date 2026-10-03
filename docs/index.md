@@ -10,7 +10,7 @@ entry point to every document in the project.
 | [../README.md](../README.md) | The repository's front page: what Monitor is and does, how to install and develop it |
 | [concept.md](concept.md) | Idea, architectural principles, planned skins, domains, roadmap |
 | [poc.md](poc.md) | POC spec: scope, terminology, wire format, work plan, answered questions |
-| [install.md](install.md) | Install guide: one command, then the manual path — the hub host, install and verify a node, upgrade by hand or from a timer, uninstall, restore the hub on another host, watching Google Drive |
+| [install.md](install.md) | Install guide: one command, then the manual path — the hub host, install and verify a node, upgrade by hand or from a timer, uninstall, restore the hub on another host, watching Google Drive, watching web sites |
 | [../public/](../public/) | The project's public pages — a homepage, a privacy policy and terms of service — that an OAuth consent screen links to; the hub serves them at `/public/` |
 | [nginx-requirements.md](nginx-requirements.md) | What the hub needs from the reverse proxy in front of it, handed to the Ansible repository that owns that host |
 | [hub-host-node-requirements.md](hub-host-node-requirements.md) | What the Ansible play must do to install the agent on the hub host too and keep it on the hub's target, and how to check it |

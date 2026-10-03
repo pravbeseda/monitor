@@ -31,8 +31,9 @@ only.
 
 - [0010](0010-agent-configuration.md) holds: the agent still merges nothing and keeps no
   file. Only the shape of a sensor's entry grows.
-- The `Sensor` interface gains a way to receive its entry; a sensor without parameters
-  ignores it. The agent's own loop reads one key of the entry beside `enabled` and
+- A sensor reads its parameters from the agent that holds the delivered configuration, as
+  the disk sensor already reads the filesystem allow-list; the `Sensor` interface does not
+  change. The agent's own loop reads one key of the entry beside `enabled` and
   `interval`: `node`, the node the sensor's measurements belong to
   ([0045](0045-sites-are-a-node-their-hosts-report-for.md)).
 - A backup sensor that names a path ([#51](https://github.com/pravbeseda/monitor/issues/51))
