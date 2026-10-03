@@ -414,3 +414,36 @@ func TestReadBackStopsWhenCancelled(t *testing.T) {
 	}
 	same(t, got)
 }
+
+// spec: site-traffic.md#rotation — a log renamed and replaced, then truncated in place and
+// grown back past the point read before the next read: the new file's beginning is known
+// from the read that first met it.
+func TestTailFollowsCopyTruncateRightAfterARename(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "access.log")
+	appendTo(t, path, "")
+	tail := open(t, path)
+	appendTo(t, path, logLine("a", clock))
+	if err := os.Rename(path, path+".1"); err != nil {
+		t.Fatal(err)
+	}
+	appendTo(t, path, logLine("new", clock))
+	same(t, read(t, tail), "a", "new")
+
+	appendTo(t, path, logLine("copied", clock))
+	content, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	// logrotate moves the earlier rotation along before it copies the log.
+	if err := os.Rename(path+".1", path+".2"); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(path+".1", content, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Truncate(path, 0); err != nil {
+		t.Fatal(err)
+	}
+	appendTo(t, path, logLine("burst-0", clock)+logLine("burst-1", clock)+logLine("burst-2", clock))
+	same(t, read(t, tail), "copied", "burst-0", "burst-1", "burst-2")
+}

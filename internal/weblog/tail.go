@@ -153,7 +153,13 @@ func (t *Tail) Read(each func(line string)) error {
 		}
 		t.cur.offset, t.cur.head = 0, nil
 	}
-	_, err = t.cur.drain(each)
+	if _, err := t.cur.drain(each); err != nil {
+		return err
+	}
+	// A file met for the first time in this read — a rotation's replacement, or a log
+	// truncated and begun again — has its beginning recorded now, so that a truncation
+	// before the next read is seen.
+	_, err = t.cur.truncated()
 	return err
 }
 
