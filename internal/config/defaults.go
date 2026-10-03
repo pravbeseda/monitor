@@ -31,6 +31,7 @@ var defaultSensors = map[string]fileSensor{
 	"systemd":     {Interval: "15m"},
 	"timemachine": {Interval: "1h"},
 	"gdrive":      {Interval: "1h"},
+	"access_log":  {Interval: "5m"},
 }
 
 var defaultClasses = map[string]fileClass{
@@ -46,4 +47,6 @@ var defaultClasses = map[string]fileClass{
 	// No profile: a service sensor needs credentials, so it runs only where the file enables
 	// it. Three hourly collections go by before a service node falls silent.
 	ServiceClass: {SilenceAfter: "3h"},
+	// Six collections go by before the sites fall silent; a slower host raises both.
+	SitesClass: {Profile: []string{AccessLogSensor}, SilenceAfter: "30m"},
 }

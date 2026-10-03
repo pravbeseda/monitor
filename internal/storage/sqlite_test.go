@@ -326,3 +326,34 @@ func TestIntroduceNodeKeepsTheVersionOfARecordedNodeCurrent(t *testing.T) {
 		t.Errorf("node = %+v, want version 9.9.9 and last-seen left at %v", node, seen)
 	}
 }
+
+// spec: site-traffic.md#ingest — a host's measurement for the sites node is stored under it,
+// and sees it, leaving its agent version and manifest empty.
+func TestSaveIngestStoresAnotherNodesMeasurement(t *testing.T) {
+	db := open(t)
+	received := time.Date(2026, 10, 3, 12, 0, 5, 0, time.UTC)
+	views := Measurement{Node: "sites", Metric: "site.pageviews_24h", Sensor: "access_log",
+		Labels: map[string]string{"site": "blog-a"}, Value: 3, TS: collected}
+
+	if err := db.SaveIngest(context.Background(), ingest("server-b", received, views, free("/", 1))); err != nil {
+		t.Fatalf("SaveIngest: %v", err)
+	}
+	if got := db.measurements(t, "sites"); len(got) != 1 || got[0].Labels["site"] != "blog-a" {
+		t.Fatalf("the sites node holds %+v, want the page views", got)
+	}
+	if got := db.measurements(t, "server-b"); len(got) != 1 || got[0].Labels["mount"] != "/" {
+		t.Fatalf("server-b holds %+v, want its own reading alone", got)
+	}
+	sites := db.node(t, "sites")
+	if !sites.LastSeen.Equal(received) || sites.AgentVersion != "" || len(sites.Manifest) != 0 {
+		t.Errorf("the sites node = %+v, want it seen at %v with no agent of its own", sites, received)
+	}
+
+	later := received.Add(5 * time.Minute)
+	if err := db.SaveIngest(context.Background(), ingest("server-b", later)); err != nil {
+		t.Fatalf("SaveIngest: %v", err)
+	}
+	if got := db.node(t, "sites").LastSeen; !got.Equal(received) {
+		t.Errorf("an empty batch from server-b moved the sites node's last-seen to %v", got)
+	}
+}

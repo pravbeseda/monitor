@@ -19,6 +19,9 @@ func validate(f file) error {
 	if err := validateAgentTarget("", f.AgentTarget); err != nil {
 		return err
 	}
+	if err := validateSites(f); err != nil {
+		return err
+	}
 	for _, name := range classNames(f) {
 		if err := validateClass(f, name); err != nil {
 			return err
@@ -44,6 +47,9 @@ func validate(f file) error {
 func validateClass(f file, name string) error {
 	builtin, custom, _ := classLayers(f, name)
 	where := fmt.Sprintf("class %s: ", name)
+	if err := validateSitesClass(name, builtin, custom); err != nil {
+		return err
+	}
 
 	if err := validateLayer(where, custom.BaseTick, custom.Filesystems, custom.Sensors); err != nil {
 		return err
@@ -70,7 +76,7 @@ func validateClass(f file, name string) error {
 	profile := lastList(builtin.Profile, custom.Profile)
 	service := name == ServiceClass
 	sensors, err := sensorSettings(profile,
-		defaultSensors, builtin.Sensors, forHost(service, f.Sensors), custom.Sensors)
+		defaultSensors, builtin.Sensors, forHost(name, f.Sensors), custom.Sensors)
 	if err != nil {
 		return fmt.Errorf("%s%w", where, err)
 	}

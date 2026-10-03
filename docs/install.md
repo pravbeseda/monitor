@@ -719,6 +719,31 @@ why, naming the credential to replace:
 | `invalid_client` | check `MONITOR_GDRIVE_CLIENT_ID` and `MONITOR_GDRIVE_CLIENT_SECRET` against the console |
 | `accessNotConfigured` | enable the Drive API, step 1 |
 
+## Watching web sites
+
+A site is read from its access log by the agent of the node that serves it, and its series
+stand under one `sites` node ([spec](specs/site-traffic.md)).
+
+1. Keep the log in nginx's `combined` format. To have the response time too, end the format
+   with `rt=$request_time`, as in
+   `log_format timed '$remote_addr - $remote_user [$time_local] "$request" $status $body_bytes_sent "$http_referer" "$http_user_agent" rt=$request_time';`
+2. List each site in `hub.yaml` with its host — a node that runs an agent — and its log:
+
+   ```yaml
+   nodes:
+     sites:
+       class: sites
+       sites:
+         blog-a: { host: server-b, log: /var/log/nginx/blog-a.access.log }
+   ```
+
+3. Restart the hub. The host receives its sites within a base tick; the first collection
+   reads back the last day from the log and its rotated files, and the `site.*` series appear
+   under `sites` on `/debug` from the collection after.
+
+A host whose rotated logs reach back less than a day — `dateext` names, or rotation by
+size — says so in its journal, and `site.pageviews_24h` holds what they reach.
+
 ## The proxy in front of the hub
 
 This guide stops at the hub's loopback port. The nginx vhost that terminates TLS, passes

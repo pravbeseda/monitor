@@ -17,6 +17,7 @@ import (
 	"github.com/pravbeseda/monitor/internal/agent"
 	"github.com/pravbeseda/monitor/internal/logging"
 	"github.com/pravbeseda/monitor/internal/sensor"
+	"github.com/pravbeseda/monitor/internal/sensor/accesslog"
 	"github.com/pravbeseda/monitor/internal/sensor/disk"
 	"github.com/pravbeseda/monitor/internal/sensor/load"
 	"github.com/pravbeseda/monitor/internal/sensor/memory"
@@ -79,12 +80,20 @@ func run(ctx context.Context, args []string, out io.Writer) error {
 		return err
 	}
 
-	// The sensor reads the allow-list the hub last delivered, so it closes over the agent
-	// that is built from it.
+	// These sensors read what the hub last delivered — the allow-list, the sites — so they
+	// close over the agent that is built from them.
 	var running *agent.Agent
 	volumes := disk.New(disk.System(), func() disk.Settings {
 		return disk.Settings{Filesystems: running.Filesystems(), SkipMounts: running.SkipMounts()}
 	}, time.Now)
+	traffic := accesslog.New(func() []accesslog.Site {
+		var sites []accesslog.Site
+		for _, site := range running.Sites(accesslog.Name) {
+			sites = append(sites, accesslog.Site{Name: site.Name, Log: site.Log})
+		}
+		return sites
+	}, time.Now)
+	defer traffic.Close()
 	running = agent.New(agent.Options{
 		Node: opts.node,
 		Sensors: []sensor.Sensor{
@@ -94,6 +103,7 @@ func run(ctx context.Context, args []string, out io.Writer) error {
 			uptime.New(uptime.System(), time.Now),
 			systemd.New(systemd.System(), time.Now),
 			timemachine.New(timemachine.System(), time.Now),
+			traffic,
 		},
 		Client: agent.NewHTTPClient(opts.hub, opts.token, requestTimeout),
 		Now:    time.Now,

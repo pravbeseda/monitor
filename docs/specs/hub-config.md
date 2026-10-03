@@ -8,7 +8,9 @@
   [0011](../decisions/0011-quality-gates.md),
   [0028](../decisions/0028-agents-follow-a-target-the-hub-serves.md),
   [0032](../decisions/0032-thresholds-are-set-in-the-interface.md),
-  [0039](../decisions/0039-the-hub-collects-a-service-node.md)
+  [0039](../decisions/0039-the-hub-collects-a-service-node.md),
+  [0044](../decisions/0044-a-sensor-takes-its-parameters-from-the-hub.md),
+  [0045](../decisions/0045-sites-are-a-node-their-hosts-report-for.md)
 
 ## Purpose
 
@@ -70,7 +72,9 @@ filesystem allow-list and the skip list above, `disk` every 15m, the
 15m, [`timemachine`](timemachine-sensor.md) and `gdrive` every 1h, and classes
 `laptop` (profile `[disk, load, memory, uptime, timemachine]`, disk every 1h), `server` (profile
 `[disk, load, memory, uptime, systemd]`) and `service` (no profile, `silence_after` 3h), whose
-nodes the hub collects itself ([services.md](services.md)). A compiled-in interval never stops the hub
+nodes the hub collects itself ([services.md](services.md)), and `sites` (profile
+`[access_log]`, `access_log` every 5m, `silence_after` 30m), whose node the hosts of its sites
+report for ([site-traffic.md](site-traffic.md#the-file)). A compiled-in interval never stops the hub
 starting: where it is shorter than the tick a node resolves to, the sensor collects every
 tick instead. A hub upgrades itself unattended
 ([0025](../decisions/0025-the-hub-checks-hourly-and-downloads-a-binary-to-install-it.md)),
@@ -79,7 +83,7 @@ The skip list names mount points no one watches — the system volumes of a Mac 
 simulator images — and says nothing about any installation.
 
 **Deployment settings** (no defaults, absent means a startup error): the `nodes` map, each
-node's `class` and — except on a `service` node, which no agent speaks for — `token_env`. Tokens themselves live in the environment, never in the
+node's `class` and — except on a `service` or `sites` node, which has no token of its own — `token_env`. Tokens themselves live in the environment, never in the
 file.
 
 Each node names one environment variable holding its token: a handful of nodes needs no
@@ -92,8 +96,10 @@ file naming none has every node's updater install nothing — and it never reach
 response: [ingest](ingest.md#the-agents-target) serves it to a node that asks.
 
 **What reaches the agent** is only the flat result — base tick, filesystem allow-list,
-skip list, and the enabled sensors with their intervals, in the shape [ingest](ingest.md)
-documents. `silence_after` stays on the hub.
+skip list, and the enabled sensors with their intervals and parameters, in the shape
+[ingest](ingest.md) documents. A sensor's parameters are its own keys, owned by its spec
+([0044](../decisions/0044-a-sensor-takes-its-parameters-from-the-hub.md)); the first are
+`access_log`'s, which a host receives for the sites it serves ([site-traffic.md](site-traffic.md#configuration)). `silence_after` stays on the hub.
 
 **Thresholds are not in the file at all.** What a series is judged by is entered on the
 page and stored beside the measurements ([thresholds.md](thresholds.md),
@@ -121,7 +127,7 @@ One row = one test. Anchors: `spec: hub-config.md#<heading>`.
 | a key the hub does not know, at any level | startup error naming the key |
 | `rules` at any level, or a node's `volumes` — the two keys thresholds used to live in | the hub starts; one warning per key names it and says thresholds are now set on the page, and no number inside it is used ([thresholds.md](thresholds.md)) |
 | `nodes` missing or empty | startup error: a hub with no nodes serves nobody |
-| a node without `token_env`, of a class other than `service` | startup error naming the node |
+| a node without `token_env`, of a class other than `service` or `sites` | startup error naming the node |
 | `token_env` names a variable that is unset or empty | startup error naming the variable |
 | a token shorter than 32 characters | startup error naming the variable |
 | two nodes sharing one `token_env` | startup error naming both nodes |
@@ -158,6 +164,7 @@ The node is listed in `nodes`; the layers apply most-specific-last.
 | the class sets `base_tick`, `filesystems` or `skip_mounts` | wins over the top level; a node entry wins over the class |
 | `skip_mounts` set to an empty list | nothing is skipped: an empty list is a value, not an omission |
 | a sensor no layer mentions | absent from the delivered configuration |
+| the node hosts sites of the sites node | `access_log` delivered with its sites, at the sites node's interval, beside its own sensors ([site-traffic.md](site-traffic.md#configuration)) |
 | a node of the compiled-in `server` class, the file setting no `profile` for it | `load` and `memory` every 5m; `disk`, `uptime` and `systemd` every 15m |
 | a node of the compiled-in `laptop` class, the file setting no `profile` for it | `load` and `memory` every 5m, `uptime` every 15m, `disk` and `timemachine` every 1h |
 | the file sets `profile: [disk]` for a compiled-in class | only `disk`: a profile in the file replaces the compiled-in one, it does not add to it |
@@ -178,7 +185,7 @@ logs both versions when it delivers a new one.
 |---|---|
 | the same file and environment, hub restarted | unchanged: the version is derived, never stored |
 | a value that reaches this node changes | a different version |
-| another node's settings change | unchanged for this node |
+| another node's settings change | unchanged for this node, unless it is the sites node and the change reaches this node's sites ([site-traffic.md](site-traffic.md#configuration)) |
 | a hub-only value changes (`silence_after`, `agent_target`) | unchanged: the agent is never sent it |
 | a threshold is edited on the page | unchanged: no threshold is in the file, and none reaches an agent ([thresholds.md](thresholds.md)) |
 | two nodes resolve to an identical configuration | the same version — it identifies the configuration, not the node |
@@ -187,7 +194,7 @@ logs both versions when it delivers a new one.
 
 | Situation | Result |
 |---|---|
-| every `token_env` is set at startup | the tokens are held in memory for ingest to compare; a `service` node has none, and no request authenticates as it |
+| every `token_env` is set at startup | the tokens are held in memory for ingest to compare; a `service` or `sites` node has none, and no request authenticates as it |
 | a token is rotated on the server | the new value takes effect when the hub restarts |
 | a token appears anywhere in a log line, an error or a response | never happens; errors name the variable, never its value |
 
@@ -198,7 +205,7 @@ logs both versions when it delivers a new one.
 - The configuration version is a function of the delivered configuration alone, so a value
   the agent never sees cannot make it re-fetch.
 - A resolved configuration carries only what the agent acts on — base tick, filesystem
-  allow-list, skip list, sensors and intervals.
+  allow-list, skip list, sensors, their intervals and their parameters.
 - No deployment setting has a fallback: the hub either starts fully configured or does not
   start ([0007](../decisions/0007-public-repository.md)).
 - The whole file is validated, not only the parts a node references: every layer's
@@ -208,7 +215,9 @@ logs both versions when it delivers a new one.
 - No check compares one layer with another. A more specific layer may lower the base tick
   or replace a list, so an intermediate layer is not required to stand alone; the one
   comparison that needs a final tick — a sensor collecting faster than it — is made on the
-  resolved node, and refuses only an interval the file wrote.
+  resolved node, and refuses only an interval the file wrote. The checks across nodes are
+  the sites node's interval and `silence_after` against the hosts of its sites
+  ([site-traffic.md](site-traffic.md#startup)).
 - The file is read once, at startup: nothing re-reads it while the hub runs.
 
 ## Edge cases
@@ -225,7 +234,8 @@ logs both versions when it delivers a new one.
   agent ignores what it cannot run; the hub does not filter by manifest in stage 1. The one
   exception is where a sensor runs at all: the hub's own sensors only on a `service` node
   and an agent's never there, which startup refuses
-  ([services.md](services.md#startup)).
+  ([services.md](services.md#startup)), and `access_log` only through the sites a node
+  hosts ([site-traffic.md](site-traffic.md#startup)).
 - **A hub upgraded to a release whose compiled-in profiles changed**: every node that takes
   its profile from code resolves differently, so each is delivered a new
   [configuration version](#configuration-version) on its next request, and its

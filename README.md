@@ -15,6 +15,9 @@ off, history behind every value, and silence until something needs you.
 - **Agents** on Linux and macOS nodes report free disk space, load, memory, uptime,
   failed systemd units and the age of the latest Time Machine backup to the hub.
 - **The hub** collects online services itself — free space on Google Drive is the first.
+- **Web sites** are read from their access logs by the agent on the server that serves
+  them: requests, error shares, response time and page views, grouped under one `sites`
+  node whichever server serves each site.
 - **Thresholds** are set per series on the hub's `/thresholds` page; no series alerts until
   its threshold is set.
 - **A silent node** is noticed without any threshold: each node class says how long it may

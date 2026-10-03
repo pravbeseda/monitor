@@ -41,10 +41,18 @@ func (c *Config) GoogleDrive() GoogleDrive { return c.gdrive }
 // existed may use for machines.
 const reserved = "class " + ServiceClass + " is reserved for nodes the hub collects itself (ADR 0039); rename a machine class of that name"
 
+// reservedFor names the classes whose nodes no agent holds a token for, and why.
+var reservedFor = map[string]string{ServiceClass: reserved, SitesClass: sitesReserved}
+
 // forHost keeps the top-level sensor layer to the sensors a class's host can run, so that
-// switching a sensor on for every class never hands it to a host that cannot run it.
-func forHost(service bool, layer map[string]fileSensor) map[string]fileSensor {
+// switching a sensor on for every class never hands it to a host that cannot run it. None
+// reaches the sites class, which runs access_log alone and only as its own layers set it.
+func forHost(class string, layer map[string]fileSensor) map[string]fileSensor {
 	out := make(map[string]fileSensor, len(layer))
+	if class == SitesClass {
+		return out
+	}
+	service := class == ServiceClass
 	for name, settings := range layer {
 		if serviceSensors[name] == service {
 			out[name] = settings

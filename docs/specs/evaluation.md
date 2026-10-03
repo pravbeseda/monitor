@@ -281,7 +281,8 @@ at 12:00:
 
 Recovery has no margin and no separate trigger: `last_seen` advances on every accepted
 request ([ingest](ingest.md#storage)) — on a service node, on every stored measurement and on its first report
-([services.md](services.md)) — and the next tick reads it. Silence cannot flap,
+([services.md](services.md)), and on the sites node on every stored measurement only
+([site-traffic.md](site-traffic.md#ingest)) — and the next tick reads it. Silence cannot flap,
 because a request either arrived inside the window or did not.
 
 ### Notifications

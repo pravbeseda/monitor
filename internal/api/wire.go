@@ -49,6 +49,10 @@ type Measurement struct {
 	// node runs rather than by its own (ADR 0034); a pointer tells that silence apart from
 	// an empty name, which is refused.
 	Sensor *string `json:"sensor,omitempty"`
+	// Node names the node the reading belongs to when it is not the request's: the sites
+	// node, for a site the requesting node hosts (ADR 0045). A pointer tells it absent from
+	// empty, which is refused.
+	Node *string `json:"node,omitempty"`
 }
 
 // Response carries the configuration only when the agent's version differs from the
@@ -66,10 +70,21 @@ type AgentConfig struct {
 	Sensors     map[string]SensorConfig `json:"sensors"`
 }
 
-// SensorConfig is one sensor's slot in that configuration.
+// SensorConfig is one sensor's slot in that configuration. Beside when it runs, it may
+// carry the sensor's own parameters (ADR 0044).
 type SensorConfig struct {
 	Enabled  bool   `json:"enabled"`
 	Interval string `json:"interval"`
+	// Node is the node the sensor's measurements belong to, when not the agent's own.
+	Node string `json:"node,omitempty"`
+	// Sites are access_log's: the sites this node serves (docs/specs/site-traffic.md).
+	Sites []Site `json:"sites,omitempty"`
+}
+
+// Site is one site a host serves: the name its series carry and the path of its log.
+type Site struct {
+	Name string `json:"name"`
+	Log  string `json:"log"`
 }
 
 // ErrorBody is what every refused request answers with.

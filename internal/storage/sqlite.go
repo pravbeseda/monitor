@@ -331,18 +331,34 @@ func (s *SQLite) SaveIngest(ctx context.Context, in Ingest) (err error) {
 		return fmt.Errorf("save node %s: %w", in.Node, err)
 	}
 
+	seen := map[string]bool{}
 	for _, m := range in.Measurements {
+		owner := in.Node
+		if m.Node != "" {
+			owner = m.Node
+			if !seen[owner] {
+				seen[owner] = true
+				// A node another reports for has no agent of its own: storing its measurement
+				// is what sees it, and nothing else of it is the reporter's to set (ADR 0045).
+				_, err = tx.ExecContext(ctx, insertNode+`
+					ON CONFLICT(node) DO UPDATE SET last_seen = excluded.last_seen`,
+					owner, formatTime(in.ReceivedAt), "", "", "[]")
+				if err != nil {
+					return fmt.Errorf("save node %s: %w", owner, err)
+				}
+			}
+		}
 		var labels string
 		if labels, err = encodeLabels(m.Labels); err != nil {
-			return fmt.Errorf("measurement %s of %s: %w", m.Metric, in.Node, err)
+			return fmt.Errorf("measurement %s of %s: %w", m.Metric, owner, err)
 		}
 		_, err = tx.ExecContext(ctx, `
 			INSERT INTO measurements (node, metric, labels, ts, value)
 			VALUES (?, ?, ?, ?, ?)
 			ON CONFLICT DO NOTHING`,
-			in.Node, m.Metric, labels, formatTime(m.TS), m.Value)
+			owner, m.Metric, labels, formatTime(m.TS), m.Value)
 		if err != nil {
-			return fmt.Errorf("save measurement %s of %s: %w", m.Metric, in.Node, err)
+			return fmt.Errorf("save measurement %s of %s: %w", m.Metric, owner, err)
 		}
 		// The series carries the newest timestamp it holds, and only ever forwards: a
 		// measurement arriving late is stored, but it is not what the series last
@@ -355,9 +371,9 @@ func (s *SQLite) SaveIngest(ctx context.Context, in Ingest) (err error) {
 			ON CONFLICT (metric, node, labels) DO UPDATE SET
 				sensor  = CASE WHEN excluded.last_ts > last_ts THEN excluded.sensor ELSE sensor END,
 				last_ts = MAX(last_ts, excluded.last_ts)`,
-			m.Metric, in.Node, labels, formatTime(m.TS), m.Sensor)
+			m.Metric, owner, labels, formatTime(m.TS), m.Sensor)
 		if err != nil {
-			return fmt.Errorf("save series %s of %s: %w", m.Metric, in.Node, err)
+			return fmt.Errorf("save series %s of %s: %w", m.Metric, owner, err)
 		}
 	}
 
