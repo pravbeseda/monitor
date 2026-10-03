@@ -2,6 +2,9 @@ package weblog_test
 
 import (
 	"compress/gzip"
+	"context"
+	"errors"
+	"fmt"
 	"os"
 	"path/filepath"
 	"slices"
@@ -209,7 +212,7 @@ func TestOpenNamesAMissingLog(t *testing.T) {
 func readBack(t *testing.T, back *weblog.Back, since time.Time) ([]string, time.Time) {
 	t.Helper()
 	var got []string
-	reached, err := back.Read(since, func(r weblog.Request) {
+	reached, err := back.Read(context.Background(), since, func(r weblog.Request) {
 		got = append(got, strings.TrimPrefix(r.Target, "/"))
 	})
 	if err != nil {
@@ -357,4 +360,48 @@ func TestReadBackReadsTheCopyOfALogTruncatedMeanwhile(t *testing.T) {
 	}
 	got, _ := readBack(t, b, clock.Add(-24*time.Hour))
 	same(t, got, "a")
+}
+
+// spec: site-traffic.md#rotation — a log truncated in place and grown back past the point
+// read before the next read is still seen as truncated: its copy past that point, then the
+// file from its start.
+func TestTailFollowsCopyTruncateThatRegrewPastThePoint(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "access.log")
+	appendTo(t, path, logLine("before", clock))
+	tail := open(t, path)
+	appendTo(t, path, logLine("copied", clock))
+	content, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(path+".1", content, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Truncate(path, 0); err != nil {
+		t.Fatal(err)
+	}
+	var burst []string
+	var text strings.Builder
+	for i := range 5 {
+		name := fmt.Sprintf("burst-%d", i)
+		burst = append(burst, name)
+		text.WriteString(logLine(name, clock))
+	}
+	appendTo(t, path, text.String())
+	same(t, read(t, tail), append([]string{"copied"}, burst...)...)
+}
+
+// spec: site-traffic.md#rotation — reading back stops as soon as it is told to.
+func TestReadBackStopsWhenCancelled(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "access.log")
+	appendTo(t, path, logLine("a", clock.Add(-2*time.Hour))+logLine("b", clock.Add(-time.Hour)))
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+	var got []string
+	if _, err := back(t, path).Read(ctx, clock.Add(-24*time.Hour), func(r weblog.Request) {
+		got = append(got, r.Target)
+	}); !errors.Is(err, context.Canceled) {
+		t.Fatalf("error %v, want the cancellation", err)
+	}
+	same(t, got)
 }

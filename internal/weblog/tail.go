@@ -4,6 +4,7 @@ import (
 	"bufio"
 	"bytes"
 	"compress/gzip"
+	"context"
 	"errors"
 	"fmt"
 	"io"
@@ -28,6 +29,29 @@ type Tail struct {
 type followed struct {
 	file   *os.File
 	offset int64
+	// head is the file's first line as last seen: a truncation the file has grown back
+	// past by the next read changes it, where the size alone no longer tells.
+	head []byte
+}
+
+// headSpan is how much of the first line is compared: enough to hold its timestamp.
+const headSpan = 256
+
+// truncated reports whether the file no longer begins as it did. The first call only
+// remembers how it begins, once it holds a complete line.
+func (f *followed) truncated() (bool, error) {
+	buf := make([]byte, headSpan)
+	n, err := f.file.ReadAt(buf, 0)
+	if err != nil && !errors.Is(err, io.EOF) {
+		return false, err
+	}
+	if f.head == nil {
+		if end := bytes.IndexByte(buf[:n], '\n'); end >= 0 {
+			f.head = append([]byte(nil), buf[:end+1]...)
+		}
+		return false, nil
+	}
+	return !bytes.HasPrefix(buf[:n], f.head), nil
 }
 
 // Back reads what was logged before a tail started. It holds the log through a descriptor
@@ -55,8 +79,13 @@ func Open(path string) (*Tail, *Back, error) {
 		_ = file.Close()
 		return nil, nil, fmt.Errorf("open %s: %w", path, err)
 	}
-	return &Tail{path: path, cur: &followed{file: file, offset: end}},
-		&Back{path: path, file: back, end: end}, nil
+	cur := &followed{file: file, offset: end}
+	if _, err := cur.truncated(); err != nil {
+		_ = file.Close()
+		_ = back.Close()
+		return nil, nil, fmt.Errorf("read %s: %w", path, err)
+	}
+	return &Tail{path: path, cur: cur}, &Back{path: path, file: back, end: end}, nil
 }
 
 // Close releases every file the tail holds.
@@ -96,6 +125,12 @@ func (t *Tail) Read(each func(line string)) error {
 		return err
 	}
 
+	cut := named.Size() < t.cur.offset
+	if !cut {
+		if cut, err = t.cur.truncated(); err != nil {
+			return err
+		}
+	}
 	switch {
 	case !os.SameFile(named, held):
 		if _, err := t.cur.drain(each); err != nil {
@@ -109,13 +144,13 @@ func (t *Tail) Read(each func(line string)) error {
 			_ = t.old.file.Close()
 		}
 		t.old, t.cur = t.cur, &followed{file: next}
-	case named.Size() < t.cur.offset:
+	case cut:
 		// Truncated in place: what was appended before the copy is in <log>.1 past the
 		// point already read.
 		if err := readCopied(t.path+".1", t.cur.offset, each); err != nil {
 			return err
 		}
-		t.cur.offset = 0
+		t.cur.offset, t.cur.head = 0, nil
 	}
 	_, err = t.cur.drain(each)
 	return err
@@ -155,10 +190,13 @@ func readCopied(path string, from int64, each func(line string)) error {
 // until one begins at or before since. That last one, when plain, is searched for the point
 // rather than read whole. It returns how far back the files reached: since itself, the
 // first time of the oldest one when they all begin after it, or zero when none holds a
-// request.
-func (b *Back) Read(since time.Time, each func(Request)) (time.Time, error) {
+// request. It stops, returning the context's error, once ctx is done.
+func (b *Back) Read(ctx context.Context, since time.Time, each func(Request)) (time.Time, error) {
 	defer b.Close()
 	keep := func(line string) bool {
+		if ctx.Err() != nil {
+			return false
+		}
 		if r, ok := Parse(line); ok && r.Time.After(since) {
 			each(r)
 		}
@@ -184,6 +222,9 @@ func (b *Back) Read(since time.Time, each func(Request)) (time.Time, error) {
 		source, next = copied, 2
 	}
 	first, err := readPlain(source, b.end, since, keep)
+	if err == nil {
+		err = ctx.Err()
+	}
 	if err != nil || reaches(first, since) {
 		return reachedBy(first, since), err
 	}
@@ -204,6 +245,9 @@ func (b *Back) Read(since time.Time, each func(Request)) (time.Time, error) {
 		_ = file.Close()
 		if err != nil {
 			return reached, fmt.Errorf("read %s: %w", file.Name(), err)
+		}
+		if err := ctx.Err(); err != nil {
+			return reached, err
 		}
 		if reaches(first, since) {
 			return since, nil

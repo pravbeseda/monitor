@@ -39,7 +39,7 @@ type Sensor struct {
 	// out when it ends.
 	closeAfter atomic.Bool
 
-	readBack func(b *weblog.Back, since time.Time, each func(weblog.Request)) (time.Time, error)
+	readBack func(ctx context.Context, b *weblog.Back, since time.Time, each func(weblog.Request)) (time.Time, error)
 	backs    sync.WaitGroup
 }
 
@@ -47,6 +47,8 @@ type site struct {
 	log  string
 	tail *weblog.Tail
 	last time.Time
+	// stop ends the site's reading back: once it is dropped, nothing more is read for it.
+	stop context.CancelFunc
 
 	// mu guards the aggregators, which reading back feeds beside the collections.
 	mu       sync.Mutex
@@ -63,7 +65,9 @@ func New(sites func() []Site, now func() time.Time) *Sensor {
 		sites:    sites,
 		now:      now,
 		followed: map[string]*site{},
-		readBack: (*weblog.Back).Read,
+		readBack: func(ctx context.Context, b *weblog.Back, since time.Time, each func(weblog.Request)) (time.Time, error) {
+			return b.Read(ctx, since, each)
+		},
 	}
 }
 
@@ -94,9 +98,14 @@ func (s *Sensor) releaseIfAsked() {
 
 func (s *Sensor) release() {
 	for name, st := range s.followed {
-		st.tail.Close()
+		st.drop()
 		delete(s.followed, name)
 	}
+}
+
+func (st *site) drop() {
+	st.stop()
+	st.tail.Close()
 }
 
 // Collect reads what each site's log gained since the previous collection. A site whose log
@@ -146,7 +155,7 @@ func (s *Sensor) forget(wanted []Site) {
 	}
 	for name, st := range s.followed {
 		if log, ok := logs[name]; !ok || log != st.log {
-			st.tail.Close()
+			st.drop()
 			delete(s.followed, name)
 		}
 	}
@@ -160,7 +169,8 @@ func (s *Sensor) follow(want Site, now time.Time) error {
 		return err
 	}
 	interval, windows := weblog.Aggregators()
-	st := &site{log: want.Log, tail: tail, last: now, interval: interval, windows: windows}
+	ctx, stop := context.WithCancel(context.Background())
+	st := &site{log: want.Log, tail: tail, last: now, stop: stop, interval: interval, windows: windows}
 	s.followed[want.Name] = st
 
 	var reach time.Duration
@@ -169,7 +179,8 @@ func (s *Sensor) follow(want Site, now time.Time) error {
 	}
 	since := now.Add(-reach)
 	s.backs.Go(func() {
-		reached, err := s.readBack(back, since, func(r weblog.Request) {
+		defer stop()
+		reached, err := s.readBack(ctx, back, since, func(r weblog.Request) {
 			st.mu.Lock()
 			defer st.mu.Unlock()
 			// Each window takes only its own span, so the hour of response times is never
@@ -180,6 +191,9 @@ func (s *Sensor) follow(want Site, now time.Time) error {
 				}
 			}
 		})
+		if errors.Is(err, context.Canceled) {
+			return
+		}
 		if err != nil {
 			slog.Error("read back an access log", "site", want.Name, "log", want.Log, "error", err)
 		}

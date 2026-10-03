@@ -120,7 +120,7 @@ func TestFirstCollectionReadsBack(t *testing.T) {
 // counting from the end of the log as reading back found it.
 func TestReadingBackStillRunning(t *testing.T) {
 	r := newRig(t, "blog-a")
-	release := r.sensor.HoldReadBack()
+	release, _ := r.sensor.HoldReadBack()
 	defer release()
 	r.settled(0)
 	appendTo(t, r.path("blog-a"), logLine("/", 404, start))
@@ -344,5 +344,20 @@ func TestCloseReleasesTheLogs(t *testing.T) {
 	s.WaitReadBack()
 	if got, err := s.Collect(context.Background()); len(got) != 0 || err != nil {
 		t.Fatalf("after a deferred Close the site reported %v (%v), want it read anew", got, err)
+	}
+}
+
+// spec: site-traffic.md#rotation — a site moved away while reading back runs: nothing more
+// is read for it.
+func TestASiteMovedAwayStopsReadingBack(t *testing.T) {
+	r := newRig(t, "blog-a")
+	appendTo(t, r.path("blog-a"), logLine("/", 200, start.Add(-time.Hour)))
+	release, handed := r.sensor.HoldReadBack()
+	r.settled(0)
+	r.sites = nil
+	r.settled(5 * time.Minute)
+	release()
+	if n := handed(); n != 0 {
+		t.Fatalf("reading back handed over %d requests of a site moved away, want none", n)
 	}
 }

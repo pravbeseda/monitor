@@ -241,7 +241,8 @@ The agent's clock reads 12:00:00, in UTC.
 | the renamed file compressed and deleted while held open | the rest of it still read through the open file |
 | two rotations between collections | the file the sensor held, followed by what it is rather than by its name, and the newest; the lines of the file between them are not counted |
 | the log truncated in place (`copytruncate`), and `<log>.1` holding at least what was read | the lines `<log>.1` holds past the point read, then the file from its start |
-| a site moved away from this host | its position dropped; nothing more is read for it |
+| the log truncated in place and grown back past the point read before the next collection — a burst after a quiet day | the same: the file no longer begins as it did |
+| a site moved away from this host | its position dropped; nothing more is read for it, reading back included |
 
 ## Invariants
 
