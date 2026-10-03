@@ -29,29 +29,30 @@ type Tail struct {
 type followed struct {
 	file   *os.File
 	offset int64
-	// head is the file's first line as last seen: a truncation the file has grown back
+	// head is how the file began when last read: a truncation the file has grown back
 	// past by the next read changes it, where the size alone no longer tells.
 	head []byte
 }
 
-// headSpan is how much of the first line is compared: enough to hold its timestamp.
+// headSpan is how much of the file's start is compared: enough to hold the first line's
+// timestamp, whatever the length of that line.
 const headSpan = 256
 
-// truncated reports whether the file no longer begins as it did. The first call only
-// remembers how it begins, once it holds a complete line.
+// truncated reports whether the file no longer begins as it did. A log only grows, so a
+// beginning shorter than headSpan is extended as the file grows past it.
 func (f *followed) truncated() (bool, error) {
 	buf := make([]byte, headSpan)
 	n, err := f.file.ReadAt(buf, 0)
 	if err != nil && !errors.Is(err, io.EOF) {
 		return false, err
 	}
-	if f.head == nil {
-		if end := bytes.IndexByte(buf[:n], '\n'); end >= 0 {
-			f.head = append([]byte(nil), buf[:end+1]...)
-		}
-		return false, nil
+	if !bytes.HasPrefix(buf[:n], f.head) {
+		return true, nil
 	}
-	return !bytes.HasPrefix(buf[:n], f.head), nil
+	if len(f.head) < n {
+		f.head = append([]byte(nil), buf[:n]...)
+	}
+	return false, nil
 }
 
 // Back reads what was logged before a tail started. It holds the log through a descriptor

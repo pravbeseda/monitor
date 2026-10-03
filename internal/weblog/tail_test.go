@@ -364,9 +364,18 @@ func TestReadBackReadsTheCopyOfALogTruncatedMeanwhile(t *testing.T) {
 
 // spec: site-traffic.md#rotation — a log truncated in place and grown back past the point
 // read before the next read is still seen as truncated: its copy past that point, then the
-// file from its start.
+// file from its start, however long its lines are.
 func TestTailFollowsCopyTruncateThatRegrewPastThePoint(t *testing.T) {
+	for name, padding := range map[string]int{"short lines": 0, "lines longer than the head": 400} {
+		t.Run(name, func(t *testing.T) { regrowAfterCopyTruncate(t, padding) })
+	}
+}
+
+func regrowAfterCopyTruncate(t *testing.T, padding int) {
 	path := filepath.Join(t.TempDir(), "access.log")
+	logLine := func(name string, at time.Time) string {
+		return strings.Replace(logLine(name, at), browser, browser+strings.Repeat("x", padding), 1)
+	}
 	appendTo(t, path, logLine("before", clock))
 	tail := open(t, path)
 	appendTo(t, path, logLine("copied", clock))
