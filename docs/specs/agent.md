@@ -59,6 +59,8 @@ One row = one test. Anchors: `spec: agent.md#<heading>`.
 | a sensor disabled by the configuration | tick | it is not called, whatever its interval |
 | no sensor is due | tick | a request with an empty batch — the heartbeat of [0002](../decisions/0002-push-not-pull.md) |
 | a sensor returns an error | tick | the error is logged, the other sensors still post |
+| a sensor returns measurements and an error — one of the things it reads failed | tick | the error is logged and the measurements post |
+| a sensor whose configuration entry names a `node` | tick | each of its measurements posts with that `node` ([site-traffic.md](site-traffic.md#the-file)) |
 | a sensor that does not answer within half the base tick | tick | its collection is abandoned and logged; the tick goes on without it |
 | a sensor's interval changes | next tick | it is measured from the sensor's last collection, not from the change |
 | the node slept through all or part of a sensor's interval | the first tick that starts once the interval has passed by the clock | it collects: the time asleep counts toward the interval |

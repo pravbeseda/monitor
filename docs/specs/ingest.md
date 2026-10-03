@@ -9,7 +9,8 @@
   [0022](../decisions/0022-updates-are-pulled.md),
   [0028](../decisions/0028-agents-follow-a-target-the-hub-serves.md),
   [0033](../decisions/0033-a-subject-is-a-series.md),
-  [0034](../decisions/0034-a-series-without-a-sensor-still-ages.md)
+  [0034](../decisions/0034-a-series-without-a-sensor-still-ages.md),
+  [0045](../decisions/0045-sites-are-a-node-their-hosts-report-for.md)
 
 ## Purpose
 
@@ -70,6 +71,11 @@ Authorization: Bearer <per-node token>
   measurement that carries none is stored and charted like any other, and its series ages
   by the longest interval among the sensors its node runs
   ([evaluation](evaluation.md#freezing)).
+- a measurement's `node` — optional — names the node it belongs to; absent, it is the
+  request's. Another node is accepted only as the sites node, and a measurement of a site
+  the requesting node does not host is dropped
+  ([site-traffic.md](site-traffic.md#ingest)).
+  The sites node is seen when one of its measurements is stored, never by the request itself.
 - `metric` ids match `[a-z0-9_.]+`, and a `sensor` name matches the same pattern; `value`
   is a finite JSON number; `labels` is a flat string-to-string map.
 - Unknown JSON fields are ignored, so an older hub accepts a newer agent's request.
@@ -96,8 +102,11 @@ Authorization: Bearer <per-node token>
 - The config is the **flat, resolved** result of the layering
   (sensor default → node class → node → sensor): the hub resolves layers, the agent
   applies what it receives and never merges anything.
-- The config carries only what the agent acts on: tick, sensor selection, intervals,
-  filesystem allow-list, and the mount prefixes to skip. Thresholds are not in it — they
+- A sensor's entry may carry parameters of its own, and `node`, the node its measurements
+  belong to ([0044](../decisions/0044-a-sensor-takes-its-parameters-from-the-hub.md),
+  [site-traffic.md](site-traffic.md#the-file)).
+- The config carries only what the agent acts on: tick, sensor selection, intervals and
+  parameters, filesystem allow-list, and the mount prefixes to skip. Thresholds are not in it — they
   are stored on the hub, entered on its page
   ([0032](../decisions/0032-thresholds-are-set-in-the-interface.md)), and the agent has no
   use for them.
@@ -114,6 +123,7 @@ One row = one test. Anchors: `spec: ingest.md#<heading>`.
 | no `Authorization` header | 401 | nothing stored |
 | token unknown to the hub | 401 | nothing stored |
 | valid token, `node` ≠ token's node | 403 | nothing stored |
+| valid token, a measurement's `node` naming another node than the token's or the sites node | 403 | nothing stored ([site-traffic.md](site-traffic.md#ingest)) |
 | valid token, matching `node` | proceeds to validation | — |
 
 ### Validation
@@ -126,6 +136,7 @@ One row = one test. Anchors: `spec: ingest.md#<heading>`.
 | a measurement missing `metric` or `value`, or `value` not a finite number | 400 | nothing stored |
 | `metric` id not matching `[a-z0-9_.]+` | 400 | nothing stored |
 | a measurement `sensor` that is not a string, or a string not matching `[a-z0-9_.]+` | 400 | nothing stored |
+| a measurement `node` that is not a string, or is empty | 400 | nothing stored |
 | body larger than 1 MiB | 413 | nothing stored |
 | one invalid measurement in a batch | 400 | **whole request** rejected, nothing stored |
 
@@ -133,7 +144,7 @@ One row = one test. Anchors: `spec: ingest.md#<heading>`.
 
 | Request | Response | Side effect |
 |---|---|---|
-| valid request | 200 | all measurements stored; node's last-seen set to hub receipt time; node's agent version replaced by the request's |
+| valid request | 200 | all measurements stored, but the sites node's for a site the node does not host ([site-traffic.md](site-traffic.md#ingest)); node's last-seen set to hub receipt time; node's agent version replaced by the request's |
 | valid request, `measurements` empty | 200 | no measurements stored; the node updated as for any valid request |
 | a service node's report in process, `measurements` empty | — | no measurements stored and last-seen left alone, unless the hub has no record of the node yet: then it is recorded as an empty request would be; its agent version, configuration version and manifest are updated either way ([services.md](services.md#the-file-and-the-environment)) |
 | measurement with a metric id the hub has never seen | 200 | stored; it is listed and charted like any other series, and has no level until a threshold is set for it ([evaluation](evaluation.md#model)) |
@@ -189,7 +200,10 @@ installer resolves it ([installer.md](installer.md#answering-a-follow-run-for-th
 
 ## Invariants
 
-- Nothing is stored unless the response is 200: a request is atomic.
+- Nothing is stored unless the response is 200: a request is atomic. The one measurement a
+  200 leaves out is the sites node's for a site the requesting node does not host, which is
+  dropped so that the host still receives its new configuration
+  ([site-traffic.md](site-traffic.md#ingest)).
 - Every 200 from `/api/v1/ingest` advances the node's last-seen, measurements or not —
   arrival of an agent's request is what "the agent is alive" means. A node's updater asking
   for its target says nothing about its agent, and advances nothing. A service node, which

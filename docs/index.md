@@ -67,6 +67,8 @@ One decision per file, each stating what was rejected and why. New records start
 | [0041](decisions/0041-mission-control-folds-into-the-timeline.md) | Mission control folds into the timeline, which becomes the primary view | accepted |
 | [0042](decisions/0042-an-anomalys-start-and-end-are-recorded.md) | An anomaly's start and end are recorded by the evaluation tick | accepted |
 | [0043](decisions/0043-the-hub-hosts-backup-belongs-to-its-provisioning.md) | The hub host's backup belongs to its provisioning; the repository states what it must keep | accepted |
+| [0044](decisions/0044-a-sensor-takes-its-parameters-from-the-hub.md) | A sensor takes its parameters from the hub, in its entry of the configuration | accepted |
+| [0045](decisions/0045-sites-are-a-node-their-hosts-report-for.md) | Sites are a node of their own, which the agent of each site's host reports for | accepted |
 
 ## Behaviour specs
 
@@ -84,6 +86,7 @@ can see ([ADR 0017](decisions/0017-one-spec-and-decision-gates.md)). New specs s
 | [services.md](specs/services.md) | Service nodes the hub collects itself, when one falls silent, and the Google Drive sensor | approved |
 | [host-sensors.md](specs/host-sensors.md) | The load, memory, uptime and failed-units sensors: what each reads on Linux and macOS, and the metrics it reports | approved |
 | [timemachine-sensor.md](specs/timemachine-sensor.md) | The Time Machine sensor: where a Mac's backup dates are read from, and the age it reports per destination | approved |
+| [site-traffic.md](specs/site-traffic.md) | Web sites' traffic, errors, response time and page views, read from each site's access log by its host's agent and reported for the sites node | approved |
 | [agent.md](specs/agent.md) | The agent: local configuration, tick loop, delivery and configuration application | approved |
 | [evaluation.md](specs/evaluation.md) | Levels, hysteresis, the event log, silence, digests and the notifier boundary | approved |
 | [history.md](specs/history.md) | The history series, `/api/v1/series`, `/api/v1/history` and the drill-down page | approved |
@@ -123,6 +126,7 @@ Reasoning from working sessions, including options that were rejected.
 | [2026-09-28](log/2026-09-28-silence-after-a-restart.md) | Silence after the hub restarts: why a grace window after every start was dropped for leaving out the hub's own outages |
 | [2026-09-29](log/2026-09-29-anomaly-log.md) | Anomalies in the log: where an anomaly ends, why a table of its own, and why a stale series holds one |
 | [2026-09-30](log/2026-09-30-time-machine.md) | Time Machine: why it needs no parameter, why not `tmutil`, one series per destination, and what fails per destination |
+| [2026-10-03](log/2026-10-03-site-traffic.md) | Site traffic: why access logs rather than a counter, why page views over a sliding day, and whose node a site is |
 
 ## Not written yet
 
