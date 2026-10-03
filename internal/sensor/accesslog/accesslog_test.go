@@ -55,7 +55,11 @@ func newRig(t *testing.T, names ...string) *rig {
 		appendTo(t, r.path(name), "")
 	}
 	r.sensor = accesslog.New(func() []accesslog.Site { return r.sites }, func() time.Time { return r.clock })
-	t.Cleanup(r.sensor.Close)
+	// Reading back left running would log into the next test's capture.
+	t.Cleanup(func() {
+		r.sensor.WaitReadBack()
+		r.sensor.Close()
+	})
 	return r
 }
 
@@ -324,7 +328,10 @@ func TestCloseReleasesTheLogs(t *testing.T) {
 		}
 		return sites
 	}, func() time.Time { return r.clock })
-	t.Cleanup(s.Close)
+	t.Cleanup(func() {
+		s.WaitReadBack()
+		s.Close()
+	})
 	done := make(chan struct{})
 	go func() {
 		_, _ = s.Collect(context.Background())
