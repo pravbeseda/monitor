@@ -45,23 +45,23 @@ func unusualRoot() stored {
 	}
 }
 
-// spec: state.md#page — a series with an anomaly rank is marked unusual beside its usual
-// value; one within its band is not.
+// spec: state.md#page — a series with an anomaly rank is marked unusual in its cell beside
+// its usual value; one within its band is not.
 func TestDebugMarksAnUnusualSeries(t *testing.T) {
 	body := showDebug(t, unusualRoot(), "/debug")
-	if row := rowOf(t, body, "disk.free_bytes", "/"); !strings.Contains(row, "unusual, usually 40.0 GB") {
-		t.Errorf("row of / = %s, want it marked unusual beside its usual 40.0 GB", row)
+	if cell := cellOf(t, body, "disk.free_bytes", "/"); !strings.Contains(cell, "unusual, usually 40.0 GB") {
+		t.Errorf("cell of / = %s, want it marked unusual beside its usual 40.0 GB", cell)
 	}
-	if row := rowOf(t, body, "disk.free_bytes", "/data"); strings.Contains(row, "unusual") {
-		t.Errorf("row of /data = %s, want no mark", row)
+	if cell := cellOf(t, body, "disk.free_bytes", "/data"); strings.Contains(cell, "unusual") {
+		t.Errorf("cell of /data = %s, want no mark", cell)
 	}
 }
 
 // spec: state.md#page — the mark in Russian.
 func TestDebugMarksAnUnusualSeriesInRussian(t *testing.T) {
 	body := showDebug(t, unusualRoot(), "/debug?lang=ru")
-	if row := rowOf(t, body, "disk.free_bytes", "/"); !strings.Contains(row, "необычно, обычно 40") {
-		t.Errorf("row of / = %s, want the Russian mark", row)
+	if cell := cellOf(t, body, "disk.free_bytes", "/"); !strings.Contains(cell, "необычно, обычно 40") {
+		t.Errorf("cell of / = %s, want the Russian mark", cell)
 	}
 }
 

@@ -210,21 +210,28 @@ staleness still has an answer — the node's longest sensor interval
 | a series with a two-day silence inside a seven-day window | the line broken across the gap, not drawn straight through it |
 | a query the endpoint refuses, or a read that fails | the same status the endpoint answers, as a translated page |
 | a value on `/debug` | a link to the history page of its series, carrying the node, the metric and every label |
-| any series on `/debug` | one row of its own: its metric id, what its labels name, if anything, its newest value and the time it was collected |
+| a series on `/debug` without labels | one row of its own: its metric id, its newest value and the time it was collected, in one table above the node's matrices, ordered by metric id |
+| the labelled series of one node | matrices, one per label key set and family — the part of the metric id before its first dot, all of it when the id has no dot: a row per label set, named by what its labels name, and a column per metric that a series shown in it carries, each cell holding the newest value of that series, linked to its chart. One volume's two series make a matrix of one row, two sites' five series one of two rows |
+| a label set without a metric its matrix carries, or whose series of that metric is left out | a dash in that cell |
+| a label set whose every series is left out | no row; a matrix left with no row is not shown |
+| a matrix | its family in the corner above its names, and its columns ordered by metric id, each headed by the id less its family and the dot — `requests_per_min` under `site`; the whole id on hover. An id with no dot is a family of its own: the corner left empty, its column headed by the whole id |
+| the matrices of one node | ordered by family, then by label keys; the rows of each by the name a [message](evaluation.md#messages) gives their series — a volume's filesystem not counted — then by their labels as [state](state.md#ordering) compares them; the grouping and the order are the page's own, since the State API privileges no label |
 | what the labels name, on `/debug`, the chart and the [thresholds](thresholds.md) form | the name a [message](evaluation.md#messages) gives the series — a mount point as itself, any other label as `key=value`, quoted when it carries a space or an `=` — then a volume's filesystem and, if it is removable, that it is. Two sites, `site=blog-a` and `site=shop-c`, never read alike |
-| a volume | two rows, one per series, since each is judged on its own ([0033](../decisions/0033-a-subject-is-a-series.md)) |
-| any row | a link to the page that sets what that series is judged by ([thresholds.md](thresholds.md)) |
-| the series of one volume collected at different times | each row its own time, and each left out or marked by its own age: no series is aged by another series' newest point |
-| the rows of one node | grouped so that the series of one volume sit together, and ordered by metric inside the group; the grouping is the page's own, since the [State API](state.md#ordering) privileges no label |
-| a row on `/debug` that the [state](state.md#staleness) calls stale when the page is read — its newest point older than three times the interval its series is aged by, or its node silent past its `silence_after` — and that carries `removable: "true"` | not shown: an unplugged drive or an ejected disk image is not a reading |
+| a row of its own | a link to the page that sets what that series is judged by ([thresholds.md](thresholds.md)) |
+| a cell of a matrix | no such link: the chart its value links to carries one, and the line shown when nothing is watched ([state](state.md#page)) says to open a series |
+| a chart of one series | a link to the page that sets what that series is judged by, in the reader's language |
+| a row of a matrix | the newest time among the series it shows; each cell's own time on hover |
+| the series of one volume collected at different times | each left out or marked by its own age: no series is aged by another series' newest point |
+| a series on `/debug` that the [state](state.md#staleness) calls stale when the page is read — its newest point older than three times the interval its series is aged by, or its node silent past its `silence_after` — and that carries `removable: "true"` | not shown: an unplugged drive or an ejected disk image is not a reading |
 | the same, without `removable: "true"` | shown, its collected time marked, in the reader's language, as holding no fresh data |
-| a row on `/debug` exactly three intervals old | shown unmarked: the bound is inclusive, as for gaps |
-| that row reporting again | shown as before, unmarked |
+| the same, in a matrix | its cell marked, in the reader's language, as holding no fresh data; when every series a matrix row shows is stale, the row's time marked once instead and its cells unmarked |
+| a series on `/debug` exactly three intervals old | shown unmarked: the bound is inclusive, as for gaps |
+| that series reporting again | shown as before, unmarked |
 | a series whose newest value names no sensor | aged by the longest interval among the sensors its node runs ([state](state.md#staleness)): marked, or hidden if it is removable, once past that bound |
 | the same series once its node is silent past its `silence_after` | marked with the rest of that node's series: silence is the node's, not the series' |
 | a series whose node runs its sensor no longer — resolved `enabled: false`, or a node the file no longer names | marked as holding no fresh data, or hidden if it is removable: nothing will refresh it |
 | a node silent past its `silence_after`, its series not yet three intervals old | its series hidden or marked already: evaluation freezes a silent node's subjects in the tick it falls silent |
-| a node whose every series is left out | "no current measurements" in place of its table, rather than the "no measurements yet" of a node that never sent one |
+| a node whose every series is left out | "no current measurements" in place of its tables, rather than the "no measurements yet" of a node that never sent one |
 | a node still reporting but sending no measurements — its mount table unreadable | its series age like any other and are hidden or marked once past the bound |
 | any chart page | the tabs ([web](web.md#skins)), the table of every series among them |
 | `&lang=ru` | axis labels, dates, byte sizes and percentages in Russian |

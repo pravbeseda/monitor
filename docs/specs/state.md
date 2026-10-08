@@ -217,25 +217,26 @@ Names and labels are compared byte by byte; labels are rendered as history rende
 | List | Order |
 |---|---|
 | `nodes` | by node |
-| `subjects` | by node, then metric, then labels; a node's silence subject comes first. No label is privileged: the core does not know `mount` is about disks ([0033](../decisions/0033-a-subject-is-a-series.md)), and grouping a volume's two rows together is `/debug`'s own rendering ([history](history.md#page)) |
+| `subjects` | by node, then metric, then labels; a node's silence subject comes first. No label is privileged: the core does not know `mount` is about disks ([0033](../decisions/0033-a-subject-is-a-series.md)), and gathering a volume's series into one matrix row is `/debug`'s own rendering ([history](history.md#page)) |
 
 ### The debug view {#page}
 
 | Request | What the reader sees |
 |---|---|
-| `/debug` | beside every series row, its level in the reader's language |
+| `/debug` | beside every series shown in a row of its own, its level in the reader's language |
+| a series in a matrix ([history](history.md#page)) | its value marked by its level, `ok` too, so that it looks unlike a series with no level; `warning` or `critical` also named beside it in the reader's language, and any level, or that there is none, on hover |
 | a hub where nothing is watched | a line above the tables, in the reader's language, saying that nothing here is being judged and where to set a threshold |
 | a node some of whose series are unwatched | how many, beside the node's name |
 | series at `ok`, `warning` and `critical` | each of the three marked differently from the other two |
-| a series with no level | a dash in place of the level |
-| a node whose level is `warning` or `critical` | that level beside the node's name, marked as a row at that level is |
+| a series with no level | a dash in place of the level; in a matrix, its value unmarked |
+| a node whose level is `warning` or `critical` | that level beside the node's name, marked as a series at that level is |
 | a node whose level is `ok` or `null` | nothing beside its name |
 | a node whose silence subject is `critical` | the node marked silent in the reader's language, beside its last-seen time |
-| a stale series still shown | its level beside the "no fresh data" mark |
-| a series with an anomaly rank | marked as unusual in the reader's language, with its usual value — the norm — in its unit, so the series the timeline's "now" leaves off past its fifth anomaly can be found ([attention.md](attention.md#order)) |
+| a stale series still shown | its level kept: beside the "no fresh data" mark in a row of its own, on its value in a matrix, whether the mark is on its cell or on its matrix row's time |
+| a series with an anomaly rank | marked as unusual in the reader's language, in its row or its cell, with its usual value — the norm — in its unit, so the series the timeline's "now" leaves off past its fifth anomaly can be found ([attention.md](attention.md#order)) |
 | a series with an anomaly and no rank | no mark: it is not unusual ([anomaly](anomaly.md#model)) |
 | `/debug` | the tabs, the timeline among them ([web](web.md#skins)) |
-| `/debug?lang=ru` | every level word and the silent mark in Russian, the language kept on every link |
+| `/debug?lang=ru` | every level word, on hover too, every mark and the silent mark in Russian, the language kept on every link |
 
 ## Invariants
 

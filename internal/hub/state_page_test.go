@@ -73,18 +73,6 @@ func silenceLevel(node, name string) storage.State {
 	}
 }
 
-// rowOf is the table row of one series of one volume.
-func rowOf(t *testing.T, body, metric, mount string) string {
-	t.Helper()
-	for _, row := range regexp.MustCompile(`(?s)<tr>.*?</tr>`).FindAllString(body, -1) {
-		if strings.Contains(row, "<td>"+metric+"</td>") && strings.Contains(row, "<td>"+mount+" · ") {
-			return row
-		}
-	}
-	t.Fatalf("no %s row for %s in %s", metric, mount, body)
-	return ""
-}
-
 // headingOf is the heading of one node.
 func headingOf(t *testing.T, body, node string) string {
 	t.Helper()
@@ -97,8 +85,8 @@ func headingOf(t *testing.T, body, node string) string {
 
 var levelClass = regexp.MustCompile(`class="level-(ok|warning|critical)"`)
 
-// spec: state.md#page — every series row carries its level, and the three levels are marked
-// apart.
+// spec: state.md#page — a series in a matrix has its value marked by its level, ok too, the
+// three marked apart, warning and critical named beside it and any level on hover.
 func TestPageShowsTheLevelOfEverySeries(t *testing.T) {
 	values := append(pair(mounted("/"), lastSeen), pair(mounted("/data"), lastSeen)...)
 	values = append(values, pair(mounted("/scratch"), lastSeen)...)
@@ -118,18 +106,21 @@ func TestPageShowsTheLevelOfEverySeries(t *testing.T) {
 
 	marks := map[string]string{}
 	for mount, want := range map[string]string{"/": "ok", "/data": "warning", "/scratch": "critical"} {
-		row := rowOf(t, body, "disk.free_bytes", mount)
-		if !strings.Contains(row, ">"+want+"<") {
-			t.Errorf("row of %s = %s, want the word %q", mount, row, want)
+		cell := cellOf(t, body, "disk.free_bytes", mount)
+		if !strings.Contains(cell, `title="`+want+` · `) {
+			t.Errorf("cell of %s = %s, want %q on hover", mount, cell, want)
 		}
-		mark := levelClass.FindString(row)
+		if named := strings.Contains(cell, ">"+want+"<"); named != (want != "ok") {
+			t.Errorf("cell of %s = %s: the word %q beside the value is %v", mount, cell, want, named)
+		}
+		mark := levelClass.FindString(cell)
 		if mark == "" {
-			t.Errorf("row of %s carries no level mark: %s", mount, row)
+			t.Errorf("cell of %s carries no level mark: %s", mount, cell)
 		}
 		marks[mark] = mount
 		// The other series of the same volume is judged separately, and is not judged here.
-		if other := rowOf(t, body, "disk.free_pct", mount); levelClass.MatchString(other) {
-			t.Errorf("row of %s = %s, want the unwatched series of the volume to carry no level", mount, other)
+		if other := cellOf(t, body, "disk.free_pct", mount); levelClass.MatchString(other) {
+			t.Errorf("cell of %s = %s, want the unwatched series of the volume to carry no level", mount, other)
 		}
 	}
 	if len(marks) != 3 {
@@ -137,19 +128,24 @@ func TestPageShowsTheLevelOfEverySeries(t *testing.T) {
 	}
 }
 
-// spec: state.md#page — a dash where there is no level: a series nothing watches, and one
-// watched but not judged yet.
+// spec: state.md#page — no level where there is none: a series nothing watches, and one
+// watched but not judged yet; a dash in a row of its own, an unmarked value in a matrix.
 func TestPageShowsADashWithoutALevel(t *testing.T) {
+	load := storage.Value{Metric: "load.avg_15m", Sensor: "disk", Value: 1, TS: lastSeen}
 	body := showJudged(t, stored{
-		states:     []storage.NodeState{{Node: "laptop-a", LastSeen: lastSeen, Values: pair(mounted("/"), lastSeen)}},
-		thresholds: []storage.Threshold{watched("laptop-a", "disk.free_bytes", mounted("/"))},
+		states:     []storage.NodeState{{Node: "laptop-a", LastSeen: lastSeen, Values: append(pair(mounted("/"), lastSeen), load)}},
+		thresholds: []storage.Threshold{watched("laptop-a", "disk.free_bytes", mounted("/")), watched("laptop-a", "load.avg_15m", nil)},
 	}, "/")
 
 	for _, metric := range []string{"disk.free_bytes", "disk.free_pct"} {
-		// The level cell carries the dash and the link that sets what judges the series.
-		if row := rowOf(t, body, metric, "/"); !strings.Contains(row, "<td>— <a class=\"set\"") || levelClass.MatchString(row) {
-			t.Errorf("row of %s = %s, want a dash and no level", metric, row)
+		if cell := cellOf(t, body, metric, "/"); levelClass.MatchString(cell) || !strings.Contains(cell, `title="no level · `) {
+			t.Errorf("cell of %s = %s, want no level marked, and that there is none on hover", metric, cell)
 		}
+	}
+	// The level cell of a row of its own carries the dash and the link that sets what
+	// judges the series.
+	if own := ownRows(t, body)[0]; !strings.Contains(own, "<td>— <a class=\"set\"") || levelClass.MatchString(own) {
+		t.Errorf("row = %s, want a dash and no level", own)
 	}
 }
 
@@ -203,8 +199,8 @@ func TestPageMarksASilentNode(t *testing.T) {
 	}
 }
 
-// spec: state.md#page — a stale series still shows its level beside the "no fresh data"
-// mark.
+// spec: state.md#page — a stale series keeps its level, on its value in a matrix whose row's
+// time carries the "no fresh data" mark.
 func TestPageShowsTheLevelOfAStaleSeries(t *testing.T) {
 	body := showJudged(t, stored{
 		states:     []storage.NodeState{{Node: "laptop-a", LastSeen: lastSeen, Values: pair(mounted("/"), lastSeen.Add(-time.Hour))}},
@@ -212,13 +208,16 @@ func TestPageShowsTheLevelOfAStaleSeries(t *testing.T) {
 		levels:     []storage.State{level("laptop-a", "disk.free_bytes", mounted("/"), "warning")},
 	}, "/")
 
-	row := rowOf(t, body, "disk.free_bytes", "/")
-	if !strings.Contains(row, ">warning<") || !strings.Contains(row, "no fresh data") {
-		t.Errorf("row = %s, want the level beside the stale mark", row)
+	row := matrixRowOf(t, body, "/")
+	if cell := row.cells["disk.free_bytes"]; !strings.Contains(cell, `class="level-warning"`) || !strings.Contains(cell, ">warning<") {
+		t.Errorf("cell = %s, want its level kept", cell)
+	}
+	if !strings.Contains(row.collected, "no fresh data") {
+		t.Errorf("row dated %s, want it marked", row.collected)
 	}
 }
 
-// spec: state.md#page — every level word in Russian.
+// spec: state.md#page — every level word in Russian, on hover too.
 func TestPageShowsLevelsInRussian(t *testing.T) {
 	body := showJudged(t, stored{
 		states:     []storage.NodeState{{Node: "laptop-a", LastSeen: lastSeen, Values: pair(mounted("/"), lastSeen)}},
@@ -226,7 +225,10 @@ func TestPageShowsLevelsInRussian(t *testing.T) {
 		levels:     []storage.State{level("laptop-a", "disk.free_bytes", mounted("/"), "warning")},
 	}, "/?lang=ru")
 
-	if row := rowOf(t, body, "disk.free_bytes", "/"); !strings.Contains(row, ">предупреждение<") {
-		t.Errorf("row = %s, want the level in Russian", row)
+	if cell := cellOf(t, body, "disk.free_bytes", "/"); !strings.Contains(cell, ">предупреждение<") || !strings.Contains(cell, `title="предупреждение · `) {
+		t.Errorf("cell = %s, want the level in Russian", cell)
+	}
+	if cell := cellOf(t, body, "disk.free_pct", "/"); !strings.Contains(cell, `title="нет уровня · `) {
+		t.Errorf("cell = %s, want the lack of a level in Russian", cell)
 	}
 }

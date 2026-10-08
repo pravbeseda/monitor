@@ -42,6 +42,17 @@ func TestHistoryPageDrawsTheSeries(t *testing.T) {
 	}
 }
 
+// spec: history.md#page — a chart of one series links to the page that sets what judges it,
+// in the reader's language.
+func TestHistoryPageLinksToTheThresholds(t *testing.T) {
+	_, body := page(t, served{series: []seriesPoints{volume()}}, oneVolume+"&lang=ru")
+
+	want := `<a href="/thresholds?label.fs=ext4&amp;label.mount=%2F&amp;lang=ru&amp;metric=disk.free_pct&amp;node=server-b">Настроить порог</a>`
+	if !strings.Contains(body, want) {
+		t.Errorf("page does not carry %s:\n%s", want, body)
+	}
+}
+
 // spec: history.md#page — window links keep node, metric, labels and language.
 func TestHistoryPageOffersTheWindows(t *testing.T) {
 	_, body := page(t, served{series: []seriesPoints{volume()}}, oneVolume+"&window=7d&lang=ru")

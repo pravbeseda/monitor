@@ -12,7 +12,6 @@ var catalogue = map[string]map[Locale]string{
 	"node.silent":              {English: "silent", Russian: "молчит"},
 	"node.unwatched":           {English: "%d series without a threshold", Russian: "серий без порога: %d"},
 	"table.metric":             {English: "Metric", Russian: "Метрика"},
-	"table.labels":             {English: "Labels", Russian: "Метки"},
 	"table.free":               {English: "Value", Russian: "Значение"},
 	"table.level":              {English: "Level", Russian: "Уровень"},
 	"table.collected":          {English: "Collected", Russian: "Собрано"},
@@ -59,6 +58,7 @@ var catalogue = map[string]map[Locale]string{
 	"level.ok":       {English: "ok", Russian: "норма"},
 	"level.warning":  {English: "warning", Russian: "предупреждение"},
 	"level.critical": {English: "critical", Russian: "критично"},
+	"level.none":     {English: "no level", Russian: "нет уровня"},
 
 	"notify.changed":  {English: "%s: %s (was %s since %s)", Russian: "%s: %s (было %s с %s)"},
 	"notify.standing": {English: "%s: still %s since %s", Russian: "%s: по-прежнему %s с %s"},
@@ -124,6 +124,7 @@ var catalogue = map[string]map[Locale]string{
 	"history.title":   {English: "History", Russian: "История"},
 	"history.window":  {English: "Window", Russian: "Окно"},
 	"history.latest":  {English: "Latest", Russian: "Последнее значение"},
+	"history.set":     {English: "Set a threshold", Russian: "Настроить порог"},
 	"history.empty":   {English: "No data for this window", Russian: "Нет данных за это окно"},
 	"history.several": {English: "Several series answer this query", Russian: "Этому запросу отвечает несколько серий"},
 

@@ -279,6 +279,18 @@ func TestAVolumesSeriesSitTogether(t *testing.T) {
 	), "/timeline"), "disk.free_bytes · /a", "disk.free_pct · /a", "disk.free_bytes · /b", "disk.free_pct · /b")
 }
 
+// spec: attention.md#order — ordered by what the labels name, not by the label a volume's
+// filesystem sorts under.
+func TestSeriesComeByWhatTheirLabelsName(t *testing.T) {
+	onZFS := free("server-b", "/a", 1e9)
+	onZFS.Labels["fs"] = "zfs"
+	order(t, showAttention(t, stateOf(
+		silenceOf("server-b", evaluate.OK),
+		judgedAt(free("server-b", "/b", 1e9), evaluate.Critical),
+		judgedAt(onZFS, evaluate.Critical),
+	), "/timeline"), "disk.free_bytes · /a", "disk.free_bytes · /b")
+}
+
 func rankedOn(n int, levels map[int]evaluate.Level) state.State {
 	subjects := []state.Subject{}
 	for i := 1; i <= n; i++ {

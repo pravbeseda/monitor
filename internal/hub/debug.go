@@ -33,7 +33,6 @@ type debugView struct {
 	NothingWatched string
 	LastSeenLabel  string
 	MetricLabel    string
-	LabelsLabel    string
 	ValueLabel     string
 	LevelLabel     string
 	CollectedLabel string
@@ -50,8 +49,10 @@ type nodeView struct {
 	// Unwatched says how many of this node's series nobody has given a threshold, so a
 	// series left unconfigured is visible rather than quietly unjudged (ADR 0032).
 	Unwatched string
-	Rows      []rowView
-	// Empty says why a node has no rows: nothing measured yet, or nothing current.
+	// Rows are the series without labels; the labelled ones are gathered in Matrices.
+	Rows     []rowView
+	Matrices []matrixView
+	// Empty says why a node shows no series: nothing measured yet, or nothing current.
 	Empty string
 }
 
@@ -61,11 +62,10 @@ type levelView struct {
 	Class string
 }
 
-// rowView is one series (ADR 0033): its metric, what its labels name, its newest
-// value and what judges it. A nil Level is shown as a dash.
+// rowView is one series without labels (ADR 0033): its metric, its newest value and what
+// judges it. A nil Level is shown as a dash.
 type rowView struct {
 	Metric string
-	Labels string
 	Value  string
 	// History addresses the drill-down page of this series, Thresholds the page that sets
 	// what it is judged by (docs/specs/history.md#page, docs/specs/thresholds.md).
@@ -108,7 +108,6 @@ func debugOf(printer *i18n.Printer, current state.State, lang string) debugView 
 		Empty:          printer.T("page.empty"),
 		LastSeenLabel:  printer.T("node.last_seen"),
 		MetricLabel:    printer.T("table.metric"),
-		LabelsLabel:    printer.T("table.labels"),
 		ValueLabel:     printer.T("table.free"),
 		LevelLabel:     printer.T("table.level"),
 		CollectedLabel: printer.T("table.collected"),
@@ -135,16 +134,17 @@ func debugOf(printer *i18n.Printer, current state.State, lang string) debugView 
 		if reported.Unwatched > 0 {
 			node.Unwatched = fmt.Sprintf(printer.T("node.unwatched"), reported.Unwatched)
 		}
+		var shown []seriesRow
 		for _, row := range rows[reported.Node] {
-			if unplugged(row.stale, row.labels) {
-				continue
+			if !unplugged(row.stale, row.labels) {
+				shown = append(shown, row)
 			}
-			node.Rows = append(node.Rows, rowOf(printer, reported.Node, row, lang))
 		}
+		node.Rows, node.Matrices = layOut(printer, reported.Node, shown, lang)
 		switch {
 		case len(rows[reported.Node]) == 0:
 			node.Empty = printer.T("node.no_values")
-		case len(node.Rows) == 0:
+		case len(shown) == 0:
 			node.Empty = printer.T("node.no_current")
 		}
 		out.Nodes = append(out.Nodes, node)
@@ -155,7 +155,6 @@ func debugOf(printer *i18n.Printer, current state.State, lang string) debugView 
 func rowOf(printer *i18n.Printer, node string, row seriesRow, lang string) rowView {
 	out := rowView{
 		Metric:     row.metric,
-		Labels:     notify.Describe(printer, row.labels),
 		Value:      format(printer, row.metric, row.value),
 		History:    historyLink(node, row.metric, row.labels, lang, ""),
 		Thresholds: thresholdLink(node, row.metric, row.labels, lang),
@@ -215,10 +214,13 @@ func rowsByNode(current state.State) map[string][]seriesRow {
 	return rows
 }
 
-// seriesBefore orders the series of one node the way every page lists them: the series of
-// one label set together, by metric inside the group. The grouping is the pages' own: the
-// state privileges no label (docs/specs/state.md#ordering).
+// seriesBefore orders the series of one node the way every page lists them: by what their
+// labels name, the series of one label set together, by metric inside the group. The
+// grouping is the pages' own: the state privileges no label (docs/specs/state.md#ordering).
 func seriesBefore(aLabels map[string]string, aMetric string, bLabels map[string]string, bMetric string) bool {
+	if first, second := notify.Naming(aLabels), notify.Naming(bLabels); first != second {
+		return first < second
+	}
 	if first, second := storage.LabelKey(aLabels), storage.LabelKey(bLabels); first != second {
 		return first < second
 	}

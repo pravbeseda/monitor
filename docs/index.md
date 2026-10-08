@@ -127,6 +127,7 @@ Reasoning from working sessions, including options that were rejected.
 | [2026-09-29](log/2026-09-29-anomaly-log.md) | Anomalies in the log: where an anomaly ends, why a table of its own, and why a stale series holds one |
 | [2026-09-30](log/2026-09-30-time-machine.md) | Time Machine: why it needs no parameter, why not `tmutil`, one series per destination, and what fails per destination |
 | [2026-10-03](log/2026-10-03-site-traffic.md) | Site traffic: why access logs rather than a counter, why page views over a sliding day, and whose node a site is |
+| [2026-10-08](log/2026-10-08-debug-matrix.md) | The series table as matrices: why a matrix per label key set and family, and why not collapsing or filtering the page |
 
 ## Not written yet
 
