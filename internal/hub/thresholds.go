@@ -14,6 +14,7 @@ import (
 	"github.com/pravbeseda/monitor/internal/evaluate"
 	"github.com/pravbeseda/monitor/internal/history"
 	"github.com/pravbeseda/monitor/internal/i18n"
+	"github.com/pravbeseda/monitor/internal/notify"
 	"github.com/pravbeseda/monitor/internal/storage"
 )
 
@@ -212,7 +213,7 @@ func emptyForm(printer *i18n.Printer, ref storage.SeriesRef, lang string) thresh
 	return thresholdView{
 		shell:          still(printer, "threshold.title", "", lang),
 		Series:         ref.Node + " · " + ref.Metric,
-		Labels:         labelText(printer, ref.Labels),
+		Labels:         notify.Describe(printer, ref.Labels),
 		Unit:           printer.T("unit." + string(history.UnitOf(ref.Metric))),
 		Action:         thresholdLink(ref.Node, ref.Metric, ref.Labels, lang),
 		Below:          true,

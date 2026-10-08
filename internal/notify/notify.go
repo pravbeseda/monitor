@@ -49,7 +49,6 @@ func Render(p *i18n.Printer, m evaluate.Message) string {
 // volume is formatted with, and whether it can be unplugged. Everything else names the
 // series, and a message that cannot be told from another one about the same metric is a
 // message about nothing (ADR 0033).
-// The hub's pages show them after the name: keep hub.labelText in step.
 var decoration = map[string]bool{"fs": true, "removable": true}
 
 // Naming is what identifies the series inside its node: a mount point reads as itself,
@@ -68,6 +67,22 @@ func Naming(labels map[string]string) string {
 		}
 	}
 	return strings.Join(named, " ")
+}
+
+// Describe is how a page names a series: its Naming, then the decoration a message leaves
+// out, since a page has room for a volume's filesystem and whether it can be unplugged.
+func Describe(p *i18n.Printer, labels map[string]string) string {
+	parts := make([]string, 0, 3)
+	if named := Naming(labels); named != "" {
+		parts = append(parts, named)
+	}
+	if fs := labels["fs"]; fs != "" {
+		parts = append(parts, fs)
+	}
+	if labels["removable"] == "true" {
+		parts = append(parts, p.T("label.removable"))
+	}
+	return strings.Join(parts, " · ")
 }
 
 // plain is a label's key or value as it reads in a message, quoted when reading it back

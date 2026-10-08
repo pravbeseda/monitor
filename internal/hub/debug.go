@@ -8,7 +8,6 @@ import (
 	"net/http"
 	"net/url"
 	"sort"
-	"strings"
 	"time"
 
 	"github.com/pravbeseda/monitor/internal/anomaly"
@@ -156,7 +155,7 @@ func debugOf(printer *i18n.Printer, current state.State, lang string) debugView 
 func rowOf(printer *i18n.Printer, node string, row seriesRow, lang string) rowView {
 	out := rowView{
 		Metric:     row.metric,
-		Labels:     labelText(printer, row.labels),
+		Labels:     notify.Describe(printer, row.labels),
 		Value:      format(printer, row.metric, row.value),
 		History:    historyLink(node, row.metric, row.labels, lang, ""),
 		Thresholds: thresholdLink(node, row.metric, row.labels, lang),
@@ -249,22 +248,6 @@ func storageFailure(w http.ResponseWriter, printer *i18n.Printer, err error) {
 	slog.Error("read the state", "error", err)
 	w.Header().Set("Cache-Control", "no-store")
 	http.Error(w, printer.T("error.storage"), http.StatusInternalServerError)
-}
-
-// labelText names the thing a series is about, from the labels the sensor set: what an alert
-// names it by, then the decoration of a volume an alert leaves out.
-func labelText(printer *i18n.Printer, labels map[string]string) string {
-	parts := make([]string, 0, 3)
-	if named := notify.Naming(labels); named != "" {
-		parts = append(parts, named)
-	}
-	if fs := labels["fs"]; fs != "" {
-		parts = append(parts, fs)
-	}
-	if labels["removable"] == "true" {
-		parts = append(parts, printer.T("label.removable"))
-	}
-	return strings.Join(parts, " · ")
 }
 
 // format renders a value in the unit its metric id declares, the way every other surface
