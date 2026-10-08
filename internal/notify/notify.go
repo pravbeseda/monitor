@@ -49,6 +49,7 @@ func Render(p *i18n.Printer, m evaluate.Message) string {
 // volume is formatted with, and whether it can be unplugged. Everything else names the
 // series, and a message that cannot be told from another one about the same metric is a
 // message about nothing (ADR 0033).
+// The hub's pages show them after the name: keep hub.labelText in step.
 var decoration = map[string]bool{"fs": true, "removable": true}
 
 // Naming is what identifies the series inside its node: a mount point reads as itself,

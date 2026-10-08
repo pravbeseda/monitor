@@ -12,7 +12,7 @@ var catalogue = map[string]map[Locale]string{
 	"node.silent":              {English: "silent", Russian: "молчит"},
 	"node.unwatched":           {English: "%d series without a threshold", Russian: "серий без порога: %d"},
 	"table.metric":             {English: "Metric", Russian: "Метрика"},
-	"table.volume":             {English: "Volume", Russian: "Том"},
+	"table.labels":             {English: "Labels", Russian: "Метки"},
 	"table.free":               {English: "Value", Russian: "Значение"},
 	"table.level":              {English: "Level", Russian: "Уровень"},
 	"table.collected":          {English: "Collected", Russian: "Собрано"},

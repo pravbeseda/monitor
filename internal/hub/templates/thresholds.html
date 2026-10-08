@@ -16,7 +16,7 @@
 <body>
   {{ template "tabs" . }}
   <h1>{{ .Title }}</h1>
-  <p class="meta">{{ .Series }}{{ with .Volume }} · {{ . }}{{ end }}</p>
+  <p class="meta">{{ .Series }}{{ with .Labels }} · {{ . }}{{ end }}</p>
   {{ with .Error }}<p class="error">{{ . }}</p>{{ end }}
   {{ with .Unwatched }}<p class="note">{{ . }}</p>{{ end }}
   {{ with .Detached }}<p class="note">{{ . }}</p>{{ end }}

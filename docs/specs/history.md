@@ -200,7 +200,7 @@ staleness still has an answer — the node's longest sensor interval
 | Request | What the reader sees |
 |---|---|
 | `/history?node=server-b&metric=disk.free_pct&label.mount=/` | an SVG chart of that series over 24 hours, a time axis, and a value axis running from zero to above the highest value in the window |
-| any chart | its node, metric and volume above it, and the newest value in the window with the time it was collected |
+| any chart | its node, metric and what its labels name above it, and the newest value in the window with the time it was collected |
 | the window the page is showing | marked among the links rather than offered as one, whatever the query spelled it as; a query naming no window is showing the first |
 | the same with `&window=7d` | the same chart over 7 days |
 | any of the above | window links 24h / 7d / 30d, each keeping node, metric, labels and language |
@@ -210,7 +210,8 @@ staleness still has an answer — the node's longest sensor interval
 | a series with a two-day silence inside a seven-day window | the line broken across the gap, not drawn straight through it |
 | a query the endpoint refuses, or a read that fails | the same status the endpoint answers, as a translated page |
 | a value on `/debug` | a link to the history page of its series, carrying the node, the metric and every label |
-| any series on `/debug` | one row of its own: its metric id, the volume its labels name if they name one, its newest value and the time it was collected |
+| any series on `/debug` | one row of its own: its metric id, what its labels name, if anything, its newest value and the time it was collected |
+| what the labels name, on `/debug`, the chart and the [thresholds](thresholds.md) form | the name a [message](evaluation.md#messages) gives the series — a mount point as itself, any other label as `key=value`, quoted when it carries a space or an `=` — then a volume's filesystem and, if it is removable, that it is. Two sites, `site=blog-a` and `site=shop-c`, never read alike |
 | a volume | two rows, one per series, since each is judged on its own ([0033](../decisions/0033-a-subject-is-a-series.md)) |
 | any row | a link to the page that sets what that series is judged by ([thresholds.md](thresholds.md)) |
 | the series of one volume collected at different times | each row its own time, and each left out or marked by its own age: no series is aged by another series' newest point |

@@ -37,7 +37,7 @@ type ThresholdStore interface {
 type thresholdView struct {
 	shell
 	Series     string
-	Volume     string
+	Labels     string
 	Unit       string
 	Action     string
 	Below      bool
@@ -212,7 +212,7 @@ func emptyForm(printer *i18n.Printer, ref storage.SeriesRef, lang string) thresh
 	return thresholdView{
 		shell:          still(printer, "threshold.title", "", lang),
 		Series:         ref.Node + " · " + ref.Metric,
-		Volume:         volume(printer, ref.Labels),
+		Labels:         labelText(printer, ref.Labels),
 		Unit:           printer.T("unit." + string(history.UnitOf(ref.Metric))),
 		Action:         thresholdLink(ref.Node, ref.Metric, ref.Labels, lang),
 		Below:          true,

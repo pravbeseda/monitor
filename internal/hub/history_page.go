@@ -87,14 +87,14 @@ func historyPage(printer *i18n.Printer, query history.Query, result history.Resu
 		series := result.Series[0]
 		newest := series.Points[len(series.Points)-1]
 		drawn := draw(printer, series, result.Window)
-		out.Heading = series.Node + " · " + series.Metric + " · " + volume(printer, series.Labels)
+		out.Heading = series.Node + " · " + series.Metric + " · " + labelText(printer, series.Labels)
 		out.Latest = format(printer, series.Metric, newest.Value) + " · " + printer.Time(newest.TS)
 		out.Chart = &drawn
 	default:
 		out.Message = printer.T("history.several")
 		for _, series := range result.Series {
 			out.Series = append(out.Series, seriesLink{
-				Label: series.Node + " · " + volume(printer, series.Labels),
+				Label: series.Node + " · " + labelText(printer, series.Labels),
 				URL:   historyLink(series.Node, series.Metric, series.Labels, lang, window),
 			})
 		}

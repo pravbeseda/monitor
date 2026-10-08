@@ -34,7 +34,7 @@ type debugView struct {
 	NothingWatched string
 	LastSeenLabel  string
 	MetricLabel    string
-	VolumeLabel    string
+	LabelsLabel    string
 	ValueLabel     string
 	LevelLabel     string
 	CollectedLabel string
@@ -49,7 +49,7 @@ type nodeView struct {
 	Level  *levelView
 	Silent string
 	// Unwatched says how many of this node's series nobody has given a threshold, so a
-	// volume left unconfigured is visible rather than quietly unjudged (ADR 0032).
+	// series left unconfigured is visible rather than quietly unjudged (ADR 0032).
 	Unwatched string
 	Rows      []rowView
 	// Empty says why a node has no rows: nothing measured yet, or nothing current.
@@ -62,11 +62,11 @@ type levelView struct {
 	Class string
 }
 
-// rowView is one series (ADR 0033): its metric, the volume its labels name, its newest
+// rowView is one series (ADR 0033): its metric, what its labels name, its newest
 // value and what judges it. A nil Level is shown as a dash.
 type rowView struct {
 	Metric string
-	Volume string
+	Labels string
 	Value  string
 	// History addresses the drill-down page of this series, Thresholds the page that sets
 	// what it is judged by (docs/specs/history.md#page, docs/specs/thresholds.md).
@@ -109,7 +109,7 @@ func debugOf(printer *i18n.Printer, current state.State, lang string) debugView 
 		Empty:          printer.T("page.empty"),
 		LastSeenLabel:  printer.T("node.last_seen"),
 		MetricLabel:    printer.T("table.metric"),
-		VolumeLabel:    printer.T("table.volume"),
+		LabelsLabel:    printer.T("table.labels"),
 		ValueLabel:     printer.T("table.free"),
 		LevelLabel:     printer.T("table.level"),
 		CollectedLabel: printer.T("table.collected"),
@@ -156,7 +156,7 @@ func debugOf(printer *i18n.Printer, current state.State, lang string) debugView 
 func rowOf(printer *i18n.Printer, node string, row seriesRow, lang string) rowView {
 	out := rowView{
 		Metric:     row.metric,
-		Volume:     volume(printer, row.labels),
+		Labels:     labelText(printer, row.labels),
 		Value:      format(printer, row.metric, row.value),
 		History:    historyLink(node, row.metric, row.labels, lang, ""),
 		Thresholds: thresholdLink(node, row.metric, row.labels, lang),
@@ -217,7 +217,7 @@ func rowsByNode(current state.State) map[string][]seriesRow {
 }
 
 // seriesBefore orders the series of one node the way every page lists them: the series of
-// one volume together, by metric inside the group. The grouping is the pages' own: the
+// one label set together, by metric inside the group. The grouping is the pages' own: the
 // state privileges no label (docs/specs/state.md#ordering).
 func seriesBefore(aLabels map[string]string, aMetric string, bLabels map[string]string, bMetric string) bool {
 	if first, second := storage.LabelKey(aLabels), storage.LabelKey(bLabels); first != second {
@@ -251,11 +251,12 @@ func storageFailure(w http.ResponseWriter, printer *i18n.Printer, err error) {
 	http.Error(w, printer.T("error.storage"), http.StatusInternalServerError)
 }
 
-// volume names the thing a series is about, from the labels the sensor set.
-func volume(printer *i18n.Printer, labels map[string]string) string {
+// labelText names the thing a series is about, from the labels the sensor set: what an alert
+// names it by, then the decoration of a volume an alert leaves out.
+func labelText(printer *i18n.Printer, labels map[string]string) string {
 	parts := make([]string, 0, 3)
-	if mount := labels["mount"]; mount != "" {
-		parts = append(parts, mount)
+	if named := notify.Naming(labels); named != "" {
+		parts = append(parts, named)
 	}
 	if fs := labels["fs"]; fs != "" {
 		parts = append(parts, fs)
