@@ -3,7 +3,7 @@
 <head>
 {{ template "shell" . }}
   <style>
-    body { font-family: system-ui, sans-serif; margin: 2rem auto; max-width: 60rem; }
+    body { font-family: system-ui, sans-serif; margin: 2rem auto; max-width: 72rem; }
     h1 { font-size: 1.4rem; }
     section { margin-bottom: 2rem; }
     h2 { font-size: 1.1rem; margin-bottom: 0.2rem; }
@@ -14,6 +14,9 @@
     th { font-weight: 600; font-size: 0.85rem; color: var(--muted); }
     small.stale, small.unusual { color: var(--warn); }
     small.unwatched, a.set { color: var(--muted); font-size: 0.85rem; }
+    div.scroll { overflow-x: auto; margin-top: 0.8rem; }
+    table.matrix th, table.matrix td { white-space: nowrap; }
+    table.matrix td small { display: block; }
   </style>
 </head>
 <body>
@@ -27,12 +30,14 @@
     <section>
       <h2>{{ .Name }}{{ with .Version }} <small>{{ . }}</small>{{ end }}{{ with .Level }} <span class="{{ .Class }}">{{ .Word }}</span>{{ end }}</h2>
       <p class="meta">{{ $.LastSeenLabel }}: {{ .LastSeen }}{{ with .Silent }} <small class="level-critical">{{ . }}</small>{{ end }}{{ with .Unwatched }} <small class="unwatched">{{ . }}</small>{{ end }}</p>
+      {{ with .Empty }}
+        <p class="meta">{{ . }}</p>
+      {{ end }}
       {{ if .Rows }}
         <table>
           <thead>
             <tr>
               <th>{{ $.MetricLabel }}</th>
-              <th>{{ $.LabelsLabel }}</th>
               <th>{{ $.ValueLabel }}</th>
               <th>{{ $.LevelLabel }}</th>
               <th>{{ $.CollectedLabel }}</th>
@@ -42,7 +47,6 @@
             {{ range .Rows }}
               <tr>
                 <td>{{ .Metric }}</td>
-                <td>{{ .Labels }}</td>
                 <td><a href="{{ .History }}">{{ .Value }}</a></td>
                 <td>{{ with .Level }}<span class="{{ .Class }}">{{ .Word }}</span>{{ else }}—{{ end }} <a class="set" href="{{ .Thresholds }}">{{ .SetLabel }}</a></td>
                 <td>{{ .Collected }}{{ with .Stale }} <small class="stale">{{ . }}</small>{{ end }}{{ with .Unusual }} <small class="unusual">{{ . }}</small>{{ end }}</td>
@@ -50,10 +54,43 @@
             {{ end }}
           </tbody>
         </table>
-      {{ else }}
-        <p class="meta">{{ .Empty }}</p>
+      {{ end }}
+      {{ range .Matrices }}
+        <div class="scroll">
+          <table class="matrix">
+            <thead>
+              <tr>
+                <th>{{ .Family }}</th>
+                {{ range .Columns }}<th title="{{ .Metric }}">{{ .Label }}</th>{{ end }}
+                <th>{{ $.CollectedLabel }}</th>
+              </tr>
+            </thead>
+            <tbody>
+              {{ range .Rows }}
+                <tr>
+                  <td>{{ .Labels }}</td>
+                  {{ range .Cells }}{{ template "cell" . }}{{ end }}
+                  <td>{{ .Collected }}{{ with .Stale }} <small class="stale">{{ . }}</small>{{ end }}</td>
+                </tr>
+              {{ end }}
+            </tbody>
+          </table>
+        </div>
       {{ end }}
     </section>
   {{ end }}
 </body>
 </html>
+
+{{ define "cell" }}
+  {{- with . -}}
+    <td title="{{ .Hover }}">
+      <a href="{{ .History }}"{{ with .Level }} class="{{ .Class }}"{{ end }}>{{ .Value }}</a>
+      {{- with .Named }} <small class="{{ .Class }}">{{ .Word }}</small>{{ end }}
+      {{- with .Stale }} <small class="stale">{{ . }}</small>{{ end }}
+      {{- with .Unusual }} <small class="unusual">{{ . }}</small>{{ end -}}
+    </td>
+  {{- else -}}
+    <td>—</td>
+  {{- end -}}
+{{ end }}

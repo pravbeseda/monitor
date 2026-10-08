@@ -17,8 +17,8 @@
 
 The list answers the first two questions of the [concept](../concept.md): is everything
 fine, and if not, where to look. It is empty while all is well, and what needs attention
-surfaces on it by itself, most urgent first. Everything else — every series, its value and
-its link to a threshold — is one click away on `/debug`.
+surfaces on it by itself, most urgent first. Everything else — every series and its value —
+is one click away on `/debug`, and its threshold one more, from its row or its chart.
 
 It began as a skin of its own, mission control, and was folded into the timeline when the
 timeline turned out to show all of it
@@ -66,8 +66,9 @@ item the time of its newest value, and no level.
    remain, one line saying how many more;
 4. watched series with no fresh data, by node.
 
-Inside a node, series come in the order `/debug` lists them: a volume's series together
-([history](history.md#page)).
+Inside a node, series come ordered by the name a [message](evaluation.md#messages) gives
+them, then by their labels and by metric, as `/debug` orders the rows of a matrix: a
+volume's series together ([history](history.md#page)).
 
 **The headline** states how things stand, above the items, in the reader's language. The
 first line that applies is the one shown:
@@ -119,6 +120,7 @@ the English catalogue's; every one of them has its Russian.
 | `server-c` silent, a `warning` on `server-a`, a `critical` on `server-b` | `server-b`'s critical, `server-c`'s silence, then `server-a`'s warning |
 | a node silent and one of its series `critical` from before it fell silent | the silence only: the series is stale |
 | two volumes of one node at `critical`, both series of each | `/a`'s two series, then `/b`'s two |
+| two volumes of one node at `critical`, `/b` on `ext4` and `/a` on `zfs` | `/a` first: by what the labels name, not by the filesystem |
 | anomalies ranked 1, 2 and 3 on three nodes | in rank order, whatever their nodes |
 | five series ranking | all five, and no line after them |
 | six series ranking | ranks 1 to 5, then "more unusual series: 1", linking to `/debug` |

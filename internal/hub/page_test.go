@@ -365,7 +365,7 @@ func TestPageFreezesTheRowsOfASilentNode(t *testing.T) {
 	}
 }
 
-// rows returns the body rows of every table on the page, one string each.
+// rows returns the body rows of every table on the page, matrices included, one string each.
 func rows(body string) []string {
 	var out []string
 	for _, tbody := range strings.Split(body, "<tbody>")[1:] {
@@ -386,41 +386,29 @@ func diskValue(metric, mount, removable string, value float64, age time.Duration
 	}
 }
 
-// spec: history.md#page — a volume is two rows, one per series, since each is judged on its
-// own, and each row links to its history and to what judges it.
-func TestPageShowsAVolumeAsTwoRows(t *testing.T) {
+// spec: history.md#page — one volume's two series make a matrix of one row, each value
+// linked to its chart.
+func TestPageShowsAVolumeAsAMatrixRow(t *testing.T) {
 	reversed := laptop
 	reversed.Values = []storage.Value{laptop.Values[1], laptop.Values[0]}
 
 	body := show(t, stored{states: []storage.NodeState{reversed}}, "/debug", "").Body.String()
 
-	got := rows(body)
-	if len(got) != 2 {
-		t.Fatalf("%d rows, want one per series of the volume; page = %q", len(got), body)
+	got := matrices(t, body)
+	if len(got) != 1 || len(got[0].rows) != 1 || got[0].rows[0].name != "/ · apfs" {
+		t.Fatalf("matrices = %v, want one row for the volume; page = %q", got, body)
 	}
-	for i, want := range [][]string{
-		{"<td>disk.free_bytes</td>", "<td>/ · apfs</td>", "1.5 GB"},
-		{"<td>disk.free_pct</td>", "<td>/ · apfs</td>", "34.2%"},
-	} {
-		for _, one := range want {
-			if !strings.Contains(got[i], one) {
-				t.Errorf("row %d = %q, want %q in it", i, got[i], one)
-			}
-		}
-	}
-	for i, metric := range []string{"disk.free_bytes", "disk.free_pct"} {
-		if !strings.Contains(got[i], "/history?") || !strings.Contains(got[i], "metric="+metric) {
-			t.Errorf("row %d = %q, want a link to the history of %s", i, got[i], metric)
-		}
-		if !strings.Contains(got[i], "/thresholds?") {
-			t.Errorf("row %d = %q, want a link to what judges the series", i, got[i])
+	for metric, value := range map[string]string{"disk.free_bytes": "1.5 GB", "disk.free_pct": "34.2%"} {
+		cell := got[0].rows[0].cells[metric]
+		if !strings.Contains(cell, value) || !strings.Contains(cell, "/history?") || !strings.Contains(cell, "metric="+metric) {
+			t.Errorf("cell of %s = %q, want %s linked to its history", metric, cell, value)
 		}
 	}
 }
 
-// spec: history.md#page — a node's rows are grouped so that the series of one volume sit
-// together, and ordered by metric inside the group.
-func TestPageGroupsAVolumesRowsAndOrdersThemByMetric(t *testing.T) {
+// spec: history.md#page — the rows of a matrix come by what their labels name, its columns
+// by metric id.
+func TestPageOrdersAMatrixByNameAndMetric(t *testing.T) {
 	state := storage.NodeState{
 		Node:     "laptop-a",
 		LastSeen: lastSeen,
@@ -432,35 +420,29 @@ func TestPageGroupsAVolumesRowsAndOrdersThemByMetric(t *testing.T) {
 		},
 	}
 
-	got := rows(show(t, stored{states: []storage.NodeState{state}}, "/debug", "").Body.String())
+	got := matrices(t, show(t, stored{states: []storage.NodeState{state}}, "/debug", "").Body.String())
 
-	if len(got) != 4 {
-		t.Fatalf("%d rows, want one per series; rows = %q", len(got), got)
+	if len(got) != 1 || len(got[0].rows) != 2 {
+		t.Fatalf("matrices = %v, want one of two rows", got)
 	}
-	for i, want := range [][]string{
-		{"<td>disk.free_bytes</td>", "<td>/ · apfs</td>"},
-		{"<td>disk.free_pct</td>", "<td>/ · apfs</td>"},
-		{"<td>disk.free_bytes</td>", "/Volumes/data-a"},
-		{"<td>disk.free_pct</td>", "/Volumes/data-a"},
-	} {
-		for _, one := range want {
-			if !strings.Contains(got[i], one) {
-				t.Errorf("row %d = %q, want %q in it", i, got[i], one)
-			}
-		}
+	if got[0].rows[0].name != "/ · apfs" || got[0].rows[1].name != "/Volumes/data-a · apfs" {
+		t.Errorf("rows = %v, want / first", got[0].rows)
+	}
+	if strings.Join(got[0].metrics, ",") != "disk.free_bytes,disk.free_pct" {
+		t.Errorf("columns = %v, want them by metric id", got[0].metrics)
 	}
 }
 
-// spec: history.md#page — each series of a volume is left out or marked by its own age, and
-// dated by its own collection: nothing ages a series by another one.
+// spec: history.md#page — each series of a volume is left out or marked by its own age:
+// nothing ages a series by another one.
 func TestPageAgesEachSeriesOfAVolumeOnItsOwn(t *testing.T) {
 	tests := []struct {
 		name      string
 		removable string
-		wantRows  int
+		wantCell  string
 	}{
-		{"a removable volume with one series stale", "true", 1},
-		{"a fixed volume with one series stale", "false", 2},
+		{"a removable volume with one series stale, and no other volume carrying it", "true", ""},
+		{"a fixed volume with one series stale", "false", "no fresh data"},
 	}
 
 	for _, tc := range tests {
@@ -472,14 +454,16 @@ func TestPageAgesEachSeriesOfAVolumeOnItsOwn(t *testing.T) {
 
 			body := show(t, stored{states: []storage.NodeState{state}}, "/debug", "").Body.String()
 
-			if got := len(rows(body)); got != tc.wantRows {
-				t.Fatalf("%d rows, want %d; page = %q", got, tc.wantRows, body)
+			row := matrixRowOf(t, body, "/Volumes/drive-a")
+			cell, shown := row.cells["disk.free_pct"]
+			if shown != (tc.wantCell != "") || !strings.Contains(cell, tc.wantCell) {
+				t.Errorf("stale cell = %q (shown %v), want %q", cell, shown, tc.wantCell)
 			}
-			if got := strings.Count(body, "no fresh data"); got != tc.wantRows-1 {
-				t.Errorf("%d rows marked, want only the stale series; page = %q", got, body)
+			if cell := row.cells["disk.free_bytes"]; !strings.Contains(cell, "1.5 GB") || strings.Contains(cell, "no fresh data") {
+				t.Errorf("fresh cell = %s, want it shown unmarked", cell)
 			}
-			if !strings.Contains(body, "2026-08-28 10:05 UTC") {
-				t.Errorf("page = %q, want the fresh series dated by its own collection", body)
+			if !strings.Contains(row.collected, "2026-08-28 10:05 UTC") {
+				t.Errorf("row dated %s, want the fresh series' time", row.collected)
 			}
 		})
 	}

@@ -21,6 +21,9 @@ type historyView struct {
 	Heading     string
 	LatestLabel string
 	Latest      string
+	// Thresholds addresses the page that sets what the series drawn is judged by.
+	Thresholds  string
+	SetLabel    string
 	WindowLabel string
 	Windows     []windowLink
 	Chart       *chart
@@ -91,6 +94,8 @@ func historyPage(printer *i18n.Printer, query history.Query, result history.Resu
 		out.Heading = series.Node + " · " + series.Metric + " · " + notify.Describe(printer, series.Labels)
 		out.Latest = format(printer, series.Metric, newest.Value) + " · " + printer.Time(newest.TS)
 		out.Chart = &drawn
+		out.Thresholds = thresholdLink(series.Node, series.Metric, series.Labels, lang)
+		out.SetLabel = printer.T("history.set")
 	default:
 		out.Message = printer.T("history.several")
 		for _, series := range result.Series {

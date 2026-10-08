@@ -269,7 +269,7 @@ The agent's clock reads 12:00:00, in UTC.
   like any node that never reported, absent from the timeline and from `/debug`. It is not
   recorded at startup, as a service node is, since no loop of the hub's runs it.
 - **The sites node's agent version and manifest** stay empty: no agent is its own.
-- **A site removed from the file** stops producing its series. Its rows stay, marked as
+- **A site removed from the file** stops producing its series. Its row stays, marked as
   holding no fresh data, and a watched one stays listed as such until its threshold is
   cleared — as for a Time Machine destination removed
   ([timemachine-sensor.md](timemachine-sensor.md#edge-cases)).

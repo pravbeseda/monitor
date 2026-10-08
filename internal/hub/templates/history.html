@@ -21,7 +21,7 @@
 <body>
   {{ template "tabs" . }}
   <h1>{{ if .Heading }}{{ .Heading }}{{ else }}{{ .Title }}{{ end }}</h1>
-  {{ if .Latest }}<p class="meta">{{ .LatestLabel }}: {{ .Latest }}</p>{{ end }}
+  {{ if .Latest }}<p class="meta">{{ .LatestLabel }}: {{ .Latest }}{{ with .Thresholds }} · <a href="{{ . }}">{{ $.SetLabel }}</a>{{ end }}</p>{{ end }}
   {{ if .Windows }}
     <nav class="windows">
       {{ .WindowLabel }}:
