@@ -32,7 +32,7 @@
           <thead>
             <tr>
               <th>{{ $.MetricLabel }}</th>
-              <th>{{ $.VolumeLabel }}</th>
+              <th>{{ $.LabelsLabel }}</th>
               <th>{{ $.ValueLabel }}</th>
               <th>{{ $.LevelLabel }}</th>
               <th>{{ $.CollectedLabel }}</th>
@@ -42,7 +42,7 @@
             {{ range .Rows }}
               <tr>
                 <td>{{ .Metric }}</td>
-                <td>{{ .Volume }}</td>
+                <td>{{ .Labels }}</td>
                 <td><a href="{{ .History }}">{{ .Value }}</a></td>
                 <td>{{ with .Level }}<span class="{{ .Class }}">{{ .Word }}</span>{{ else }}—{{ end }} <a class="set" href="{{ .Thresholds }}">{{ .SetLabel }}</a></td>
                 <td>{{ .Collected }}{{ with .Stale }} <small class="stale">{{ . }}</small>{{ end }}{{ with .Unusual }} <small class="unusual">{{ . }}</small>{{ end }}</td>
