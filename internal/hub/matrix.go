@@ -56,7 +56,8 @@ func layOut(printer *i18n.Printer, node string, series []seriesRow, lang string)
 			continue
 		}
 		family, dotted := familyOf(row.metric)
-		key := fmt.Sprint(family, "\x00", dotted, "\x00", strings.Join(slices.Sorted(maps.Keys(row.labels)), ","))
+		// %q keeps a key holding a comma from reading like two keys.
+		key := fmt.Sprintf("%s\x00%t\x00%q", family, dotted, slices.Sorted(maps.Keys(row.labels)))
 		gathered[key] = append(gathered[key], row)
 	}
 	matrices := make([]matrixView, 0, len(gathered))

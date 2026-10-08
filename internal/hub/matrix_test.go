@@ -302,3 +302,18 @@ func TestDebugOrdersLabelSetsNamedAlikeByTheirLabels(t *testing.T) {
 		t.Errorf("matrices = %v, want / on apfs first", got)
 	}
 }
+
+// spec: history.md#page — one matrix per label key set, even for keys that would read alike
+// once joined.
+func TestDebugKeepsLabelKeySetsApartWhateverTheirKeysHold(t *testing.T) {
+	values := []storage.Value{
+		{Metric: "x.y", Labels: map[string]string{"a,b": "1", "c": "2"}, Value: 1, TS: lastSeen},
+		{Metric: "x.y", Labels: map[string]string{"a": "1", "b,c": "2"}, Value: 1, TS: lastSeen},
+	}
+
+	body := showDebug(t, stored{states: []storage.NodeState{{Node: "laptop-a", LastSeen: lastSeen, Values: values}}}, "/debug")
+
+	if got := matrices(t, body); len(got) != 2 {
+		t.Errorf("matrices = %v, want one per label key set", got)
+	}
+}
