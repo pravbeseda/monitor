@@ -1,7 +1,7 @@
 package hub
 
 import (
-	"fmt"
+	"cmp"
 	"maps"
 	"slices"
 	"strings"
@@ -49,22 +49,41 @@ type seriesCell struct {
 // of its own that unlabelled series get and the matrices labelled ones are gathered in.
 func layOut(printer *i18n.Printer, node string, series []seriesRow, lang string) ([]rowView, []matrixView) {
 	var own []rowView
-	gathered := map[string][]seriesRow{}
+	var groups []*matrixGroup
 	for _, row := range series {
 		if len(row.labels) == 0 {
 			own = append(own, rowOf(printer, node, row, lang))
 			continue
 		}
 		family, dotted := familyOf(row.metric)
-		// %q keeps a key holding a comma from reading like two keys.
-		key := fmt.Sprintf("%s\x00%t\x00%q", family, dotted, slices.Sorted(maps.Keys(row.labels)))
-		gathered[key] = append(gathered[key], row)
+		if dotted {
+			family += "."
+		}
+		keys := slices.Sorted(maps.Keys(row.labels))
+		at := slices.IndexFunc(groups, func(g *matrixGroup) bool { return g.family == family && slices.Equal(g.keys, keys) })
+		if at < 0 {
+			at = len(groups)
+			groups = append(groups, &matrixGroup{family: family, keys: keys})
+		}
+		groups[at].series = append(groups[at].series, row)
 	}
-	matrices := make([]matrixView, 0, len(gathered))
-	for _, key := range slices.Sorted(maps.Keys(gathered)) {
-		matrices = append(matrices, matrixOf(printer, node, gathered[key], lang))
+	// Byte by byte, as the state compares labels (docs/specs/state.md#ordering).
+	slices.SortFunc(groups, func(a, b *matrixGroup) int {
+		return cmp.Or(strings.Compare(a.family, b.family), slices.Compare(a.keys, b.keys))
+	})
+	matrices := make([]matrixView, 0, len(groups))
+	for _, group := range groups {
+		matrices = append(matrices, matrixOf(printer, node, group.series, lang))
 	}
 	return own, matrices
+}
+
+// matrixGroup is the series one matrix gathers: one family — its dot kept, so that an id
+// without one stays a family of its own — and one label key set.
+type matrixGroup struct {
+	family string
+	keys   []string
+	series []seriesRow
 }
 
 // familyOf is the part of a metric id before its first dot; an id without one is a family

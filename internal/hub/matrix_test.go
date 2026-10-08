@@ -317,3 +317,19 @@ func TestDebugKeepsLabelKeySetsApartWhateverTheirKeysHold(t *testing.T) {
 		t.Errorf("matrices = %v, want one per label key set", got)
 	}
 }
+
+// spec: history.md#page — matrices of one family come by their label keys, compared byte
+// by byte (state.md#ordering), whatever bytes the keys hold.
+func TestDebugOrdersMatricesByLabelKeysByteByByte(t *testing.T) {
+	values := []storage.Value{
+		{Metric: "x.y", Labels: map[string]string{" ": "1"}, Value: 1, TS: lastSeen},
+		{Metric: "x.y", Labels: map[string]string{"\n": "1"}, Value: 1, TS: lastSeen},
+	}
+
+	body := showDebug(t, stored{states: []storage.NodeState{{Node: "laptop-a", LastSeen: lastSeen, Values: values}}}, "/debug")
+
+	newline, space := strings.Index(body, "label.%0A="), strings.Index(body, "label.&#43;=")
+	if newline < 0 || space < 0 || newline > space {
+		t.Errorf("the newline key at %d, the space key at %d: want the newline's matrix first", newline, space)
+	}
+}
