@@ -45,8 +45,10 @@ type chart struct {
 	// so the template does no arithmetic.
 	Baseline, RightEdge float64
 	Lines               []string
-	Dots                []dot
-	XTicks, YTicks      []tick
+	// Areas close each line down to the baseline, for a skin that fills under it.
+	Areas          []string
+	Dots           []dot
+	XTicks, YTicks []tick
 	// Levels are the series' stored threshold values, drawn across the plot.
 	Levels []levelLine
 	// Zone names the reading of the time axis once: a tick label has no room for it
@@ -135,6 +137,8 @@ func draw(printer *i18n.Printer, series history.Series, window history.Window, i
 			pairs = append(pairs, fmt.Sprintf("%.1f,%.1f", x(point.TS), y(point.Value)))
 		}
 		out.Lines = append(out.Lines, strings.Join(pairs, " "))
+		first, last := x(segment[0].TS), x(segment[len(segment)-1].TS)
+		out.Areas = append(out.Areas, fmt.Sprintf("%.1f,%.1f %s %.1f,%.1f", first, out.Baseline, out.Lines[len(out.Lines)-1], last, out.Baseline))
 	}
 
 	for i := 0; i <= axisTicks; i++ {

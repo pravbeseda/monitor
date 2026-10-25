@@ -10,7 +10,6 @@ import (
 	"net/url"
 	"slices"
 	"sort"
-	"strconv"
 	"strings"
 	"time"
 
@@ -353,8 +352,6 @@ type cardRowView struct {
 	Value string
 	Mark  *levelView
 	Line  *chart
-	// Areas fill under each stretch of the line.
-	Areas []string
 }
 
 // Overview renders the overview skin: a card per item, grouped by who collects it
@@ -451,9 +448,6 @@ func cardOf(ctx context.Context, printer *i18n.Printer, reader history.Reader, s
 		if row.Line, err = lineOf(ctx, printer, reader, s, history.DefaultWindow, sparkFrame, levels...); err != nil {
 			return out, err
 		}
-		if row.Line != nil {
-			row.Areas = areasOf(*row.Line)
-		}
 		out.Main = append(out.Main, row)
 	}
 	if more > 0 {
@@ -505,19 +499,6 @@ func (it overviewItem) reason(printer *i18n.Printer, shown []state.Subject, th s
 		return printer.T("overview.all_within")
 	}
 	return ""
-}
-
-// areasOf fills under each stretch of a line, down to the plot's baseline.
-func areasOf(line chart) []string {
-	out := make([]string, 0, len(line.Lines))
-	baseline := strconv.FormatFloat(line.Baseline, 'f', -1, 64)
-	for _, points := range line.Lines {
-		first, _, _ := strings.Cut(points, ",")
-		last := points[strings.LastIndexByte(points, ' ')+1:]
-		last, _, _ = strings.Cut(last, ",")
-		out = append(out, first+","+baseline+" "+points+" "+last+","+baseline)
-	}
-	return out
 }
 
 // markOf is the one mark a row carries: a stale series is marked stale whatever level it

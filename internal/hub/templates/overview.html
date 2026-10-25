@@ -65,10 +65,9 @@
                 {{ range . }}
                   <li class="row main" data-series="{{ .Name }}"><span class="row-name">{{ .Name }}</span>
                     <span class="row-value">{{ template "mark" .Mark }}{{ .Value }}</span>
-                    {{- $row := . }}
                     {{- with .Line }}
                       <svg class="spark" viewBox="0 0 {{ .Width }} {{ .Height }}" preserveAspectRatio="none" aria-hidden="true">
-                        {{- range $row.Areas }}<polygon class="area" points="{{ . }}"></polygon>{{ end }}
+                        {{- range .Areas }}<polygon class="area" points="{{ . }}"></polygon>{{ end }}
                         {{- $c := . }}
                         {{- range .Levels }}<line class="threshold {{ .Class }}" x1="0" y1="{{ .Y }}" x2="{{ $c.Width }}" y2="{{ .Y }}"></line>{{ end }}
                         {{- range .Lines }}<polyline points="{{ . }}"></polyline>{{ end }}
