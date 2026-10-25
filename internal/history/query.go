@@ -103,6 +103,9 @@ func parse(values url.Values, selectors []string, allow []string) (Query, error)
 	return query, nil
 }
 
+// ParseWindow reads a window as a query spells it (docs/specs/history.md#window).
+func ParseWindow(raw string) (time.Duration, error) { return parseWindow(raw) }
+
 func parseWindow(raw string) (time.Duration, error) {
 	bad := refuse("window", "window must be a whole number of minutes, hours or days between 1m and 365d")
 	match := windowPattern.FindStringSubmatch(raw)

@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"iter"
+	"maps"
 	"runtime"
 	"testing"
 	"time"
@@ -68,7 +69,7 @@ func (s *source) Points(_ context.Context, ref storage.SeriesRef, _, _ time.Time
 			return
 		}
 		for _, series := range s.series {
-			if series.Node != ref.Node || storage.LabelKey(series.Labels) != storage.LabelKey(ref.Labels) {
+			if series.Node != ref.Node || !maps.Equal(series.Labels, ref.Labels) {
 				continue
 			}
 			// The whole series is streamed, bounds and all: clipping the window is the
@@ -657,5 +658,48 @@ func TestReadHoldsItsAnswerNotItsWindow(t *testing.T) {
 	// of this package run one at a time.
 	if grew := after.TotalAlloc - before.TotalAlloc; grew > 4<<20 {
 		t.Fatalf("one read allocated %d bytes over %d stored points, want the size of its answer", grew, count)
+	}
+}
+
+// ReadOne reads exactly the series named, however many others carry its labels and more:
+// an item's page draws one series per chart (docs/specs/overview.md#item-page).
+func TestReadOneSelectsExactlyTheSeries(t *testing.T) {
+	bare := seriesPoints{SeriesRef: storage.SeriesRef{Node: "server-b", Metric: "disk.free_pct", Labels: map[string]string{}}, Points: []storage.Point{at(-time.Hour, 7)}}
+	src := &source{series: []seriesPoints{bare}}
+	for i := range 60 {
+		src.series = append(src.series, series("server-b", "/m"+string(rune('a'+i%26))+string(rune('a'+i/26)), at(-time.Hour, 42)))
+	}
+	got, window, err := reader(src).ReadOne(context.Background(), bare.SeriesRef, 24*time.Hour)
+	if err != nil {
+		t.Fatalf("ReadOne: %v", err)
+	}
+	if got == nil || len(got.Points) != 1 || got.Points[0].Value != 7 || !window.To.Equal(now) {
+		t.Fatalf("ReadOne = %+v over %v, want the bare series' one point", got, window)
+	}
+
+	empty, _, err := reader(src).ReadOne(context.Background(), series("server-b", "/none").SeriesRef, 24*time.Hour)
+	if err != nil || empty != nil {
+		t.Errorf("ReadOne of a series without points = %+v, %v; want nil, nil", empty, err)
+	}
+}
+
+func TestParseWindow(t *testing.T) {
+	if got, err := history.ParseWindow("7d"); err != nil || got != 7*24*time.Hour {
+		t.Errorf("ParseWindow(7d) = %v, %v", got, err)
+	}
+	if _, err := history.ParseWindow("2w"); err == nil {
+		t.Errorf("ParseWindow(2w) accepted")
+	}
+}
+
+// Two label sets can render alike as a key; ReadOne tells them apart by the labels
+// themselves.
+func TestReadOneComparesLabelsNotTheirRendering(t *testing.T) {
+	one := seriesPoints{SeriesRef: storage.SeriesRef{Node: "server-b", Metric: "disk.free_pct", Labels: map[string]string{"a=b": "c"}}, Points: []storage.Point{at(-time.Hour, 1)}}
+	two := seriesPoints{SeriesRef: storage.SeriesRef{Node: "server-b", Metric: "disk.free_pct", Labels: map[string]string{"a": "b=c"}}, Points: []storage.Point{at(-time.Hour, 2)}}
+	src := &source{series: []seriesPoints{one, two}}
+	got, _, err := reader(src).ReadOne(context.Background(), two.SeriesRef, 24*time.Hour)
+	if err != nil || got == nil || got.Points[0].Value != 2 {
+		t.Fatalf("ReadOne = %+v, %v; want the second series", got, err)
 	}
 }

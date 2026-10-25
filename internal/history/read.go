@@ -3,6 +3,8 @@ package history
 import (
 	"context"
 	"iter"
+	"maps"
+	"slices"
 	"time"
 
 	"github.com/pravbeseda/monitor/internal/storage"
@@ -68,17 +70,37 @@ func (r Reader) Read(ctx context.Context, query Query) (Result, error) {
 	if len(selected) > maxSeries {
 		return Result{}, tooMany(len(selected))
 	}
+	return r.read(ctx, now, query.Window, selected)
+}
 
+// ReadOne answers the one series ref names, however many others carry its labels and
+// more, or nil when the window holds none of its points.
+func (r Reader) ReadOne(ctx context.Context, ref storage.SeriesRef, window time.Duration) (*Series, Window, error) {
+	now := r.Now()
+	stored, err := r.Source.Newest(ctx, storage.Selection{Metric: ref.Metric, Node: ref.Node}, now.Add(-window))
+	if err != nil {
+		return nil, Window{}, err
+	}
+	stored = slices.DeleteFunc(stored, func(series storage.SeriesNewest) bool { return !maps.Equal(series.Labels, ref.Labels) })
+	result, err := r.read(ctx, now, window, stored)
+	if err != nil || len(result.Series) == 0 {
+		return nil, result.Window, err
+	}
+	return &result.Series[0], result.Window, nil
+}
+
+// read gathers the points of the selected series over one window shared by all of them.
+func (r Reader) read(ctx context.Context, now time.Time, length time.Duration, selected []storage.SeriesNewest) (Result, error) {
 	window := Window{To: now}
 	for _, series := range selected {
 		// A clock running ahead moves the end of the window to the point it stamped, but
 		// no further ahead than the window is long: one node stamped a century out would
 		// otherwise carry every other series off the chart for good.
-		if series.Newest.After(window.To) && series.Newest.Sub(now) <= query.Window {
+		if series.Newest.After(window.To) && series.Newest.Sub(now) <= length {
 			window.To = series.Newest
 		}
 	}
-	window.From = window.To.Add(-query.Window)
+	window.From = window.To.Add(-length)
 
 	result := Result{Window: window, Series: make([]Series, 0, len(selected))}
 	for _, series := range selected {

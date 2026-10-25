@@ -119,7 +119,7 @@ func cellOf(node Node, cell Interval) Cell {
 			fresh = true
 			for _, span := range series.Spans {
 				if held, ok := span.intersect(window); ok && held.overlaps(cell) {
-					worst = min(worst, cellFor(span.Level))
+					worst = min(worst, CellFor(span.Level))
 				}
 			}
 			for _, unusual := range series.Unusual {
@@ -135,7 +135,8 @@ func cellOf(node Node, cell Interval) Cell {
 	return worst
 }
 
-func cellFor(level evaluate.Level) Cell {
+// CellFor is the cell a level paints.
+func CellFor(level evaluate.Level) Cell {
 	switch level {
 	case evaluate.Critical:
 		return Critical

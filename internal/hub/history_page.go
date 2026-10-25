@@ -6,13 +6,14 @@ import (
 	"log/slog"
 	"net/http"
 	"net/url"
+	"time"
 
 	"github.com/pravbeseda/monitor/internal/history"
 	"github.com/pravbeseda/monitor/internal/i18n"
 	"github.com/pravbeseda/monitor/internal/notify"
 )
 
-var historyTemplate = template.Must(template.ParseFS(templates, "templates/history.html", "templates/shell.html"))
+var historyTemplate = template.Must(template.ParseFS(templates, "templates/history.html", "templates/chart.html", "templates/shell.html"))
 
 // historyView is the drill-down page as the template sees it: every string translated,
 // every number formatted, no logic left.
@@ -47,6 +48,16 @@ type seriesLink struct {
 // reload and a shared address.
 var offered = []string{"24h", "7d", "30d"}
 
+// offeredFor is the link offered for a window, when one is.
+func offeredFor(window time.Duration) (string, bool) {
+	for _, offer := range offered {
+		if length, err := history.ParseWindow(offer); err == nil && length == window {
+			return offer, true
+		}
+	}
+	return "", false
+}
+
 // HistoryPage draws one series, or says why it cannot.
 func HistoryPage(reader history.Reader) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -73,14 +84,14 @@ func historyPage(printer *i18n.Printer, query history.Query, result history.Resu
 		LatestLabel: printer.T("history.latest"),
 		WindowLabel: printer.T("history.window"),
 	}
+	// The mark follows the window the page is showing, not the string the query spelled it
+	// with: 1440m and 24h are one window.
+	shown, _ := offeredFor(query.Window)
 	for _, offer := range offered {
-		// The mark follows the window the page is showing, not the string the query
-		// spelled it with: 1440m and 24h are one window.
-		shown, err := history.ParseQuery(url.Values{"metric": {query.Metric}, "window": {offer}})
 		out.Windows = append(out.Windows, windowLink{
 			Label:   offer,
 			URL:     historyLink(query.Node, query.Metric, query.Labels, lang, offer),
-			Current: err == nil && shown.Window == query.Window,
+			Current: offer == shown,
 		})
 	}
 
@@ -90,7 +101,7 @@ func historyPage(printer *i18n.Printer, query history.Query, result history.Resu
 	case 1:
 		series := result.Series[0]
 		newest := series.Points[len(series.Points)-1]
-		drawn := draw(printer, series, result.Window)
+		drawn := draw(printer, series, result.Window, fullFrame)
 		out.Heading = series.Node + " · " + series.Metric + " · " + notify.Describe(printer, series.Labels)
 		out.Latest = format(printer, series.Metric, newest.Value) + " · " + printer.Time(newest.TS)
 		out.Chart = &drawn

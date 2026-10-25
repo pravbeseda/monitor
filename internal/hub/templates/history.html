@@ -31,23 +31,7 @@
     </nav>
   {{ end }}
   {{ if .Message }}<p>{{ .Message }}</p>{{ end }}
-  {{ with .Chart }}
-    <svg viewBox="0 0 {{ .Width }} {{ .Height }}" role="img">
-      {{ $c := . }}
-      {{ range .YTicks }}
-        <line class="grid" x1="{{ $c.Left }}" y1="{{ .At }}" x2="{{ $c.RightEdge }}" y2="{{ .At }}"></line>
-        <text x="{{ $c.Left }}" y="{{ .LabelAt }}" dx="-8" text-anchor="end">{{ .Label }}</text>
-      {{ end }}
-      <text class="zone" x="{{ .RightEdge }}" y="{{ .Top }}" dy="-5" text-anchor="end">{{ .Zone }}</text>
-      {{ range .XTicks }}
-        <text x="{{ .At }}" y="{{ .LabelAt }}" text-anchor="middle">{{ .Label }}</text>
-      {{ end }}
-      <line class="axis" x1="{{ .Left }}" y1="{{ .Top }}" x2="{{ .Left }}" y2="{{ .Baseline }}"></line>
-      <line class="axis" x1="{{ .Left }}" y1="{{ .Baseline }}" x2="{{ .RightEdge }}" y2="{{ .Baseline }}"></line>
-      {{ range .Lines }}<polyline class="line" points="{{ . }}"></polyline>{{ end }}
-      {{ range .Dots }}<circle class="dot" cx="{{ .X }}" cy="{{ .Y }}" r="3"></circle>{{ end }}
-    </svg>
-  {{ end }}
+  {{ with .Chart }}{{ template "chart-svg" . }}{{ end }}
   {{ if .Series }}
     <ul>
       {{ range .Series }}<li><a href="{{ .URL }}">{{ .Label }}</a></li>{{ end }}
