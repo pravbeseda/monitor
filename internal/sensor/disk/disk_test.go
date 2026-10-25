@@ -310,3 +310,50 @@ func TestSnapshotCountsAsAMemberOfItsContainer(t *testing.T) {
 		t.Errorf("mounts = %v, want the root and the snapshot standing alone for its container", mounts)
 	}
 }
+
+// spec: disk-sensor.md#enumeration — a volume macOS hides is skipped whatever the skip list
+// says: simulator runtimes move between directories no prefix can follow.
+func TestSkipsHiddenVolumes(t *testing.T) {
+	const runtime = "/private/var/run/com.apple.security.cryptexd/mnt/runtime-a"
+	source := fake{
+		mounts: []disk.Mount{
+			{Path: "/", FS: "apfs", Container: "disk3"},
+			{Path: runtime, FS: "apfs", Container: "disk12", Removable: true, Hidden: true},
+		},
+		usage: map[string]disk.Usage{
+			"/":     {TotalBytes: 1000, AvailBytes: 250},
+			runtime: {TotalBytes: 100, AvailBytes: 5},
+		},
+	}
+
+	got := collectWith(t, source, disk.Settings{Filesystems: []string{"apfs"}, SkipMounts: []string{}})
+
+	if len(got) != 2 || got[0].Labels["mount"] != "/" || got[1].Labels["mount"] != "/" {
+		t.Errorf("measurements = %+v, want only the root volume", got)
+	}
+}
+
+// spec: disk-sensor.md#enumeration — a hidden member never stands for its container, and a
+// container of hidden members only is not collected.
+func TestHiddenMembersDoNotStandForTheirContainer(t *testing.T) {
+	source := fake{
+		mounts: []disk.Mount{
+			{Path: "/Volumes/vm", FS: "apfs", Container: "disk3", Hidden: true},
+			{Path: "/Volumes/system-a", FS: "apfs", Container: "disk3"},
+			{Path: "/Volumes/Recovery", FS: "apfs", Container: "disk1", Hidden: true},
+			{Path: "/System/Volumes/xarts", FS: "apfs", Container: "disk1", Hidden: true},
+		},
+		usage: map[string]disk.Usage{
+			"/Volumes/vm":           {TotalBytes: 1000, AvailBytes: 250},
+			"/Volumes/system-a":     {TotalBytes: 1000, AvailBytes: 250},
+			"/Volumes/Recovery":     {TotalBytes: 500, AvailBytes: 400},
+			"/System/Volumes/xarts": {TotalBytes: 500, AvailBytes: 400},
+		},
+	}
+
+	got := collectWith(t, source, disk.Settings{Filesystems: []string{"apfs"}})
+
+	if len(got) != 2 || got[0].Labels["mount"] != "/Volumes/system-a" {
+		t.Errorf("measurements = %+v, want only the visible member of disk3", got)
+	}
+}

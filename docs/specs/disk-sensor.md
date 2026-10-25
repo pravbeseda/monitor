@@ -10,8 +10,9 @@
 ## Purpose
 
 The disk sensor reads how much space each mounted volume has left and returns it as
-measurements. It decides nothing: which filesystem types count comes from the hub's
-configuration, and whether a value is alarming is the evaluation engine's business.
+measurements. It decides nothing beyond what the OS itself hides from its user: which
+filesystem types and mount prefixes count comes from the hub's configuration, and whether a
+value is alarming is the evaluation engine's business.
 
 Its labels are a contract. They form the storage key together with the metric id, so a
 volume that changes its labels between runs breaks its own history.
@@ -60,7 +61,9 @@ One row = one test. Anchors: `spec: disk-sensor.md#<heading>`.
 | a mounted volume whose type is in the allow-list | `disk.free_bytes` and `disk.free_pct` for it |
 | a volume whose type is not in the allow-list (`devfs`, `tmpfs`, `overlay`, `nfs`) | nothing: it is skipped |
 | a mount point under one of the skipped prefixes | nothing: the hub's skip list names what is not worth watching |
+| on macOS, a volume the OS hides from its user (`nobrowse`): system volumes, Recovery, simulator runtimes | nothing, whatever the skip list says: what Finder does not show is not the owner's to watch |
 | several volumes that share one pool of free space (an APFS container, bind mounts of one device) | one measurement pair, for the shortest mount point of the group |
+| a container whose shortest mount point is hidden (a hidden `/Volumes/vm` beside a visible `/Volumes/system-a`) | one measurement pair, for the shortest visible mount point; nothing when every member is hidden |
 | several partitions of one physical disk (two NTFS volumes on a stick) | one measurement pair each: separate pools are separate volumes |
 | on macOS, a mounted snapshot of an APFS volume — Time Machine mounts them during a backup | grouped with the container it was taken from, so nothing of its own while that container has a watched volume with a shorter mount point |
 | on macOS, a mounted snapshot whose container has no other watched volume | collected as that container's one measurement pair, like any other sole member |
@@ -92,9 +95,10 @@ One row = one test. Anchors: `spec: disk-sensor.md#<heading>`.
 - The sensor holds no state between collections: the same machine and the same allow-list
   produce the same measurements.
 - The allow-list and the skip list arrive from the hub; the sensor has no list of its own
-  ([0010](../decisions/0010-agent-configuration.md)).
-- Which volume of a container is kept depends on the mount points alone, so it does not
-  change between collections and a series keeps its history.
+  ([0010](../decisions/0010-agent-configuration.md)). Its one built-in filter is the OS's
+  hidden flag, which configuration cannot turn off.
+- Which volume of a container is kept depends on the mount points and the filters
+  alone, so it does not change between collections and a series keeps its history.
 
 ## Edge cases
 
@@ -106,6 +110,15 @@ One row = one test. Anchors: `spec: disk-sensor.md#<heading>`.
   is what lets the hub tell that from a vanished internal disk
   ([evaluation](evaluation.md#freezing), [history](history.md#page)). macOS flags a mounted
   disk image as removable too, so an installer opened and ejected leaves no row on the page.
+- **A volume macOS hides** is marked `nobrowse` in the mount table; Finder leaves it out
+  for the same reason. Xcode mounts simulator runtimes as such volumes, and has moved them
+  from one directory to another between releases, so a skip-list prefix catches them only
+  until the next move — the flag catches them wherever they land. The skip list stays for
+  what the OS shows but nobody watches; its macOS defaults predate the flag and keep older
+  agents quiet. Linux has no such flag.
+- **A disk its owner hid** — `hdiutil attach -nobrowse`, `nobrowse` in `fstab` — is not
+  watched either, and no setting brings it back. Hiding a disk from Finder and watching it
+  here is a combination nobody has asked for; the flag is the OS's answer and is taken as is.
 - **A mounted snapshot** names its source device after its last `@`
   (`com.apple.TimeMachine.….local@/dev/disk3s5`), so it is grouped with the container it was
   taken from and loses to that container's shorter mount points — `/` for a local snapshot,

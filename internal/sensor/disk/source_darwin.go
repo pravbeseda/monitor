@@ -35,6 +35,7 @@ func (systemSource) Mounts() ([]Mount, error) {
 			Path:      unix.ByteSliceToString(stat.Mntonname[:]),
 			FS:        unix.ByteSliceToString(stat.Fstypename[:]),
 			Removable: stat.Flags&unix.MNT_REMOVABLE != 0,
+			Hidden:    stat.Flags&unix.MNT_DONTBROWSE != 0,
 			Container: container(
 				unix.ByteSliceToString(stat.Fstypename[:]),
 				unix.ByteSliceToString(stat.Mntfromname[:])),

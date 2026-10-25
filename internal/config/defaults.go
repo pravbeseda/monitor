@@ -11,7 +11,8 @@ const defaultBaseTick = "5m"
 var defaultFilesystems = []string{"apfs", "ext4", "xfs", "btrfs", "zfs", "ntfs"}
 
 // Mount points nobody watches: the system volumes of a Mac and the simulator images.
-// They describe the tool's behaviour out of the box, not any installation.
+// They describe the tool's behaviour out of the box, not any installation. Agents skip
+// them as hidden volumes on their own; the list keeps older agents quiet.
 var defaultSkipMounts = []string{"/System/Volumes/", "/Library/Developer/CoreSimulator/"}
 
 // The digest goes out at nine in the morning UTC: an hour names no installation, and UTC
