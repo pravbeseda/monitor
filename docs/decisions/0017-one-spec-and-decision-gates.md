@@ -1,6 +1,7 @@
 # 0017. One document per unit of work; gates on decisions, not documents
 
-- **Status:** accepted
+- **Status:** accepted; opening a pull request is no longer a gate, per
+  [0047](0047-a-pull-request-opens-without-a-gate.md)
 - **Date:** 2026-08-29
 - **Source:** stage 2 of the POC, where the process cost more attention than the work
 - **Amends:** the stages and gates of [0009](0009-development-process.md); its purpose —

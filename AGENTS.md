@@ -91,9 +91,10 @@ Per [ADR 0008](docs/decisions/0008-english-repo-bilingual-ui.md):
 ## Development process (mandatory)
 
 Per [ADR 0009](docs/decisions/0009-development-process.md), amended by
-[ADR 0017](docs/decisions/0017-one-spec-and-decision-gates.md). Every unit of work runs
-through these stages in order. Only three things stop and wait for the user: a question of
-the three kinds below, opening a pull request, and merging it. Code never starts before the
+[ADR 0017](docs/decisions/0017-one-spec-and-decision-gates.md) and
+[ADR 0047](docs/decisions/0047-a-pull-request-opens-without-a-gate.md). Every unit of work
+runs through these stages in order. Only two things stop and wait for the user: a question
+of the three kinds below, and merging a pull request. Code never starts before the
 behaviour it implements exists as a table, but that is my constraint, not a stop. Everything
 else is decided, done and reported.
 
@@ -117,7 +118,7 @@ else is decided, done and reported.
    deliberately not fixed and why, and anything that turned out to be a question for them.
 7. **Documentation.** Update the spec, ADRs and `docs/index.md`; report which documents
    were touched.
-8. **Pull request.** → **gate:** never opened without explicit permission for that PR.
+8. **Pull request.** Opened without asking once the definition of done holds.
 9. **Merge.** → **gate:** only on the user's explicit instruction.
 
 **A question reaches the user only when** one of these holds:
@@ -144,12 +145,12 @@ the multi-agent self-review was run and its findings resolved.
 
 ### Holding the line
 
-The user has asked to be kept on this process. Three things are worth saying out loud when
+The user has asked to be kept on this process. Four things are worth saying out loud when
 they are about to be skipped, in one or two sentences each: code written before the
-behaviour it implements exists as a table, a commit on `main`, and a pull request or a
-merge without permission. Say it once per occurrence; a repeated objection the user has
-overruled is noise, not diligence. If the user confirms anyway, do it and record the skip
-in the pull request, so it is visible rather than forgotten.
+behaviour it implements exists as a table, a commit on `main`, a pull request opened before
+the work is done, and a merge without permission. Say it once per occurrence; a repeated
+objection the user has overruled is noise, not diligence. If the user confirms anyway, do it
+and record the skip in the pull request, so it is visible rather than forgotten.
 
 ## Documentation duties (mandatory)
 
