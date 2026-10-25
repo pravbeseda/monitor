@@ -3,6 +3,7 @@ package history
 import (
 	"context"
 	"iter"
+	"maps"
 	"slices"
 	"time"
 
@@ -80,8 +81,7 @@ func (r Reader) ReadOne(ctx context.Context, ref storage.SeriesRef, window time.
 	if err != nil {
 		return nil, Window{}, err
 	}
-	exact := storage.LabelKey(ref.Labels)
-	stored = slices.DeleteFunc(stored, func(series storage.SeriesNewest) bool { return storage.LabelKey(series.Labels) != exact })
+	stored = slices.DeleteFunc(stored, func(series storage.SeriesNewest) bool { return !maps.Equal(series.Labels, ref.Labels) })
 	result, err := r.read(ctx, now, window, stored)
 	if err != nil || len(result.Series) == 0 {
 		return nil, result.Window, err

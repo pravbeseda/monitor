@@ -236,10 +236,8 @@ var defaultMetrics = []string{
 // gave one — the first the page charts.
 func (it overviewItem) cardSeries(attention []item) ([]state.Subject, int) {
 	var out []state.Subject
-	seen := map[string]bool{}
 	add := func(s state.Subject) {
-		if key := s.Metric + "|" + storage.LabelKey(s.Labels); !seen[key] {
-			seen[key] = true
+		if !slices.ContainsFunc(out, func(o state.Subject) bool { return o.Metric == s.Metric && maps.Equal(o.Labels, s.Labels) }) {
 			out = append(out, s)
 		}
 	}

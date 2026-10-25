@@ -2,6 +2,7 @@ package hub_test
 
 import (
 	"context"
+	"encoding/json"
 	"iter"
 	"net/http"
 	"net/http/httptest"
@@ -39,7 +40,8 @@ func layout() hub.Layout {
 type held map[string][]storage.Point
 
 func heldKey(ref storage.SeriesRef) string {
-	return ref.Node + "|" + ref.Metric + "|" + storage.LabelKey(ref.Labels)
+	labels, _ := json.Marshal(ref.Labels)
+	return ref.Node + "|" + ref.Metric + "|" + string(labels)
 }
 
 func (h held) refs() []storage.SeriesRef {
@@ -47,11 +49,7 @@ func (h held) refs() []storage.SeriesRef {
 	for key := range h {
 		parts := strings.SplitN(key, "|", 3)
 		labels := map[string]string{}
-		for _, pair := range strings.Split(parts[2], ",") {
-			if name, value, ok := strings.Cut(pair, "="); ok {
-				labels[name] = value
-			}
-		}
+		_ = json.Unmarshal([]byte(parts[2]), &labels)
 		out = append(out, storage.SeriesRef{Node: parts[0], Metric: parts[1], Labels: labels})
 	}
 	return out
@@ -532,5 +530,16 @@ func TestOverviewLineReadsItsOwnSeries(t *testing.T) {
 	body := card(t, showOverview(t, stateOf(subjects...), points, "/overview"), "box-x")
 	if !strings.Contains(body, "<polyline") {
 		t.Errorf("the empty-labelled series has no line: %s", body)
+	}
+}
+
+// spec: overview.md#rows — two series whose labels render alike are still two rows.
+func TestOverviewRowsKeepLabelSetsApart(t *testing.T) {
+	body := overview(t,
+		judgedAt(reading("box-x", "queue.depth", map[string]string{"a=b": "c"}, 9), evaluate.Warning),
+		judgedAt(reading("box-x", "queue.depth", map[string]string{"a": "b=c"}, 9), evaluate.Warning),
+	)
+	if got := cardRows(t, body, "box-x"); len(got) != 2 {
+		t.Errorf("rows = %q, want both series", got)
 	}
 }
