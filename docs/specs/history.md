@@ -3,7 +3,8 @@
 - **Status:** approved
 - **Owns:** `internal/history` (series: selection, window, reduction, gaps) and its consumers
   in `internal/hub` — `GET /api/v1/series`, `GET /api/v1/history` and the drill-down page
-  `GET /history`, plus the link the debug view `/debug` grows to reach it and which series `/debug`
+  `GET /history`, whose chart the item pages of the [overview](overview.md) reuse, plus the
+  link the debug view `/debug` grows to reach it and which series `/debug`
   hides or marks as no longer arriving, by the staleness [state](state.md#staleness) reports.
   Reading stored points stays with `internal/storage`; the expected interval of a series
   comes from the resolved configuration `internal/config` already computes; every
@@ -297,8 +298,9 @@ unit reads naturally.
   [0018](../decisions/0018-history-through-the-api.md) exists to enable. Ingest's per-node
   limiter has no counterpart here yet.
 - **Thresholds drawn on the chart** — a series' own warning and critical values
-  ([thresholds.md](thresholds.md)) are meaning, and drawing them as lines on its chart is a
-  later step.
+  ([thresholds.md](thresholds.md)) are meaning, and drawing them as lines on this page's
+  chart is a later step; the item pages of the [overview](overview.md#item-page) draw them
+  on theirs.
 - **Events on the chart.** An event and a series now key alike — both on
   `(node, metric, labels)` ([0033](../decisions/0033-a-subject-is-a-series.md)) — so the
   overlay is a design question of what to draw, not of how to join it.

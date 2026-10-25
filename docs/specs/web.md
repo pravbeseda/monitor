@@ -8,7 +8,8 @@
   itself stays with `internal/i18n`; what a page *contains* stays with that page's own spec
   ([history.md](history.md) for `/history` and for the values on `/debug`, [state.md](state.md)
   for the levels on `/debug`, [timeline.md](timeline.md) for `/timeline`,
-  [thresholds.md](thresholds.md) for `/thresholds`); the reader's language
+  [overview.md](overview.md) for `/overview` and `/item`, [thresholds.md](thresholds.md) for
+  `/thresholds`); the reader's language
   is settled by [0008](../decisions/0008-english-repo-bilingual-ui.md) and needs nothing
   here. The JSON API is not a reader: nothing here touches it. A *hub page* below is
   any HTML page the hub serves outside `/public/`: the public pages share only the icon
@@ -22,7 +23,8 @@
   [0029](../decisions/0029-pages-refresh-by-fetching-their-own-address.md),
   [0037](../decisions/0037-skins-are-tabs-and-the-root-opens-the-last-one.md),
   [0040](../decisions/0040-the-hub-serves-its-public-pages-open.md),
-  [0041](../decisions/0041-mission-control-folds-into-the-timeline.md)
+  [0041](../decisions/0041-mission-control-folds-into-the-timeline.md),
+  [0046](../decisions/0046-an-overview-of-items-rendered-by-the-hub.md)
 
 ## Purpose
 
@@ -73,23 +75,24 @@ tell which of them they are.
 
 A skin is a page that shows the whole hub its own way
 ([0037](../decisions/0037-skins-are-tabs-and-the-root-opens-the-last-one.md)): the timeline
-at `/timeline` and the table of every series at `/debug`, in that order, their tabs reading
-"Timeline" and "All series" ("Лента", "Все серии"). Mission control, once at `/board`, is
-part of the timeline now
-([0041](../decisions/0041-mission-control-folds-into-the-timeline.md)).
+at `/timeline`, the overview at `/overview` ([overview](overview.md)) and the table of every
+series at `/debug`, in that order, their tabs reading "Timeline", "Overview" and "All
+series" ("Лента", "Обзор", "Все серии"). Mission control, once at `/board`, is part of the
+timeline now ([0041](../decisions/0041-mission-control-folds-into-the-timeline.md)).
 
 The choice is the tab the reader last clicked, stored by the page in the browser the way the
 zone is ([zone](#zone)); the hub only reads it.
 
 | Request | What the reader sees |
 |---|---|
-| any hub page | a row of two tabs at the top, "Timeline" then "All series" ("Лента", "Все серии"), each linking to its address with the page's language |
+| any hub page | a row of three tabs at the top, "Timeline", "Overview" then "All series" ("Лента", "Обзор", "Все серии"), each linking to its address with the page's language |
 | a skin's own address | that skin, its tab marked as the open one |
-| `/history` or `/thresholds` | the tabs, none marked |
+| `/history`, `/thresholds` or an item's page `/item` | the tabs, none marked |
 | `/` from a browser that never clicked a tab | a redirect to `/timeline` |
 | a click on the table's tab, then `/` | a redirect to `/debug` |
 | a click on the table's tab, then `/?lang=ru` | a redirect to `/debug?lang=ru` |
 | a click on the table's tab, then the timeline's, then `/` | a redirect to `/timeline`: the last tab clicked wins |
+| a click on the overview's tab, then `/` | a redirect to `/overview` |
 | no tab clicked, then the link to `/debug` from a silent node's item under "Now", then `/` | a redirect to `/timeline`: only a tab is a choice |
 | `/timeline` opened from a bookmark after a click on the table's tab, then `/` | a redirect to `/debug` |
 | open pages keeping themselves current or reloading after an upgrade ([live](#live)) | the remembered skin unchanged, however many are open |

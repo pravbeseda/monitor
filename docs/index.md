@@ -69,6 +69,7 @@ One decision per file, each stating what was rejected and why. New records start
 | [0043](decisions/0043-the-hub-hosts-backup-belongs-to-its-provisioning.md) | The hub host's backup belongs to its provisioning; the repository states what it must keep | accepted |
 | [0044](decisions/0044-a-sensor-takes-its-parameters-from-the-hub.md) | A sensor takes its parameters from the hub, in its entry of the configuration | accepted |
 | [0045](decisions/0045-sites-are-a-node-their-hosts-report-for.md) | Sites are a node of their own, which the agent of each site's host reports for | accepted |
+| [0046](decisions/0046-an-overview-of-items-rendered-by-the-hub.md) | An overview of items, rendered by the hub, opens a page per item | accepted |
 
 ## Behaviour specs
 
@@ -94,6 +95,7 @@ can see ([ADR 0017](decisions/0017-one-spec-and-decision-gates.md)). New specs s
 | [anomaly.md](specs/anomaly.md) | Each series' norm, how far its newest value lies from it, the anomaly rank, and the record of when a series became unusual and came back | approved |
 | [attention.md](specs/attention.md) | What needs attention now, in what order, under what headline — the timeline's "Now" | approved |
 | [timeline.md](specs/timeline.md) | `/timeline`: what needs attention now, each node's last 24 hours, and the levels and anomalies that changed | approved |
+| [overview.md](specs/overview.md) | `/overview` and `/item`: a card per server, site and service with its telling numbers, and a page per item with every series charted beside its changes | approved |
 | [thresholds.md](specs/thresholds.md) | The page that sets what a series is judged by — what may be stored as a threshold, and whether it may be shown as unusual | approved |
 | [release.md](specs/release.md) | How a merge tags itself, what a tag publishes, how a release is signed, and how an artifact is checked | approved |
 | [installer.md](specs/installer.md) | One command that installs or upgrades a hub or an agent from a signed release, the hub following the version its host names, and an agent following the one the hub names | approved |
@@ -128,6 +130,7 @@ Reasoning from working sessions, including options that were rejected.
 | [2026-09-30](log/2026-09-30-time-machine.md) | Time Machine: why it needs no parameter, why not `tmutil`, one series per destination, and what fails per destination |
 | [2026-10-03](log/2026-10-03-site-traffic.md) | Site traffic: why access logs rather than a counter, why page views over a sliding day, and whose node a site is |
 | [2026-10-08](log/2026-10-08-debug-matrix.md) | The series table as matrices: why a matrix per label key set and family, and why not collapsing or filtering the page |
+| [2026-10-25](log/2026-10-25-overview.md) | The overview: how it is drawn, the five questions, the seven prototypes, and why sections follow who collects an item |
 
 ## Not written yet
 

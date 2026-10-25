@@ -27,7 +27,9 @@ off, history behind every value, and silence until something needs you.
 - **Anomalies** — a value outside the band its series kept the week before — are shown,
   never notified.
 - **The timeline** at `/timeline` shows what needs attention now, each node's last
-  24 hours, and what changed; `/debug` is the full table of every series.
+  24 hours, and what changed; **the overview** at `/overview` shows each computer, site and
+  service as a card of its telling numbers, opening a page with all of its charts; `/debug`
+  is the full table of every series.
 - **The interface** speaks English and Russian.
 
 Finance and health come once they have sources that report on their own; the roadmap is in
@@ -41,7 +43,7 @@ Finance and health come once they have sources that report on their own; the roa
  node (agent) ──┘                            │
                                              ├── collects online services
                                              ├── evaluation tick ──▶ alerts, daily digest
-                                             └── web pages: /timeline, /debug, /thresholds
+                                             └── web pages: /timeline, /overview, /debug, …
 ```
 
 - **Two binaries in one repository:** `cmd/agent` runs on every node, `cmd/hub` is one

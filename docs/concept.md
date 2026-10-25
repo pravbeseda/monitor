@@ -56,6 +56,7 @@ Each principle below is recorded in full, with its alternatives, in the linked A
 |---|---|
 | Debug view | A table of every metric, at `/debug`. The first skin; it proves the State API is sufficient and stays as the debugging mode. |
 | Timeline | The primary view, at `/timeline`: what needs attention now — empty while all is well, anomalies surfacing on their own ([spec](specs/attention.md)) — each node's last 24 hours, and the levels and anomalies that changed ([spec](specs/timeline.md)). It absorbed mission control, the board that showed only the first part ([ADR 0041](decisions/0041-mission-control-folds-into-the-timeline.md)). |
+| Overview | At `/overview`: a card per server, site and service with its few telling numbers and a line of its last day, grouped by who collects them; a card opens the item's page with every series charted beside its changes ([spec](specs/overview.md), [ADR 0046](decisions/0046-an-overview-of-items-rendered-by-the-hub.md)). |
 | Advisors | Per-domain summaries in plain language (an LLM over aggregates). |
 | City | Isometric city: districts are life areas, buildings are metrics. |
 | Organism | Metrics as body systems, with one overall "pulse" number. |
@@ -91,5 +92,5 @@ health wait for sources that report on their own
 3. **Semantic engine** — health, anomalies, trends, forecasts, time travel. The anomaly
    rank came first, as the slice mission control read
    ([log](log/2026-09-23-mission-control.md)).
-4. **Skins** — mission control first, since folded into the timeline, then advisors, then
-   the visual metaphors.
+4. **Skins** — mission control first, since folded into the timeline; the overview of
+   numbers per item; then advisors, then the visual metaphors.
