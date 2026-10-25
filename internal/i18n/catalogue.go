@@ -182,7 +182,7 @@ var catalogue = map[string]map[Locale]string{
 	"family.systemd":                        {English: "Services", Russian: "Сервисы"},
 	"metric.systemd.failed_units":           {English: "Failed units", Russian: "Упавшие юниты"},
 	"family.timemachine":                    {English: "Time Machine", Russian: "Time Machine"},
-	"metric.timemachine.backup_age_seconds": {English: "Time Machine backup", Russian: "Бэкап Time Machine"},
+	"metric.timemachine.backup_age_seconds": {English: "Time Machine backup {destination}", Russian: "Бэкап Time Machine {destination}"},
 	"family.gdrive":                         {English: "Google Drive", Russian: "Google Drive"},
 	"metric.gdrive.free_pct":                {English: "Free on Google Drive", Russian: "Свободно на Google Drive"},
 	"metric.gdrive.free_bytes":              {English: "Free on Google Drive", Russian: "Свободно на Google Drive"},

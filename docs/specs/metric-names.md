@@ -53,7 +53,7 @@ and its family:
 | family `systemd` | Services | Сервисы |
 | `systemd.failed_units` | Failed units | Упавшие юниты |
 | family `timemachine` | Time Machine | Time Machine |
-| `timemachine.backup_age_seconds` | Time Machine backup | Бэкап Time Machine |
+| `timemachine.backup_age_seconds` | Time Machine backup {destination} | Бэкап Time Machine {destination} |
 | family `gdrive` | Google Drive | Google Drive |
 | `gdrive.free_pct`, `gdrive.free_bytes` | Free on Google Drive | Свободно на Google Drive |
 | family `site` | Site | Сайт |
@@ -106,7 +106,7 @@ followed by what the labels it does not use name today
 |---|---|---|
 | `disk.free_pct {mount: /srv, fs: ext4, removable: "false"}` | ru | `Свободно /srv` |
 | the same | en | `Free on /srv` |
-| `timemachine.backup_age_seconds {destination: backup-a}` | en | `Time Machine backup destination=backup-a` |
+| `queue.depth {queue: payments}`, named "Queue depth" | en | `Queue depth queue=payments` |
 | `disk.free_pct {mount: "/Volumes/Backup Disk"}` | en | `Free on "/Volumes/Backup Disk"`: a value is quoted as a label value is quoted today |
 | `disk.free_pct {mount: ""}` | en | `Free on ""`: an empty value still tells the series apart |
 | a name referring to `{queue}`, on a series without that label | en | the name with `{queue}` left out and the spaces around it closed up |
