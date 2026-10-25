@@ -242,6 +242,33 @@ English catalogue's; every one of them has its Russian. `sites` is the node of c
 | a row on a site's card | without `site=blog-a`: the card already names the site |
 | any card | a link to that item's page, carrying the language |
 
+### The card {#card}
+
+How a card lays out what the rows above choose
+([2026-10-25 metric names](../log/2026-10-25-metric-names.md#the-card) records the style
+chosen). Its state's word is a pill, and a stripe runs along its left edge, both in the
+colour the timeline's lanes draw that state ([timeline](timeline.md#lanes)). The first two
+rows are its main numbers, side by side however narrow the screen: each its name, its value
+large with its mark before it, and its line of the day under it, the area under the line
+filled. The rows after them follow in a run that wraps. A reason closes the card.
+
+| State | The card |
+|---|---|
+| any card | its state's word as a pill, and a stripe of the same colour along its left edge |
+| two rows or more | the first two as the main numbers, side by side, each with its name, value, mark and line |
+| one row | that row alone as the main number, at the card's full width |
+| a main number whose series holds a readable threshold | each of its `warning` and `critical` values at zero or above drawn across the line as a dashed line in its level's colour, the line's scale reaching it |
+| a main number with no point in its last day | no line and no threshold lines |
+| the third row on | in the run after the main numbers, each its name, its value and its mark, separated by a dot; "N more" at its end |
+| the card's last report | at its foot, and nowhere else on the card |
+| a card `critical` or `warning`, its first row at that level with a readable threshold holding a value for it | the reason: the row's name, "below" or "above" by the threshold's direction, and that value — "Free on /srv below 10.0%" — whatever the newest value, since a level holds until its value recovers past the band |
+| the same, the threshold unreadable or holding no value for that level | the reason: the row's name and the level's word |
+| a card `unusual` | the reason: the first row marked unusual, its name and its usual value, as "now" says it ([attention](attention.md#model)) |
+| a card `ok` whose rows carry no mark | the reason "All within thresholds" |
+| a card `ok` whose first row holds no fresh data | the reason: the row's name and that it holds no fresh data since its newest value |
+| a card silent or with no fresh data | its last report as the reason |
+| a card "reporting, nothing watched" | no reason: its pill says it |
+
 ### The overview page {#overview-page}
 
 | Request | What the reader sees |
