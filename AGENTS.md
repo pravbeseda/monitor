@@ -149,8 +149,8 @@ The user has asked to be kept on this process. Four things are worth saying out 
 they are about to be skipped, in one or two sentences each: code written before the
 behaviour it implements exists as a table, a commit on `main`, a pull request opened before
 the work is done, and a merge without permission. Say it once per occurrence; a repeated
-objection the user has overruled is noise, not diligence. If the user confirms anyway, do it and record the skip
-in the pull request, so it is visible rather than forgotten.
+objection the user has overruled is noise, not diligence. If the user confirms anyway, do it
+and record the skip in the pull request, so it is visible rather than forgotten.
 
 ## Documentation duties (mandatory)
 
