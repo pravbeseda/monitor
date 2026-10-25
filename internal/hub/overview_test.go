@@ -99,7 +99,7 @@ func showOverview(t *testing.T, current state.State, source history.Source, targ
 	t.Helper()
 	rec := httptest.NewRecorder()
 	read := func(context.Context) (state.State, error) { return current, nil }
-	hub.Overview(read, historyOf(source), layout()).ServeHTTP(rec, httptest.NewRequest(http.MethodGet, target, nil))
+	hub.Overview(read, historyOf(source), limits{}, layout()).ServeHTTP(rec, httptest.NewRequest(http.MethodGet, target, nil))
 	if rec.Code != http.StatusOK {
 		t.Fatalf("status = %d: %s", rec.Code, rec.Body)
 	}
@@ -133,7 +133,7 @@ var (
 	headingPattern = regexp.MustCompile(`(?s)<h2 class="section-heading">(.*?)</h2>`)
 	cardPattern    = regexp.MustCompile(`(?s)<a class="card [^"]*" href="[^"]*" data-item="([^"]*)">.*?</a>`)
 	cardState      = regexp.MustCompile(`<span class="card-state">([^<]*)</span>`)
-	rowPattern     = regexp.MustCompile(`(?s)<li class="row" data-series="([^"]*)">.*?</li>`)
+	rowPattern     = regexp.MustCompile(`(?s)<li class="row[^"]*" data-series="([^"]*)">.*?</li>`)
 	markPattern    = regexp.MustCompile(`<span class="row-mark[^"]*">([^<]*)</span>`)
 )
 
@@ -535,7 +535,7 @@ func TestOverviewPage(t *testing.T) {
 	t.Run("the state cannot be read", func(t *testing.T) {
 		rec := httptest.NewRecorder()
 		read := func(context.Context) (state.State, error) { return state.State{}, errFailed }
-		hub.Overview(read, historyOf(held{}), layout()).ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/overview", nil))
+		hub.Overview(read, historyOf(held{}), limits{}, layout()).ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/overview", nil))
 		if rec.Code != http.StatusInternalServerError {
 			t.Errorf("status = %d, want 500", rec.Code)
 		}

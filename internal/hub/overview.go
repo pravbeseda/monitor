@@ -10,6 +10,7 @@ import (
 	"net/url"
 	"slices"
 	"sort"
+	"strconv"
 	"strings"
 	"time"
 
@@ -334,14 +335,17 @@ type sectionView struct {
 }
 
 type cardView struct {
-	Name       string
-	Class      string
-	Word       string
-	Link       string
-	LastReport string
-	None       string
-	Rows       []cardRowView
-	More       string
+	Name  string
+	Class string
+	Word  string
+	Link  string
+	None  string
+	// Main are the card's main numbers, side by side; Rest are the rows after them.
+	Main []cardRowView
+	Rest []cardRowView
+	More string
+	// Reason closes the card: why it holds its state (docs/specs/overview.md#card).
+	Reason string
 }
 
 type cardRowView struct {
@@ -349,11 +353,13 @@ type cardRowView struct {
 	Value string
 	Mark  *levelView
 	Line  *chart
+	// Areas fill under each stretch of the line.
+	Areas []string
 }
 
 // Overview renders the overview skin: a card per item, grouped by who collects it
 // (docs/specs/overview.md).
-func Overview(read StateReader, reader history.Reader, layout Layout) http.Handler {
+func Overview(read StateReader, reader history.Reader, store ThresholdReader, layout Layout) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		values := r.URL.Query()
 		printer := i18n.For(i18n.Negotiate(values.Get("lang"), r.Header.Get("Accept-Language"))).In(zoneOf(r))
@@ -364,7 +370,7 @@ func Overview(read StateReader, reader history.Reader, layout Layout) http.Handl
 			storageFailure(w, printer, err)
 			return
 		}
-		view, err := overviewOf(r.Context(), printer, reader, current, layout, lang)
+		view, err := overviewOf(r.Context(), printer, reader, store, current, layout, lang)
 		if err != nil {
 			storageFailure(w, printer, err)
 			return
@@ -376,7 +382,7 @@ func Overview(read StateReader, reader history.Reader, layout Layout) http.Handl
 	})
 }
 
-func overviewOf(ctx context.Context, printer *i18n.Printer, reader history.Reader, current state.State, layout Layout, lang string) (overviewView, error) {
+func overviewOf(ctx context.Context, printer *i18n.Printer, reader history.Reader, store ThresholdReader, current state.State, layout Layout, lang string) (overviewView, error) {
 	out := overviewView{shell: shellOf(printer, "overview.title", "overview", lang)}
 	found := overviewItems(current, layout)
 	if len(found) == 0 {
@@ -388,7 +394,7 @@ func overviewOf(ctx context.Context, printer *i18n.Printer, reader history.Reade
 		if n := len(out.Sections); n == 0 || out.Sections[n-1].section != it.section {
 			out.Sections = append(out.Sections, sectionView{section: it.section, counts: map[timeline.Cell]int{}, Key: sectionKeys[it.section].plural})
 		}
-		view, err := cardOf(ctx, printer, reader, it, attention, lang)
+		view, err := cardOf(ctx, printer, reader, store, it, attention, lang)
 		if err != nil {
 			return out, err
 		}
@@ -414,36 +420,102 @@ func headingOf(printer *i18n.Printer, section sectionView) string {
 	return strings.Join(parts, " · ")
 }
 
-func cardOf(ctx context.Context, printer *i18n.Printer, reader history.Reader, it overviewItem, attention []item, lang string) (cardView, error) {
+func cardOf(ctx context.Context, printer *i18n.Printer, reader history.Reader, store ThresholdReader, it overviewItem, attention []item, lang string) (cardView, error) {
 	out := cardView{
 		Name:  it.name,
 		Class: cellNames[it.cell].class,
 		Word:  printer.T(cellNames[it.cell].word),
 		Link:  it.link(lang, ""),
 	}
-	if it.cell == timeline.Silent || it.cell == timeline.NoFreshData {
-		out.LastReport = fmt.Sprintf(printer.T("overview.last_report"), printer.Time(it.lastReport))
-	}
 	if len(it.shownSeries()) == 0 {
 		out.None = printer.T("overview.no_series")
+		out.Reason = it.lastReported(printer)
 		return out, nil
 	}
 	shown, more := it.cardSeries(attention)
 	for i, s := range shown {
 		row := cardRowView{Name: it.rowName(printer, s), Value: format(printer, s.Metric, *s.Value), Mark: markOf(printer, s)}
-		if i < linedRows {
-			line, err := lineOf(ctx, printer, reader, s, history.DefaultWindow, sparkFrame)
-			if err != nil {
-				return out, err
-			}
-			row.Line = line
+		if i >= linedRows {
+			out.Rest = append(out.Rest, row)
+			continue
 		}
-		out.Rows = append(out.Rows, row)
+		_, _, levels, err := levelsOf(ctx, store, s)
+		if err != nil {
+			return out, err
+		}
+		if row.Line, err = lineOf(ctx, printer, reader, s, history.DefaultWindow, sparkFrame, levels...); err != nil {
+			return out, err
+		}
+		if row.Line != nil {
+			row.Areas = areasOf(*row.Line)
+		}
+		out.Main = append(out.Main, row)
 	}
 	if more > 0 {
 		out.More = fmt.Sprintf(printer.T("overview.more"), more)
 	}
-	return out, nil
+	var err error
+	out.Reason, err = it.reason(ctx, printer, store, shown)
+	return out, err
+}
+
+// lastReported is when the item last reported, said only once it is silent or holds no
+// fresh data.
+func (it overviewItem) lastReported(printer *i18n.Printer) string {
+	if it.cell != timeline.Silent && it.cell != timeline.NoFreshData {
+		return ""
+	}
+	return fmt.Sprintf(printer.T("overview.last_report"), printer.Time(it.lastReport))
+}
+
+// reason is why the card holds its state, said at its foot (docs/specs/overview.md#card).
+// Rows needing attention come first, so the first row is the one to explain.
+func (it overviewItem) reason(ctx context.Context, printer *i18n.Printer, store ThresholdReader, shown []state.Subject) (string, error) {
+	first := shown[0]
+	switch it.cell {
+	case timeline.Silent, timeline.NoFreshData:
+		return it.lastReported(printer), nil
+	case timeline.Critical, timeline.Warning:
+		name := it.rowName(printer, first)
+		th, readable, _, err := levelsOf(ctx, store, first)
+		if err != nil {
+			return "", err
+		}
+		value := th.Warning
+		if *first.Level == evaluate.Critical {
+			value = th.Critical
+		}
+		if !readable || value == nil {
+			return fmt.Sprintf(printer.T("overview.reason_level"), name, printer.T("level."+first.Level.String())), nil
+		}
+		return fmt.Sprintf(printer.T("overview.reason_"+string(th.Direction)), name, format(printer, first.Metric, *value)), nil
+	case timeline.Unusual:
+		for _, s := range shown {
+			if mark := markOf(printer, s); mark != nil && mark.Class == "level-unusual" {
+				usual := fmt.Sprintf(printer.T("attention.usually"), format(printer, s.Metric, s.Anomaly.Norm))
+				return it.rowName(printer, s) + " " + usual, nil
+			}
+		}
+	case timeline.OK:
+		if first.Stale {
+			return fmt.Sprintf(printer.T("overview.reason_stale"), it.rowName(printer, first), printer.Time(first.TS)), nil
+		}
+		return printer.T("overview.all_within"), nil
+	}
+	return "", nil
+}
+
+// areasOf fills under each stretch of a line, down to the plot's baseline.
+func areasOf(line chart) []string {
+	out := make([]string, 0, len(line.Lines))
+	for _, points := range line.Lines {
+		first, _, _ := strings.Cut(points, ",")
+		last := points[strings.LastIndexByte(points, ' ')+1:]
+		last, _, _ = strings.Cut(last, ",")
+		baseline := strconv.FormatFloat(line.Baseline, 'f', -1, 64)
+		out = append(out, first+","+baseline+" "+points+" "+last+","+baseline)
+	}
+	return out
 }
 
 // markOf is the one mark a row carries: a stale series is marked stale whatever level it

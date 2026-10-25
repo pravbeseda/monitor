@@ -31,8 +31,30 @@ const siteChangesRead = 500
 // ItemStore is what an item's page reads beside the state and the points: what each series
 // is judged by, and the log of what changed.
 type ItemStore interface {
-	ThresholdOf(ctx context.Context, ref storage.SeriesRef) (storage.Threshold, bool, error)
+	ThresholdReader
 	EventLog
+}
+
+// ThresholdReader is where a page reads what one series is judged by.
+type ThresholdReader interface {
+	ThresholdOf(ctx context.Context, ref storage.SeriesRef) (storage.Threshold, bool, error)
+}
+
+// levelsOf is a series' stored threshold, whether this build can read it, and the values
+// a chart draws across its line.
+func levelsOf(ctx context.Context, store ThresholdReader, s state.Subject) (storage.Threshold, bool, []threshold, error) {
+	th, stored, err := store.ThresholdOf(ctx, storage.SeriesRef{Node: s.Node, Metric: s.Metric, Labels: s.Labels})
+	if err != nil || !stored || !evaluate.Readable(th) {
+		return th, false, nil, err
+	}
+	var levels []threshold
+	if th.Warning != nil {
+		levels = append(levels, threshold{value: *th.Warning, level: evaluate.Warning})
+	}
+	if th.Critical != nil {
+		levels = append(levels, threshold{value: *th.Critical, level: evaluate.Critical})
+	}
+	return th, true, levels, nil
 }
 
 // itemPageView is an item's page as the template sees it.
@@ -236,19 +258,9 @@ func smallChartOf(ctx context.Context, printer *i18n.Printer, reader history.Rea
 		out.Usual = fmt.Sprintf(printer.T("attention.usually"), format(printer, s.Metric, s.Anomaly.Norm))
 	}
 
-	ref := storage.SeriesRef{Node: s.Node, Metric: s.Metric, Labels: s.Labels}
-	th, stored, err := store.ThresholdOf(ctx, ref)
+	_, _, levels, err := levelsOf(ctx, store, s)
 	if err != nil {
 		return out, err
-	}
-	var levels []threshold
-	if stored && evaluate.Readable(th) {
-		if th.Warning != nil {
-			levels = append(levels, threshold{value: *th.Warning, level: evaluate.Warning})
-		}
-		if th.Critical != nil {
-			levels = append(levels, threshold{value: *th.Critical, level: evaluate.Critical})
-		}
 	}
 	out.Chart, err = lineOf(ctx, printer, reader, s, window, smallFrame, levels...)
 	return out, err

@@ -473,7 +473,7 @@ func TestItemPageMore(t *testing.T) {
 			t.Errorf("failing points answer %d on the item's page", rec.Code)
 		}
 		rec = httptest.NewRecorder()
-		hub.Overview(read, historyOf(recent), layout()).ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/overview", nil))
+		hub.Overview(read, historyOf(recent), limits{}, layout()).ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/overview", nil))
 		if rec.Code != http.StatusInternalServerError {
 			t.Errorf("failing points answer %d on the overview", rec.Code)
 		}
