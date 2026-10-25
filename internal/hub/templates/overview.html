@@ -7,29 +7,46 @@
     p.quiet { color: var(--muted); }
     section.section { margin-bottom: 2rem; }
     h2.section-heading { font-size: 1rem; font-weight: 600; margin: 0 0 0.8rem; padding-bottom: 0.4rem; border-bottom: 1px solid var(--rule); }
-    .cards { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(100%, 21rem), 1fr)); gap: 1rem; }
-    a.card { display: flex; flex-direction: column; gap: 0.6rem; padding: 0.9rem 1rem; background: var(--grid); border: 1px solid var(--rule); border-radius: 10px; color: var(--fg); text-decoration: none; }
-    a.card:hover, a.card:focus-visible { border-color: var(--muted); }
-    a.card.state-critical, a.card.state-silent { border-color: var(--bad); }
-    a.card.state-warning { border-color: var(--warn); }
-    a.card.state-unusual { border-color: var(--unusual); }
-    a.card.state-no-data { opacity: 0.75; }
-    .card-top { display: flex; justify-content: space-between; align-items: baseline; gap: 0.6rem; }
-    .card-name { font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-    .card-state { font-size: 0.8rem; white-space: nowrap; color: var(--muted); }
+    .cards { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(100%, 24rem), 1fr)); gap: 1rem; }
+    a.card { --tone: var(--faint); display: flex; flex-direction: column; gap: 0.75rem; padding: 1rem 1.2rem 0.9rem; background: var(--grid); border: 1px solid var(--rule); border-left: 4px solid var(--tone); border-radius: 10px; color: var(--fg); text-decoration: none; }
+    a.card:hover, a.card:focus-visible { border-color: var(--muted); border-left-color: var(--tone); }
+    a.card.state-ok { --tone: var(--accent); }
+    a.card.state-warning { --tone: var(--warn); }
+    a.card.state-critical, a.card.state-silent { --tone: var(--bad); }
+    a.card.state-unusual { --tone: var(--unusual); }
+    a.card.state-reporting { --tone: var(--muted); }
+    a.card.state-no-data { --tone: var(--rule); opacity: 0.8; }
+    .card-top { display: flex; justify-content: space-between; align-items: center; gap: 0.6rem; }
+    .card-name { font-weight: 600; font-size: 1.05rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .card-state { font-size: 0.8rem; white-space: nowrap; padding: 0.1rem 0.6rem; border-radius: 999px; color: var(--muted); background: color-mix(in srgb, var(--tone) 18%, transparent); }
     .state-ok .card-state { color: var(--accent); }
     .state-warning .card-state { color: var(--warn); }
     .state-critical .card-state, .state-silent .card-state { color: var(--bad); font-weight: 600; }
     .state-unusual .card-state { color: var(--unusual); }
-    .card-seen, .card-none, .card-more { font-size: 0.8rem; color: var(--muted); }
-    ul.rows { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 0.45rem; }
-    li.row { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 0.1rem 0.8rem; align-items: baseline; }
-    .row-name { font-size: 0.8rem; color: var(--muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-    .row-value { font-variant-numeric: tabular-nums; text-align: right; }
-    .row-mark { grid-column: 1 / -1; font-size: 0.75rem; }
-    svg.spark { grid-column: 1 / -1; width: 100%; height: 2rem; }
-    svg.spark polyline { fill: none; stroke: var(--link); stroke-width: 1.5; vector-effect: non-scaling-stroke; }
-    svg.spark polyline.point { stroke-width: 4; stroke-linecap: round; }
+    .card-none, .card-more { font-size: 0.85rem; color: var(--muted); }
+    ul.main { list-style: none; margin: 0; padding: 0; display: grid; grid-template-columns: 1fr 1fr; gap: 1.2rem; }
+    ul.main.single { grid-template-columns: 1fr; }
+    li.main { display: flex; flex-direction: column; min-width: 0; }
+    .main .row-name { font-size: 0.85rem; color: var(--muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .main .row-value { font-size: 1.8rem; font-weight: 650; font-variant-numeric: tabular-nums; display: flex; align-items: center; gap: 0.45rem; margin: 0.1rem 0 0.35rem; white-space: nowrap; }
+    .row-mark { display: inline-block; width: 0.55rem; height: 0.55rem; border-radius: 50%; background: var(--faint); flex: none; }
+    .row-mark.level-warning { background: var(--warn); }
+    .row-mark.level-critical { background: var(--bad); }
+    .row-mark.level-unusual { background: var(--unusual); }
+    svg.spark { width: 100%; height: 3.2rem; }
+    svg.spark polyline { fill: none; stroke: var(--link); stroke-width: 2; vector-effect: non-scaling-stroke; }
+    svg.spark polyline.point { stroke-width: 5; stroke-linecap: round; }
+    svg.spark polygon.area { fill: color-mix(in srgb, var(--link) 16%, transparent); stroke: none; }
+    svg.spark line.threshold { stroke-width: 1.5; stroke-dasharray: 5 4; vector-effect: non-scaling-stroke; }
+    svg.spark line.level-warning { stroke: var(--warn); }
+    svg.spark line.level-critical { stroke: var(--bad); }
+    ul.rest { list-style: none; margin: 0; padding: 0; display: flex; flex-wrap: wrap; gap: 0.2rem 0.4rem; font-size: 0.85rem; }
+    li.rest + li.rest::before { content: "·"; color: var(--faint); margin-right: 0.4rem; }
+    .rest .row-name { color: var(--muted); }
+    .rest .row-value { font-variant-numeric: tabular-nums; }
+    .rest .row-mark { margin-left: 0.25rem; vertical-align: middle; }
+    p.card-reason { margin: 0; font-size: 0.85rem; color: var(--muted); }
+    .row-mark-word { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
   </style>
 </head>
 <body>
@@ -42,15 +59,17 @@
         {{ range .Cards }}
           <a class="card state-{{ .Class }}" href="{{ .Link }}" data-item="{{ .Name }}">
             <span class="card-top"><span class="card-name">{{ .Name }}</span> <span class="card-state">{{ .Word }}</span></span>
-            {{ with .LastReport }}<span class="card-seen">{{ . }}</span>{{ end }}
             {{ with .None }}<span class="card-none">{{ . }}</span>{{ end }}
-            {{ if .Rows }}
-              <ul class="rows">
-                {{ range .Rows }}
-                  <li class="row" data-series="{{ .Name }}"><span class="row-name">{{ .Name }}</span> <span class="row-value">{{ .Value }}</span>
-                    {{- with .Mark }} <span class="row-mark {{ .Class }}">{{ .Word }}</span>{{ end }}
+            {{ with .Main }}
+              <ul class="main{{ if eq (len .) 1 }} single{{ end }}">
+                {{ range . }}
+                  <li class="row main" data-series="{{ .Name }}"><span class="row-name">{{ .Name }}</span>
+                    <span class="row-value">{{ template "mark" .Mark }}{{ .Value }}</span>
                     {{- with .Line }}
                       <svg class="spark" viewBox="0 0 {{ .Width }} {{ .Height }}" preserveAspectRatio="none" aria-hidden="true">
+                        {{- range .Areas }}<polygon class="area" points="{{ . }}"></polygon>{{ end }}
+                        {{- $c := . }}
+                        {{- range .Levels }}<line class="threshold {{ .Class }}" x1="0" y1="{{ .Y }}" x2="{{ $c.Width }}" y2="{{ .Y }}"></line>{{ end }}
                         {{- range .Lines }}<polyline points="{{ . }}"></polyline>{{ end }}
                         {{- range .Dots }}<polyline class="point" points="{{ .X }},{{ .Y }} {{ .X }},{{ .Y }}"></polyline>{{ end -}}
                       </svg>
@@ -58,7 +77,13 @@
                 {{ end }}
               </ul>
             {{ end }}
-            {{ with .More }}<span class="card-more">{{ . }}</span>{{ end }}
+            {{ if or .Rest .More }}
+              <ul class="rest">
+                {{ range .Rest }}<li class="row rest" data-series="{{ .Name }}"><span class="row-name">{{ .Name }}</span> <span class="row-value">{{ .Value }}</span>{{ template "mark" .Mark }}</li>{{ end }}
+                {{ with .More }}<li class="rest card-more">{{ . }}</li>{{ end }}
+              </ul>
+            {{ end }}
+            {{ with .Reason }}<p class="card-reason">{{ . }}</p>{{ end }}
           </a>
         {{ end }}
       </div>
@@ -66,3 +91,4 @@
   {{ end }}
 </body>
 </html>
+{{ define "mark" }}{{ with . }} <span class="row-mark {{ .Class }}" title="{{ .Word }}"></span><span class="row-mark-word">{{ .Word }}</span> {{ end }}{{ end }}
