@@ -40,7 +40,7 @@ One decision per file, each stating what was rejected and why. New records start
 | [0014](decisions/0014-macos-available-space.md) | Free space is what the system calls available; cgo in the darwin sensor only | accepted |
 | [0015](decisions/0015-evaluation-on-a-tick.md) | Evaluation runs on its own tick, never inside a request | accepted |
 | [0016](decisions/0016-leaving-critical-is-instant.md) | Leaving critical is announced as instantly as entering it | accepted |
-| [0017](decisions/0017-one-spec-and-decision-gates.md) | One document per unit of work; gates on decisions, not documents | accepted |
+| [0017](decisions/0017-one-spec-and-decision-gates.md) | One document per unit of work; gates on decisions, not documents | accepted, amended by [0047](decisions/0047-a-pull-request-opens-without-a-gate.md) |
 | [0018](decisions/0018-history-through-the-api.md) | History is served by the hub's API; a chart is one of its consumers | accepted |
 | [0019](decisions/0019-deployment-layout.md) | Install into system paths, with one environment file per binary | accepted |
 | [0020](decisions/0020-agent-reads-its-environment-file.md) | The agent reads its own environment file; no shell sources it | accepted |
@@ -70,6 +70,7 @@ One decision per file, each stating what was rejected and why. New records start
 | [0044](decisions/0044-a-sensor-takes-its-parameters-from-the-hub.md) | A sensor takes its parameters from the hub, in its entry of the configuration | accepted |
 | [0045](decisions/0045-sites-are-a-node-their-hosts-report-for.md) | Sites are a node of their own, which the agent of each site's host reports for | accepted |
 | [0046](decisions/0046-an-overview-of-items-rendered-by-the-hub.md) | An overview of items, rendered by the hub, opens a page per item | accepted |
+| [0047](decisions/0047-a-pull-request-opens-without-a-gate.md) | A pull request opens without a gate; only the merge waits | accepted |
 
 ## Behaviour specs
 
