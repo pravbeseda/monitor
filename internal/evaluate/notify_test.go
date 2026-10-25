@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/pravbeseda/monitor/internal/evaluate"
+	"github.com/pravbeseda/monitor/internal/i18n"
 	"github.com/pravbeseda/monitor/internal/storage"
 )
 
@@ -595,5 +596,28 @@ func TestAFrozenSubjectStillDeliversWhatItAlreadyRecorded(t *testing.T) {
 
 	if len(got) != 1 || got[0].To != evaluate.Critical || got[0].Labels["mount"] != "/" {
 		t.Fatalf("the frozen subject delivered %+v, want the message it had recorded", got)
+	}
+}
+
+// spec: metric-names.md#where — a delivered message carries what its metric's sensor
+// declared it is called, so the channel can say it in its own locale.
+func TestAMessageCarriesTheDeclaredName(t *testing.T) {
+	db := open(t)
+	named := storage.Ingest{
+		Node: "server-b", AgentVersion: "test", ConfigVersion: "test", ReceivedAt: tick,
+		Measurements: []storage.Measurement{{Metric: "disk.free_bytes", Sensor: "disk", Labels: volume("/"), Value: gb(3), TS: tick}},
+		Names: []storage.Name{
+			{Kind: storage.MetricName, Key: "disk.free_bytes", Locale: i18n.English, Text: "Free on {mount}"},
+			{Kind: storage.MetricName, Key: "disk.free_bytes", Locale: i18n.Russian, Text: "Свободно {mount}"},
+		},
+	}
+	if err := db.SaveIngest(context.Background(), named); err != nil {
+		t.Fatalf("SaveIngest: %v", err)
+	}
+	retune(t, db, volume("/"), num(gb(10)), num(gb(4)))
+
+	got := delivered(t, db, tick, watching(t))
+	if len(got) != 1 || got[0].Name[i18n.Russian] != "Свободно {mount}" || got[0].Name[i18n.English] != "Free on {mount}" {
+		t.Fatalf("delivered %+v, want the declared name", got)
 	}
 }

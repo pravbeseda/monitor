@@ -5,6 +5,7 @@ import (
 	"log/slog"
 	"time"
 
+	"github.com/pravbeseda/monitor/internal/names"
 	"github.com/pravbeseda/monitor/internal/storage"
 )
 
@@ -30,6 +31,9 @@ type Message struct {
 	Since time.Time
 	// At is when the change was recorded, or the instant of a repeat.
 	At time.Time
+	// Name is what the metric's sensor declared it is called, in each locale it declared;
+	// empty when none did (docs/specs/metric-names.md).
+	Name names.Text
 }
 
 // Notifier is where a notification leaves the hub. What is worth sending is decided before

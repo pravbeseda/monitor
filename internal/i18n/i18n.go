@@ -17,6 +17,9 @@ const (
 	Russian Locale = "ru"
 )
 
+// Locales are every language the interface speaks.
+var Locales = []Locale{English, Russian}
+
 // Negotiate picks the locale for one request: a supported ?lang= wins, then the browser's
 // Accept-Language, then English. A ?lang= naming a language the panel does not speak is
 // ignored rather than honoured — a broken link should not cost the reader the language

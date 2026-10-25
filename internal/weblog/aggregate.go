@@ -8,6 +8,18 @@ import (
 	"github.com/pravbeseda/monitor/internal/sensor"
 )
 
+// The metrics a site's access log yields (docs/specs/site-traffic.md).
+const (
+	RequestsPerMin = "site.requests_per_min"
+	ClientErrorPct = "site.client_error_pct"
+	ServerErrorPct = "site.server_error_pct"
+	ResponseP95    = "site.response_p95_seconds"
+	PageViews24h   = "site.pageviews_24h"
+)
+
+// Metrics are all of them.
+var Metrics = []string{RequestsPerMin, ClientErrorPct, ServerErrorPct, ResponseP95, PageViews24h}
+
 // Figure is one value an aggregator reports.
 type Figure struct {
 	Metric string
@@ -69,9 +81,9 @@ func (a *Interval) Report(_ time.Time, interval time.Duration) []Figure {
 		return sensor.Round2(100 * float64(n) / float64(counted.requests))
 	}
 	return []Figure{
-		{Metric: "site.requests_per_min", Value: sensor.Round2(float64(counted.requests) / interval.Minutes())},
-		{Metric: "site.client_error_pct", Value: share(counted.client)},
-		{Metric: "site.server_error_pct", Value: share(counted.server)},
+		{Metric: RequestsPerMin, Value: sensor.Round2(float64(counted.requests) / interval.Minutes())},
+		{Metric: ClientErrorPct, Value: share(counted.client)},
+		{Metric: ServerErrorPct, Value: share(counted.server)},
 	}
 }
 
@@ -114,7 +126,7 @@ func (a *ResponseTime) Report(now time.Time, _ time.Duration) []Figure {
 	}
 	slices.Sort(inside)
 	rank := int(math.Ceil(0.95 * float64(len(inside))))
-	return []Figure{{Metric: "site.response_p95_seconds", Value: sensor.Round2(inside[rank-1])}}
+	return []Figure{{Metric: ResponseP95, Value: sensor.Round2(inside[rank-1])}}
 }
 
 // Span is the hour the percentile is taken over.
@@ -151,7 +163,7 @@ func (a *PageViews) Report(now time.Time, _ time.Duration) []Figure {
 			total += n
 		}
 	}
-	return []Figure{{Metric: "site.pageviews_24h", Value: float64(total)}}
+	return []Figure{{Metric: PageViews24h, Value: float64(total)}}
 }
 
 // Span is the day the views are counted over.

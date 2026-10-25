@@ -3,6 +3,7 @@
 package api
 
 import (
+	"encoding/json"
 	"fmt"
 	"regexp"
 	"strings"
@@ -31,11 +32,19 @@ type Request struct {
 	Measurements *[]Measurement `json:"measurements"`
 }
 
-// SensorStatus is one line of the manifest: a sensor the build contains.
+// SensorStatus is one line of the manifest: a sensor the build contains, and what it says
+// its metrics and their families are called (docs/specs/metric-names.md).
 type SensorStatus struct {
 	Sensor     string `json:"sensor"`
 	Applicable bool   `json:"applicable"`
+	// Names and Families map an id to its name per locale. They stay raw until ingest reads
+	// them, so that a malformed one is dropped alone instead of refusing the request.
+	Names    json.RawMessage `json:"names,omitempty"`
+	Families json.RawMessage `json:"families,omitempty"`
 }
+
+// Declared is what Names and Families hold: an id, then its name by locale.
+type Declared map[string]map[string]string
 
 // Measurement is one reading on the wire.
 type Measurement struct {

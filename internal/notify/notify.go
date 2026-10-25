@@ -12,6 +12,7 @@ import (
 	"github.com/pravbeseda/monitor/internal/evaluate"
 	"github.com/pravbeseda/monitor/internal/history"
 	"github.com/pravbeseda/monitor/internal/i18n"
+	"github.com/pravbeseda/monitor/internal/names"
 )
 
 // levelKeys name the catalogue entry of each level, so a level's stored name and its
@@ -27,8 +28,8 @@ var levelKeys = map[evaluate.Level]string{
 // than as a change.
 func Render(p *i18n.Printer, m evaluate.Message) string {
 	subject := m.Node
-	if named := Naming(m.Labels); named != "" {
-		subject += " " + named
+	if m.Metric != evaluate.SilenceMetric {
+		subject += " · " + Name(p, m.Name, m.Metric, m.Labels)
 	}
 
 	var line string
@@ -67,6 +68,45 @@ func Naming(labels map[string]string) string {
 		}
 	}
 	return strings.Join(named, " ")
+}
+
+// Name is how a message and a page name a series: its metric's declared name in the
+// printer's locale with its labels filled in, then what the labels it did not use name. A
+// metric nobody named reads as its id (docs/specs/metric-names.md#naming).
+func Name(p *i18n.Printer, declared names.Text, metric string, labels map[string]string) string {
+	template, named := declared.In(p.Locale())
+	if !named {
+		template = metric
+	}
+	name, used := names.Fill(template, labels, filled)
+	rest := maps.Clone(labels)
+	maps.DeleteFunc(rest, func(key, _ string) bool { return used[key] })
+	if more := Naming(rest); more != "" {
+		name += " " + more
+	}
+	return name
+}
+
+// Heading is how a page heads a series: its Name, then the volume's filesystem and its
+// being removable, which a message leaves out, unless the name already said them.
+func Heading(p *i18n.Printer, declared names.Text, metric string, labels map[string]string) string {
+	template, _ := declared.In(p.Locale())
+	_, used := names.Fill(template, labels, filled)
+	rest := maps.Clone(labels)
+	maps.DeleteFunc(rest, func(key, _ string) bool { return used[key] || !decoration[key] })
+	if volume := Describe(p, rest); volume != "" {
+		return Name(p, declared, metric, labels) + " · " + volume
+	}
+	return Name(p, declared, metric, labels)
+}
+
+// filled is a label's value as a name says it: quoted like any label value, and an empty
+// one as an empty pair of quotes, since it still tells one series from another.
+func filled(value string) string {
+	if value == "" {
+		return `""`
+	}
+	return plain(value)
 }
 
 // Describe is how a page names a series: its Naming, then the decoration a message leaves
@@ -122,7 +162,7 @@ func detail(p *i18n.Printer, m evaluate.Message) string {
 	if !measured {
 		return ""
 	}
-	return fmt.Sprintf(p.T("notify.reading"), m.Metric, Value(p, m.Metric, value))
+	return Value(p, m.Metric, value)
 }
 
 // Value renders one reading the way its metric id says to. It is exported because every

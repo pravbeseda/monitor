@@ -17,6 +17,8 @@ import (
 
 	"github.com/pravbeseda/monitor/internal/api"
 	"github.com/pravbeseda/monitor/internal/config"
+	"github.com/pravbeseda/monitor/internal/i18n"
+	"github.com/pravbeseda/monitor/internal/names"
 	"github.com/pravbeseda/monitor/internal/storage"
 )
 
@@ -85,6 +87,7 @@ func (h *Handler) Accept(ctx context.Context, node config.Node, req api.Request)
 	if in.Measurements, err = h.owned(node, in.Measurements); err != nil {
 		return api.Response{}, err
 	}
+	in.Names = declaredNames(req.Manifest, in.Measurements)
 	// A service node cannot sleep, so only a stored measurement is a sign of life; an empty
 	// report merely makes it known, so that it can fall silent before it ever stores one.
 	save := h.store.SaveIngest
@@ -211,6 +214,47 @@ func validate(req api.Request, received time.Time) (storage.Ingest, error) {
 		in.Measurements = append(in.Measurements, stored)
 	}
 	return in, nil
+}
+
+// declaredNames keeps the names the manifest gives what the request carries: a metric it
+// holds a measurement of, or the family of one. Anything else, and any name a page could
+// not show, is dropped alone — a name never costs the request (docs/specs/metric-names.md#ingest).
+func declaredNames(manifest []api.SensorStatus, measurements []storage.Measurement) []storage.Name {
+	carried := map[storage.NameKind]map[string]bool{storage.MetricName: {}, storage.FamilyName: {}}
+	for _, m := range measurements {
+		carried[storage.MetricName][m.Metric] = true
+		family, _, _ := strings.Cut(m.Metric, ".")
+		carried[storage.FamilyName][family] = true
+	}
+
+	// Keyed by kind, id and locale, so a later manifest entry replaces an earlier one.
+	kept := map[storage.Name]string{}
+	for _, status := range manifest {
+		for kind, raw := range map[storage.NameKind]json.RawMessage{storage.MetricName: status.Names, storage.FamilyName: status.Families} {
+			var declared api.Declared
+			if len(raw) == 0 || json.Unmarshal(raw, &declared) != nil {
+				continue
+			}
+			for key, byLocale := range declared {
+				if !carried[kind][key] {
+					continue
+				}
+				for tag, text := range byLocale {
+					locale, known := i18n.Parse(tag)
+					if known && string(locale) == tag && names.Valid(text) {
+						kept[storage.Name{Kind: kind, Key: key, Locale: locale}] = text
+					}
+				}
+			}
+		}
+	}
+
+	out := make([]storage.Name, 0, len(kept))
+	for name, text := range kept {
+		name.Text = text
+		out = append(out, name)
+	}
+	return out
 }
 
 func validateMeasurement(m api.Measurement, sent time.Time) (storage.Measurement, error) {

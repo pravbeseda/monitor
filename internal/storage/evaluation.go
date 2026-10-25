@@ -8,6 +8,8 @@ import (
 	"fmt"
 	"strings"
 	"time"
+
+	"github.com/pravbeseda/monitor/internal/names"
 )
 
 // lastDigestKey is the boundary of the digest window. It is opened at the instant a hub
@@ -103,6 +105,9 @@ type Snapshot struct {
 	// Unusual is every anomaly still open: what the tick and the state judge a series'
 	// newest value against (ADR 0042).
 	Unusual []Anomaly
+	// Names is what the sensors say their metrics and families are called
+	// (docs/specs/metric-names.md).
+	Names names.Book
 }
 
 // Outage is a span the hub was down: from the last tick recorded before a start to the
@@ -142,6 +147,9 @@ func (s *SQLite) Snapshot(ctx context.Context, owed []string) (Snapshot, error) 
 		return Snapshot{}, err
 	}
 	if out.Unusual, err = readAnomalies(ctx, tx, `WHERE ended = ''`); err != nil {
+		return Snapshot{}, err
+	}
+	if out.Names, err = readNames(ctx, tx); err != nil {
 		return Snapshot{}, err
 	}
 	return out, nil

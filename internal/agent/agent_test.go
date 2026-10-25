@@ -13,6 +13,8 @@ import (
 
 	"github.com/pravbeseda/monitor/internal/agent"
 	"github.com/pravbeseda/monitor/internal/api"
+	"github.com/pravbeseda/monitor/internal/i18n"
+	"github.com/pravbeseda/monitor/internal/names"
 	"github.com/pravbeseda/monitor/internal/sensor"
 )
 
@@ -696,5 +698,40 @@ func TestASensorNoLongerEnabledIsReleased(t *testing.T) {
 	}
 	if traffic.closed != 1 || volumes.closed != 0 {
 		t.Errorf("closed access_log %d and disk %d times, want 1 and 0", traffic.closed, volumes.closed)
+	}
+}
+
+// named is a sensor that says what its metric and family are called.
+type named struct{ stub }
+
+func (n *named) Names() names.Book {
+	return names.Book{
+		Metrics:  map[string]names.Text{"disk.free_bytes": {i18n.English: "Free on {mount}", i18n.Russian: "Свободно {mount}"}},
+		Families: map[string]names.Text{"disk": {i18n.English: "Disk"}},
+	}
+}
+
+// spec: metric-names.md#ingest — a sensor's names travel in its manifest entry; one that
+// names nothing sends the entry it always did.
+func TestTheManifestCarriesWhatASensorNames(t *testing.T) {
+	h, c := &hub{}, &clock{at: start}
+	a := newAgent(t, h, c, &named{stub{name: "disk"}}, &stub{name: "load"})
+	if err := a.Tick(context.Background()); err != nil {
+		t.Fatalf("Tick: %v", err)
+	}
+
+	manifest := h.last().Manifest
+	var metrics, families api.Declared
+	if err := json.Unmarshal(manifest[0].Names, &metrics); err != nil {
+		t.Fatalf("names %s: %v", manifest[0].Names, err)
+	}
+	if err := json.Unmarshal(manifest[0].Families, &families); err != nil {
+		t.Fatalf("families %s: %v", manifest[0].Families, err)
+	}
+	if metrics["disk.free_bytes"]["ru"] != "Свободно {mount}" || families["disk"]["en"] != "Disk" {
+		t.Errorf("manifest entry = %s %s, want the declared names", manifest[0].Names, manifest[0].Families)
+	}
+	if manifest[1].Names != nil || manifest[1].Families != nil {
+		t.Errorf("a sensor that names nothing sent %s %s", manifest[1].Names, manifest[1].Families)
 	}
 }
