@@ -19,7 +19,7 @@ import (
 )
 
 var timelineTemplate = template.Must(template.ParseFS(templates,
-	"templates/timeline.html", "templates/attention.html", "templates/shell.html"))
+	"templates/timeline.html", "templates/attention.html", "templates/changes.html", "templates/shell.html"))
 
 // shownChanges is how many of the newest changes the page lists.
 const shownChanges = 50
@@ -146,7 +146,7 @@ func Timeline(read StateReader, store TimelineStore, targets func(node string) (
 			storageFailure(w, printer, err)
 			return
 		}
-		view.addChanges(printer, changes, anomalies, targets, current.At, lang)
+		view.Days = changeDays(printer, changes, anomalies, targets, current.At, lang, shownChanges)
 
 		shellHeaders(w)
 		if err := timelineTemplate.Execute(w, view); err != nil {
@@ -273,9 +273,11 @@ type entry struct {
 	view    changeView
 }
 
-func (v *timelineView) addChanges(printer *i18n.Printer, changes []storage.Transition, anomalies []storage.Anomaly,
-	targets func(node string) (evaluate.Target, bool), now time.Time, lang string,
-) {
+// changeDays is the newest limit of the changes and anomalies, newest first, grouped under
+// the day they happened on (docs/specs/timeline.md#changes).
+func changeDays(printer *i18n.Printer, changes []storage.Transition, anomalies []storage.Anomaly,
+	targets func(node string) (evaluate.Target, bool), now time.Time, lang string, limit int,
+) []dayView {
 	entries := make([]entry, 0, len(changes)+2*len(anomalies))
 	for _, change := range changes {
 		entries = append(entries, entry{at: change.At, view: changeOf(printer, change, targets, lang)})
@@ -305,18 +307,20 @@ func (v *timelineView) addChanges(printer *i18n.Printer, changes []storage.Trans
 		}
 		return false
 	})
-	if len(entries) > shownChanges {
-		entries = entries[:shownChanges]
+	if len(entries) > limit {
+		entries = entries[:limit]
 	}
 
+	var days []dayView
 	for _, one := range entries {
 		label := printer.Date(one.at, now)
-		if n := len(v.Days); n == 0 || v.Days[n-1].Label != label {
-			v.Days = append(v.Days, dayView{Label: label})
+		if n := len(days); n == 0 || days[n-1].Label != label {
+			days = append(days, dayView{Label: label})
 		}
-		day := &v.Days[len(v.Days)-1]
+		day := &days[len(days)-1]
 		day.Changes = append(day.Changes, one.view)
 	}
+	return days
 }
 
 // seriesChange is what every change of a series shows: when, which series, and a link to

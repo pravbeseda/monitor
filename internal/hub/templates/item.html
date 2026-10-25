@@ -1,0 +1,100 @@
+<!DOCTYPE html>
+<html lang="{{ .Locale }}">
+<head>
+{{ template "shell" . }}
+  <style>
+    body { font-family: system-ui, sans-serif; margin: 2rem auto; max-width: 76rem; padding: 0 1rem; }
+    {{- template "changes-style" }}
+    h1.item-name { font-size: 1.5rem; margin: 0 0 0.2rem; }
+    p.item-meta { color: var(--muted); margin: 0 0 1rem; font-size: 0.9rem; }
+    span.item-state.state-ok { color: var(--accent); }
+    span.item-state.state-warning { color: var(--warn); }
+    span.item-state.state-critical, span.item-state.state-silent { color: var(--bad); font-weight: 600; }
+    span.item-state.state-unusual { color: var(--unusual); }
+    ul.numbers { list-style: none; padding: 0; margin: 0 0 1.2rem; display: grid; grid-template-columns: repeat(auto-fill, minmax(min(100%, 12rem), 1fr)); gap: 0.6rem; }
+    li.number { background: var(--grid); border: 1px solid var(--rule); border-radius: 8px; padding: 0.5rem 0.7rem; display: flex; flex-direction: column; gap: 0.15rem; }
+    li.number .row-name { font-size: 0.75rem; color: var(--muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    li.number .row-value { font-size: 1.3rem; font-variant-numeric: tabular-nums; }
+    .row-mark { font-size: 0.75rem; }
+    nav.windows { margin: 0 0 1rem; font-size: 0.9rem; }
+    nav.windows .zone { color: var(--faint); }
+    nav.windows a, nav.windows strong { margin-right: 0.6rem; }
+    .columns { display: grid; grid-template-columns: 1fr minmax(16rem, 22rem); gap: 1.5rem; align-items: start; }
+    @media (max-width: 60rem) { .columns { grid-template-columns: 1fr; } }
+    h2.family-heading { font-size: 0.8rem; text-transform: uppercase; letter-spacing: 0.06em; color: var(--muted); font-weight: 600; margin: 0 0 0.6rem; }
+    section.family { margin-bottom: 1.4rem; }
+    .charts { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(100%, 19rem), 1fr)); gap: 0.8rem; }
+    figure.chart { margin: 0; background: var(--grid); border: 1px solid var(--rule); border-radius: 8px; padding: 0.6rem 0.7rem; }
+    figure.chart figcaption { display: flex; flex-wrap: wrap; gap: 0.2rem 0.6rem; align-items: baseline; font-size: 0.85rem; margin-bottom: 0.3rem; }
+    figure.chart .chart-value { font-variant-numeric: tabular-nums; }
+    figure.chart .chart-time, figure.chart .chart-usual { color: var(--muted); font-size: 0.75rem; }
+    figure.chart .chart-set { font-size: 0.75rem; margin-left: auto; }
+    figure.chart svg { width: 100%; height: auto; }
+    .axis { stroke: var(--faint); stroke-width: 1; }
+    .grid { stroke: var(--rule); stroke-width: 1; }
+    .line { fill: none; stroke: var(--link); stroke-width: 1.6; }
+    .dot { fill: var(--link); }
+    line.threshold { stroke-width: 1; stroke-dasharray: 5 4; }
+    line.threshold.level-warning { stroke: var(--warn); }
+    line.threshold.level-critical { stroke: var(--bad); }
+    text { font-size: 10px; fill: var(--muted); }
+    text.level-warning { fill: var(--warn); }
+    text.level-critical { fill: var(--bad); }
+    section.panel { background: var(--grid); border: 1px solid var(--rule); border-radius: 10px; padding: 1rem; }
+    section.panel h2 { font-size: 0.8rem; text-transform: uppercase; letter-spacing: 0.06em; color: var(--muted); font-weight: 600; margin: 0 0 0.8rem; }
+  </style>
+</head>
+<body>
+  {{ template "tabs" . }}
+  {{ if .Message }}
+    <p class="quiet">{{ .Message }}</p>
+  {{ else }}
+    <h1 class="item-name">{{ .Name }}</h1>
+    <p class="item-meta"><span class="item-kind">{{ .Kind }}</span> · <span class="item-state state-{{ .Class }}">{{ .Word }}</span> · {{ .LastReport }}</p>
+    {{ if .Numbers }}
+      <ul class="numbers">
+        {{ range .Numbers }}<li class="number" data-series="{{ .Name }}"><span class="row-name">{{ .Name }}</span><span class="row-value">{{ .Value }}</span>{{ with .Mark }}<span class="row-mark {{ .Class }}">{{ .Word }}</span>{{ end }}</li>
+        {{ end }}
+      </ul>
+    {{ end }}
+    <nav class="windows">
+      {{ .WindowLabel }}:
+      {{ range .Windows }}{{ if .Current }}<strong class="window">{{ .Label }}</strong>{{ else }}<a href="{{ .URL }}">{{ .Label }}</a>{{ end }} {{ end }}
+      <span class="zone">{{ .Zone }}</span>
+    </nav>
+    <div class="columns">
+      <div>
+        {{ with .None }}<p class="quiet">{{ . }}</p>{{ end }}
+        {{ range .Families }}
+          <section class="family">
+            <h2 class="family-heading">{{ .Name }}</h2>
+            <div class="charts">
+              {{ range .Charts }}
+                <figure class="chart" data-series="{{ .Name }}">
+                  <figcaption>
+                    <a class="chart-name" href="{{ .History }}">{{ .Name }}</a>
+                    <span class="chart-value">{{ .Value }}</span>
+                    {{- with .Mark }} <span class="row-mark {{ .Class }}">{{ .Word }}</span>{{ end }}
+                    {{- with .Usual }} <span class="chart-usual">{{ . }}</span>{{ end }}
+                    <span class="chart-time">{{ .Collected }}</span>
+                    <a class="chart-set" href="{{ .Thresholds }}">{{ $.SetLabel }}</a>
+                  </figcaption>
+                  {{ with .Chart }}
+                    {{ template "chart-svg" . }}
+                  {{ else }}
+                    <p class="quiet">{{ $.NoData }}</p>
+                  {{ end }}
+                </figure>
+              {{ end }}
+            </div>
+          </section>
+        {{ end }}
+      </div>
+      <section class="panel">
+        <h2>{{ .ChangesLabel }}</h2>
+        {{ template "changes" . }}
+      </section>
+    </div>
+  {{ end }}
+</body>
+</html>

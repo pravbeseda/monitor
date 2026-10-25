@@ -55,10 +55,7 @@ func layOut(printer *i18n.Printer, node string, series []seriesRow, lang string)
 			own = append(own, rowOf(printer, node, row, lang))
 			continue
 		}
-		family, dotted := familyOf(row.metric)
-		if dotted {
-			family += "."
-		}
+		family := familyKey(row.metric)
 		keys := slices.Sorted(maps.Keys(row.labels))
 		at := slices.IndexFunc(groups, func(g *matrixGroup) bool { return g.family == family && slices.Equal(g.keys, keys) })
 		if at < 0 {
@@ -91,6 +88,15 @@ type matrixGroup struct {
 func familyOf(metric string) (family string, dotted bool) {
 	family, _, dotted = strings.Cut(metric, ".")
 	return family, dotted
+}
+
+// familyKey keeps the dot of a family, so that an id without one stays a family of its own.
+func familyKey(metric string) string {
+	family, dotted := familyOf(metric)
+	if dotted {
+		family += "."
+	}
+	return family
 }
 
 func matrixOf(printer *i18n.Printer, node string, series []seriesRow, lang string) matrixView {

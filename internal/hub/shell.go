@@ -29,6 +29,7 @@ type skin struct {
 
 var skins = []skin{
 	{name: "timeline", path: "/timeline", labelKey: "timeline.title"},
+	{name: "overview", path: "/overview", labelKey: "overview.title"},
 	{name: "debug", path: "/debug", labelKey: "page.all_series"},
 }
 

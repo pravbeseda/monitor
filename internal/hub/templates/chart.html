@@ -1,0 +1,21 @@
+{{ define "chart-svg" }}
+    <svg viewBox="0 0 {{ .Width }} {{ .Height }}" role="img">
+      {{ $c := . }}
+      {{ range .YTicks }}
+        <line class="grid" x1="{{ $c.Left }}" y1="{{ .At }}" x2="{{ $c.RightEdge }}" y2="{{ .At }}"></line>
+        <text x="{{ $c.Left }}" y="{{ .LabelAt }}" dx="-8" text-anchor="end">{{ .Label }}</text>
+      {{ end }}
+      {{ with .Zone }}<text class="zone" x="{{ $c.RightEdge }}" y="{{ $c.Top }}" dy="-5" text-anchor="end">{{ . }}</text>{{ end }}
+      {{ range .XTicks }}
+        <text x="{{ .At }}" y="{{ .LabelAt }}" text-anchor="middle">{{ .Label }}</text>
+      {{ end }}
+      <line class="axis" x1="{{ .Left }}" y1="{{ .Top }}" x2="{{ .Left }}" y2="{{ .Baseline }}"></line>
+      <line class="axis" x1="{{ .Left }}" y1="{{ .Baseline }}" x2="{{ .RightEdge }}" y2="{{ .Baseline }}"></line>
+      {{ range .Levels }}
+        <line class="threshold {{ .Class }}" x1="{{ $c.Left }}" y1="{{ .Y }}" x2="{{ $c.RightEdge }}" y2="{{ .Y }}"></line>
+        <text class="{{ .Class }}" x="{{ $c.RightEdge }}" y="{{ .Y }}" dy="-3" text-anchor="end">{{ .Word }}</text>
+      {{ end }}
+      {{ range .Lines }}<polyline class="line" points="{{ . }}"></polyline>{{ end }}
+      {{ range .Dots }}<circle class="dot" cx="{{ .X }}" cy="{{ .Y }}" r="3"></circle>{{ end }}
+    </svg>
+{{- end }}

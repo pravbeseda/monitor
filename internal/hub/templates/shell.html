@@ -30,6 +30,8 @@
     .level-ok { color: var(--accent); }
     .level-warning { color: var(--warn); }
     .level-critical { color: var(--bad); font-weight: 600; }
+    .level-unusual { color: var(--unusual); }
+    .level-stale { color: var(--muted); }
   </style>
   {{ if .Live }}<meta name="monitor-live" content="{{ .StalledNotice }}" data-rendering="{{ .Rendering }}">{{ end }}
   <script>

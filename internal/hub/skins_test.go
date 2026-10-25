@@ -45,6 +45,7 @@ func TestTheRootRedirectsToTheRememberedSkin(t *testing.T) {
 	}{
 		{"no tab ever clicked", http.MethodGet, "/", "", "/timeline"},
 		{"the table remembered", http.MethodGet, "/", "debug", "/debug"},
+		{"the overview remembered", http.MethodGet, "/", "overview", "/overview"},
 		{"the timeline remembered", http.MethodGet, "/", "timeline", "/timeline"},
 		{"mission control, remembered before it folded", http.MethodGet, "/", "board", "/timeline"},
 		{"the language kept", http.MethodGet, "/?lang=ru", "debug", "/debug?lang=ru"},
@@ -82,6 +83,7 @@ func TestEveryPageCarriesTheTabs(t *testing.T) {
 		target, open string
 	}{
 		{"/debug", "debug"},
+		{"/overview", "overview"},
 		{"/timeline", "timeline"},
 		{oneVolume, ""},
 		{dataAddress, ""},
@@ -96,7 +98,7 @@ func TestEveryPageCarriesTheTabs(t *testing.T) {
 			for _, one := range tabs {
 				skins = append(skins, one.skin+" "+one.href+" "+one.label)
 			}
-			want := []string{"timeline /timeline Timeline", "debug /debug All series"}
+			want := []string{"timeline /timeline Timeline", "overview /overview Overview", "debug /debug All series"}
 			if strings.Join(skins, ", ") != strings.Join(want, ", ") {
 				t.Errorf("tabs = %v, want %v", skins, want)
 			}
@@ -116,7 +118,7 @@ func TestTheTabsKeepTheLanguage(t *testing.T) {
 	for _, one := range tabsOf(t, rec.Body.String()) {
 		got = append(got, one.href+" "+one.label)
 	}
-	want := []string{"/timeline?lang=ru Лента", "/debug?lang=ru Все серии"}
+	want := []string{"/timeline?lang=ru Лента", "/overview?lang=ru Обзор", "/debug?lang=ru Все серии"}
 	if strings.Join(got, ", ") != strings.Join(want, ", ") {
 		t.Errorf("tabs = %v, want %v", got, want)
 	}
@@ -125,7 +127,7 @@ func TestTheTabsKeepTheLanguage(t *testing.T) {
 // spec: web.md#skins — a skin's page writes no cookie: only a tab click, in the browser,
 // makes a choice, so a refresh or a reload changes nothing.
 func TestASkinPageChoosesNothing(t *testing.T) {
-	for _, target := range []string{"/timeline", "/debug"} {
+	for _, target := range []string{"/timeline", "/overview", "/debug"} {
 		rec := httptest.NewRecorder()
 		routesWith(t, stored{}, func() time.Time { return lastSeen }).ServeHTTP(rec, httptest.NewRequest(http.MethodGet, target, nil))
 		if rec.Code != http.StatusOK {
@@ -140,7 +142,7 @@ func TestASkinPageChoosesNothing(t *testing.T) {
 // spec: web.md#skins — every page carries the script that, on a click on a tab, stores that
 // tab's skin for a year and for the whole site.
 func TestEveryPageStoresTheTabClicked(t *testing.T) {
-	for _, target := range []string{"/timeline", "/debug", oneVolume, dataAddress, "/history?metric=disk.free_pct&nonsense=1"} {
+	for _, target := range []string{"/timeline", "/overview", "/debug", oneVolume, dataAddress, "/history?metric=disk.free_pct&nonsense=1"} {
 		body := getState(t, holding(dataSeries), target, at).Body.String()
 		for _, want := range []string{
 			`event.target.closest("a.tab[data-skin]")`,
