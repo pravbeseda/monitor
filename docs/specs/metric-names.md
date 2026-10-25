@@ -89,7 +89,7 @@ One row = one test. Anchors: `spec: metric-names.md#<heading>`.
 | a name for a locale the interface does not have | ignored; the rest of the declaration is kept |
 | an empty name | that name is ignored; the request is accepted |
 | a name longer than 80 characters | that name is ignored; the request is accepted |
-| a name carrying a control or format character — a line break, a bidirectional override | that name is ignored; the request is accepted |
+| a name carrying a control, format or line-separating character — a line break, U+2028, a bidirectional override | that name is ignored; the request is accepted |
 | a sensor the hub runs itself declares names | kept the same way as an agent's |
 | the hub restarts | the names declared before it stopped are still known |
 
