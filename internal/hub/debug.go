@@ -13,6 +13,7 @@ import (
 	"github.com/pravbeseda/monitor/internal/anomaly"
 	"github.com/pravbeseda/monitor/internal/evaluate"
 	"github.com/pravbeseda/monitor/internal/i18n"
+	"github.com/pravbeseda/monitor/internal/names"
 	"github.com/pravbeseda/monitor/internal/notify"
 	"github.com/pravbeseda/monitor/internal/state"
 	"github.com/pravbeseda/monitor/internal/storage"
@@ -65,6 +66,8 @@ type levelView struct {
 // rowView is one series without labels (ADR 0033): its metric, its newest value and what
 // judges it. A nil Level is shown as a dash.
 type rowView struct {
+	// Name is what the row says; Metric, its id, is shown on hover.
+	Name   string
 	Metric string
 	Value  string
 	// History addresses the drill-down page of this series, Thresholds the page that sets
@@ -140,7 +143,7 @@ func debugOf(printer *i18n.Printer, current state.State, lang string) debugView 
 				shown = append(shown, row)
 			}
 		}
-		node.Rows, node.Matrices = layOut(printer, reported.Node, shown, lang)
+		node.Rows, node.Matrices = layOut(printer, current.Names, reported.Node, shown, lang)
 		switch {
 		case len(rows[reported.Node]) == 0:
 			node.Empty = printer.T("node.no_values")
@@ -152,8 +155,9 @@ func debugOf(printer *i18n.Printer, current state.State, lang string) debugView 
 	return out
 }
 
-func rowOf(printer *i18n.Printer, node string, row seriesRow, lang string) rowView {
+func rowOf(printer *i18n.Printer, book names.Book, node string, row seriesRow, lang string) rowView {
 	out := rowView{
+		Name:       notify.Name(printer, book.Metrics[row.metric], row.metric, row.labels),
 		Metric:     row.metric,
 		Value:      format(printer, row.metric, row.value),
 		History:    historyLink(node, row.metric, row.labels, lang, ""),

@@ -164,12 +164,9 @@ func itemOf(printer *i18n.Printer, one item, current state.State, lang string) i
 	}
 
 	out := itemView{
-		Name:  s.Node + " · " + s.Metric,
+		Name:  s.Node + " · " + notify.Name(printer, current.Names.Metrics[s.Metric], s.Metric, s.Labels),
 		Link:  historyLink(s.Node, s.Metric, s.Labels, lang, ""),
 		Value: format(printer, s.Metric, *s.Value),
-	}
-	if named := notify.Naming(s.Labels); named != "" {
-		out.Name += " · " + named
 	}
 	if s.Anomaly != nil && s.Anomaly.Rank > 0 {
 		out.Usual = fmt.Sprintf(printer.T("attention.usually"), format(printer, s.Metric, s.Anomaly.Norm))

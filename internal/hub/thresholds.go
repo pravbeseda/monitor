@@ -14,6 +14,7 @@ import (
 	"github.com/pravbeseda/monitor/internal/evaluate"
 	"github.com/pravbeseda/monitor/internal/history"
 	"github.com/pravbeseda/monitor/internal/i18n"
+	"github.com/pravbeseda/monitor/internal/names"
 	"github.com/pravbeseda/monitor/internal/notify"
 	"github.com/pravbeseda/monitor/internal/storage"
 )
@@ -25,6 +26,7 @@ var thresholdTemplate = template.Must(template.ParseFS(templates,
 // what one of them is judged by, and whether it is excluded from anomalies
 // (docs/specs/thresholds.md).
 type ThresholdStore interface {
+	NameReader
 	Series(ctx context.Context, sel storage.Selection) ([]storage.SeriesNewest, error)
 	ThresholdOf(ctx context.Context, ref storage.SeriesRef) (storage.Threshold, bool, error)
 	Excluded(ctx context.Context, ref storage.SeriesRef) (bool, error)
@@ -37,8 +39,9 @@ type ThresholdStore interface {
 // as the reader typed it or as it is stored.
 type thresholdView struct {
 	shell
+	// Series names the series; Metric, its id, is shown on hover.
 	Series     string
-	Labels     string
+	Metric     string
 	Unit       string
 	Action     string
 	Below      bool
@@ -109,7 +112,7 @@ func Thresholds(store ThresholdStore, configured func(node string) bool) http.Ha
 func showForm(ctx context.Context, w http.ResponseWriter, store ThresholdStore,
 	printer *i18n.Printer, ref storage.SeriesRef, lang string, configured bool,
 ) {
-	view := emptyForm(printer, ref, lang)
+	view := emptyForm(printer, namesFrom(ctx, store).Metrics[ref.Metric], ref, lang)
 	if !configured {
 		view.Detached = printer.T("threshold.detached")
 	}
@@ -154,7 +157,7 @@ func save(w http.ResponseWriter, r *http.Request, store ThresholdStore,
 	case string(storage.Above):
 		direction = storage.Above
 	default:
-		refuseForm(w, printer, ref, lang, r, "threshold.bad_direction")
+		refuseForm(w, store, printer, ref, lang, r, "threshold.bad_direction")
 		return
 	}
 	// A form is the whole configuration, so a save that says nothing about the switch —
@@ -162,22 +165,22 @@ func save(w http.ResponseWriter, r *http.Request, store ThresholdStore,
 	anomalies := r.PostForm.Get("anomalies")
 	exclude := anomalies == "exclude"
 	if !exclude && anomalies != "show" {
-		refuseForm(w, printer, ref, lang, r, "threshold.bad_switch")
+		refuseForm(w, store, printer, ref, lang, r, "threshold.bad_switch")
 		return
 	}
 
 	warning, err := parseValue(ref.Metric, r.PostForm.Get("warning"))
 	if err != nil {
-		refuseForm(w, printer, ref, lang, r, "threshold.bad_warning")
+		refuseForm(w, store, printer, ref, lang, r, "threshold.bad_warning")
 		return
 	}
 	critical, err := parseValue(ref.Metric, r.PostForm.Get("critical"))
 	if err != nil {
-		refuseForm(w, printer, ref, lang, r, "threshold.bad_critical")
+		refuseForm(w, store, printer, ref, lang, r, "threshold.bad_critical")
 		return
 	}
 	if !ordered(direction, warning, critical) {
-		refuseForm(w, printer, ref, lang, r, "threshold.unordered")
+		refuseForm(w, store, printer, ref, lang, r, "threshold.unordered")
 		return
 	}
 
@@ -197,10 +200,10 @@ func save(w http.ResponseWriter, r *http.Request, store ThresholdStore,
 }
 
 // refuseForm redraws the form with what the reader typed and says what is wrong with it.
-func refuseForm(w http.ResponseWriter, printer *i18n.Printer, ref storage.SeriesRef, lang string,
+func refuseForm(w http.ResponseWriter, store ThresholdStore, printer *i18n.Printer, ref storage.SeriesRef, lang string,
 	r *http.Request, reason string,
 ) {
-	view := emptyForm(printer, ref, lang)
+	view := emptyForm(printer, namesFrom(r.Context(), store).Metrics[ref.Metric], ref, lang)
 	view.Below = r.PostForm.Get("direction") != string(storage.Above)
 	view.Excluded = r.PostForm.Get("anomalies") == "exclude"
 	view.Warning, view.Critical = r.PostForm.Get("warning"), r.PostForm.Get("critical")
@@ -209,11 +212,11 @@ func refuseForm(w http.ResponseWriter, printer *i18n.Printer, ref storage.Series
 	drawForm(w, view)
 }
 
-func emptyForm(printer *i18n.Printer, ref storage.SeriesRef, lang string) thresholdView {
+func emptyForm(printer *i18n.Printer, name names.Text, ref storage.SeriesRef, lang string) thresholdView {
 	return thresholdView{
 		shell:          still(printer, "threshold.title", "", lang),
-		Series:         ref.Node + " · " + ref.Metric,
-		Labels:         notify.Describe(printer, ref.Labels),
+		Series:         ref.Node + " · " + notify.Heading(printer, name, ref.Metric, ref.Labels),
+		Metric:         ref.Metric,
 		Unit:           printer.T("unit." + string(history.UnitOf(ref.Metric))),
 		Action:         thresholdLink(ref.Node, ref.Metric, ref.Labels, lang),
 		Below:          true,

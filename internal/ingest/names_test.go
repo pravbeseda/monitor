@@ -82,7 +82,7 @@ func TestIgnoresAnUnknownLocale(t *testing.T) {
 // spec: metric-names.md#ingest — an empty name, one over 80 characters, and one with a
 // control or format character are each dropped alone.
 func TestIgnoresANameItCannotShow(t *testing.T) {
-	for _, bad := range []string{`""`, `"` + strings.Repeat("x", 81) + `"`, `"Free\nresolved"`, `"Free‮on"`} {
+	for _, bad := range []string{`""`, `"` + strings.Repeat("x", 81) + `"`, `"Free\nresolved"`, `"Free\u202eon"`} {
 		got := namesOf(t, declaring(`"names": {"disk.free_bytes": {"en": `+bad+`, "ru": "Свободно"}}`))
 		expect(t, got, "metric disk.free_bytes ru Свободно")
 	}

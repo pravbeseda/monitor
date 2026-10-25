@@ -5,6 +5,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/pravbeseda/monitor/internal/state"
 	"github.com/pravbeseda/monitor/internal/storage"
 )
 
@@ -35,7 +36,7 @@ func TestEveryPageNamesASeriesByAllItsLabels(t *testing.T) {
 
 	store := served{series: []seriesPoints{siteSeries("blog-a"), siteSeries("shop-c")}}
 	_, chart := page(t, store, "/history?metric=site.requests_per_min&node=sites&label.site=blog-a")
-	if want := "<h1>sites · site.requests_per_min · site=blog-a</h1>"; !strings.Contains(chart, want) {
+	if want := "<h1>sites · site.requests_per_min site=blog-a</h1>"; !strings.Contains(chart, want) {
 		t.Errorf("chart heading is not %q: %s", want, chart)
 	}
 	_, choice := page(t, store, "/history?metric=site.requests_per_min&node=sites")
@@ -47,14 +48,34 @@ func TestEveryPageNamesASeriesByAllItsLabels(t *testing.T) {
 
 	ref := siteSeries("blog-a").SeriesRef
 	_, form := openForm(t, holding(ref), "/thresholds?label.site=blog-a&metric=site.requests_per_min&node=sites")
-	if want := "sites · site.requests_per_min · site=blog-a"; !strings.Contains(form, want) {
+	if want := "sites · site.requests_per_min site=blog-a"; !strings.Contains(form, want) {
 		t.Errorf("thresholds form does not name %q: %s", want, form)
 	}
 
 	spaced := siteSeries("")
 	spaced.Metric, spaced.Labels = "disk.free_pct", map[string]string{"mount": "/Volumes/Backup Disk", "fs": "apfs"}
 	_, quoted := page(t, served{series: []seriesPoints{spaced}}, "/history?metric=disk.free_pct&node=sites")
-	if want := `· &#34;/Volumes/Backup Disk&#34; · apfs</h1>`; !strings.Contains(quoted, want) {
+	if want := ` &#34;/Volumes/Backup Disk&#34; · apfs</h1>`; !strings.Contains(quoted, want) {
 		t.Errorf("a spaced mount is not quoted as %q: %s", want, quoted)
+	}
+}
+
+// spec: metric-names.md#where — the history page and the thresholds form head a series by
+// its declared name, with the filesystem, and keep the id where a machine or a hover reads it.
+func TestHeadingsSayTheDeclaredName(t *testing.T) {
+	book := named(state.State{}).Names
+	volume := siteSeries("")
+	volume.Node, volume.Metric, volume.Labels = "server-b", "disk.free_pct", map[string]string{"mount": "/srv", "fs": "ext4", "removable": "false"}
+
+	_, chart := page(t, served{stored: stored{names: book}, series: []seriesPoints{volume}}, "/history?metric=disk.free_pct&node=server-b&lang=ru")
+	if want := "<h1>server-b · Свободно /srv · ext4</h1>"; !strings.Contains(chart, want) {
+		t.Errorf("chart heading is not %q: %s", want, chart)
+	}
+
+	form := holding(volume.SeriesRef)
+	form.names = book
+	_, body := openForm(t, form, "/thresholds?label.fs=ext4&label.mount=/srv&label.removable=false&metric=disk.free_pct&node=server-b&lang=ru")
+	if want := `<p class="meta" title="disk.free_pct">server-b · Свободно /srv · ext4</p>`; !strings.Contains(body, want) {
+		t.Errorf("thresholds form does not name %q: %s", want, body)
 	}
 }

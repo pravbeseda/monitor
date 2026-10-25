@@ -14,6 +14,8 @@ import (
 	"github.com/pravbeseda/monitor/internal/evaluate"
 	"github.com/pravbeseda/monitor/internal/history"
 	"github.com/pravbeseda/monitor/internal/hub"
+	"github.com/pravbeseda/monitor/internal/i18n"
+	"github.com/pravbeseda/monitor/internal/names"
 	"github.com/pravbeseda/monitor/internal/state"
 	"github.com/pravbeseda/monitor/internal/storage"
 )
@@ -102,6 +104,23 @@ func showOverview(t *testing.T, current state.State, source history.Source, targ
 		t.Fatalf("status = %d: %s", rec.Code, rec.Body)
 	}
 	return rec.Body.String()
+}
+
+// named is current with the names the built-in sensors declare for disk, load and sites.
+func named(current state.State) state.State {
+	current.Names = names.Book{
+		Metrics: map[string]names.Text{
+			"disk.free_pct":         {i18n.English: "Free on {mount}", i18n.Russian: "Свободно {mount}"},
+			"disk.free_bytes":       {i18n.English: "Free on {mount}", i18n.Russian: "Свободно {mount}"},
+			"load.avg_15m":          {i18n.English: "Load 15 min", i18n.Russian: "Нагрузка 15 мин"},
+			"site.requests_per_min": {i18n.English: "Requests a minute", i18n.Russian: "Запросов в минуту"},
+		},
+		Families: map[string]names.Text{
+			"disk": {i18n.English: "Disk", i18n.Russian: "Диск"},
+			"load": {i18n.English: "Load", i18n.Russian: "Нагрузка"},
+		},
+	}
+	return current
 }
 
 func overview(t *testing.T, subjects ...state.Subject) string {
@@ -441,6 +460,15 @@ func TestOverviewRows(t *testing.T) {
 
 	t.Run("a value in its unit", func(t *testing.T) {
 		containsAll(t, "card", card(t, overview(t, freePct("server-b", "/", 40)), "server-b"), "40.0%")
+	})
+
+	// spec: metric-names.md#where — a row is named by its metric's declared name, in the
+	// reader's language, and a site's row leaves its site out.
+	t.Run("declared names", func(t *testing.T) {
+		current := named(stateOf(freePct("server-b", "/srv", 40), siteOf("blog-a", "site.requests_per_min", 4)))
+		body := showOverview(t, current, held{}, "/overview?lang=ru")
+		equal(t, "rows", cardRows(t, body, "server-b"), []string{"Свободно /srv"})
+		equal(t, "rows", cardRows(t, body, "blog-a"), []string{"Запросов в минуту"})
 	})
 
 	t.Run("a card links to its item", func(t *testing.T) {

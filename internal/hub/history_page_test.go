@@ -31,10 +31,10 @@ func TestHistoryPageDrawsTheSeries(t *testing.T) {
 	}
 	for _, want := range []string{
 		"<svg", "<polyline",
-		"<h1>server-b · disk.free_pct · / · ext4</h1>", // the heading names the series
-		"34.1% · 2026-08-31 11:30 UTC",                 // the newest value and when it was collected
-		">0.0%<",                                       // the axis starts at zero
-		">37.6%<",                                      // and reaches above the highest value
+		"<h1>server-b · disk.free_pct / · ext4</h1>", // the heading names the series
+		"34.1% · 2026-08-31 11:30 UTC",               // the newest value and when it was collected
+		">0.0%<",                                     // the axis starts at zero
+		">37.6%<",                                    // and reaches above the highest value
 	} {
 		if !strings.Contains(body, want) {
 			t.Errorf("page does not show %q", want)

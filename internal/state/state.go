@@ -11,6 +11,7 @@ import (
 	"github.com/pravbeseda/monitor/internal/anomaly"
 	"github.com/pravbeseda/monitor/internal/evaluate"
 	"github.com/pravbeseda/monitor/internal/history"
+	"github.com/pravbeseda/monitor/internal/names"
 	"github.com/pravbeseda/monitor/internal/storage"
 )
 
@@ -25,6 +26,9 @@ type State struct {
 	Unwatched int
 	Nodes     []Node
 	Subjects  []Subject
+	// Names is what the sensors call their metrics, for the pages that show them; the State
+	// API carries ids, not names (docs/specs/metric-names.md#where).
+	Names names.Book
 }
 
 // Node is one node that has reported. Its Level counts only subjects that are not stale:
@@ -68,7 +72,7 @@ type Subject struct {
 // norm by its subject key; a series absent from it — every series, when the norms could not
 // be read — carries no anomaly (docs/specs/anomaly.md).
 func Build(targets func(node string) (evaluate.Target, bool), snap storage.Snapshot, now time.Time, norms map[string]anomaly.Norm) State {
-	out := State{At: now, Nodes: make([]Node, 0, len(snap.Nodes)), Subjects: []Subject{}}
+	out := State{At: now, Nodes: make([]Node, 0, len(snap.Nodes)), Subjects: []Subject{}, Names: snap.Names}
 
 	resolved := map[string]evaluate.Target{}
 	var configured []evaluate.Target

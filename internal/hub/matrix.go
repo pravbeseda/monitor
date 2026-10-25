@@ -8,6 +8,7 @@ import (
 
 	"github.com/pravbeseda/monitor/internal/evaluate"
 	"github.com/pravbeseda/monitor/internal/i18n"
+	"github.com/pravbeseda/monitor/internal/names"
 	"github.com/pravbeseda/monitor/internal/notify"
 )
 
@@ -47,12 +48,12 @@ type seriesCell struct {
 
 // layOut splits a node's shown series, in the order seriesBefore gives them, into the rows
 // of its own that unlabelled series get and the matrices labelled ones are gathered in.
-func layOut(printer *i18n.Printer, node string, series []seriesRow, lang string) ([]rowView, []matrixView) {
+func layOut(printer *i18n.Printer, book names.Book, node string, series []seriesRow, lang string) ([]rowView, []matrixView) {
 	var own []rowView
 	var groups []*matrixGroup
 	for _, row := range series {
 		if len(row.labels) == 0 {
-			own = append(own, rowOf(printer, node, row, lang))
+			own = append(own, rowOf(printer, book, node, row, lang))
 			continue
 		}
 		family := familyKey(row.metric)
@@ -70,7 +71,7 @@ func layOut(printer *i18n.Printer, node string, series []seriesRow, lang string)
 	})
 	matrices := make([]matrixView, 0, len(groups))
 	for _, group := range groups {
-		matrices = append(matrices, matrixOf(printer, node, group.series, lang))
+		matrices = append(matrices, matrixOf(printer, book, node, group.series, lang))
 	}
 	return own, matrices
 }
@@ -99,11 +100,11 @@ func familyKey(metric string) string {
 	return family
 }
 
-func matrixOf(printer *i18n.Printer, node string, series []seriesRow, lang string) matrixView {
+func matrixOf(printer *i18n.Printer, book names.Book, node string, series []seriesRow, lang string) matrixView {
 	var out matrixView
 	family, dotted := familyOf(series[0].metric)
 	if dotted {
-		out.Family = family
+		out.Family = book.Family(printer.Locale(), family)
 	}
 	metrics := map[string]bool{}
 	for _, row := range series {
@@ -113,6 +114,10 @@ func matrixOf(printer *i18n.Printer, node string, series []seriesRow, lang strin
 		label := metric
 		if dotted {
 			label = strings.TrimPrefix(metric, family+".")
+		}
+		// A column names its metric, not a series: the labels are the rows' to say.
+		if template, named := book.Metrics[metric].In(printer.Locale()); named {
+			label, _ = names.Fill(template, nil, nil)
 		}
 		out.Columns = append(out.Columns, columnView{Metric: metric, Label: label})
 	}
@@ -154,7 +159,7 @@ func setRowOf(printer *i18n.Printer, node string, set []seriesRow, columns []col
 }
 
 func seriesCellOf(printer *i18n.Printer, node string, row seriesRow, markStale bool, lang string) *seriesCell {
-	out := &seriesCell{rowView: rowOf(printer, node, row, lang)}
+	out := &seriesCell{rowView: rowOf(printer, names.Book{}, node, row, lang)}
 	word := printer.T("level.none")
 	if out.Level != nil {
 		word = out.Level.Word

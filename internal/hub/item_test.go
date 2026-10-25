@@ -178,9 +178,18 @@ func TestItemPage(t *testing.T) {
 		equal(t, "families", families(body), []string{"disk", "load", "memory", "uptime"})
 		got := charts(body)
 		equal(t, "charts", got[:7], []string{
-			"disk.free_bytes · /a · ext4", "disk.free_pct · /a · ext4", "disk.free_bytes · /b · ext4", "disk.free_pct · /b · ext4",
+			"disk.free_bytes /a · ext4", "disk.free_pct /a · ext4", "disk.free_bytes /b · ext4", "disk.free_pct /b · ext4",
 			"load.avg_15m", "load.avg_1m", "load.avg_5m",
 		})
+	})
+
+	// spec: metric-names.md#where — charts, numbers and family headings say the declared
+	// names; a metric nobody named keeps its id.
+	t.Run("declared names", func(t *testing.T) {
+		body := itemPage(t, named(stateOf(freePct("server-b", "/srv", 40), plain("server-b", "load.avg_15m", 1), plain("server-b", "uptime.boot_seconds", 9))),
+			held{}, logbook{}, "/item?node=server-b&lang=ru")
+		equal(t, "families", families(body), []string{"Диск", "Нагрузка", "uptime"})
+		equal(t, "charts", charts(body), []string{"Свободно /srv · ext4", "Нагрузка 15 мин", "uptime.boot_seconds"})
 	})
 
 	t.Run("sixty series", func(t *testing.T) {
@@ -195,7 +204,7 @@ func TestItemPage(t *testing.T) {
 
 	t.Run("a stale removable volume", func(t *testing.T) {
 		body := itemPage(t, stateOf(staled(removable(freePct("server-b", "/usb", 3))), freePct("server-b", "/", 40)), held{}, logbook{}, "/item?node=server-b")
-		equal(t, "charts", charts(body), []string{"disk.free_pct · / · ext4"})
+		equal(t, "charts", charts(body), []string{"disk.free_pct / · ext4"})
 	})
 }
 
@@ -215,7 +224,7 @@ func TestItemCharts(t *testing.T) {
 	current := stateOf(judgedAt(free("server-b", "/", 19e9), evaluate.OK), judgedAt(plain("server-b", "load.avg_15m", 0.6), evaluate.OK))
 	body := itemPage(t, current, points, book, "/item?node=server-b")
 
-	disk := chartOf(t, body, "disk.free_bytes · / · ext4")
+	disk := chartOf(t, body, "disk.free_bytes / · ext4")
 	lines := levelLineY.FindAllStringSubmatch(disk, -1)
 	if len(lines) != 2 || lines[0][1] != "warning" || lines[1][1] != "critical" {
 		t.Fatalf("threshold lines = %v", lines)
@@ -248,7 +257,7 @@ func TestItemCharts(t *testing.T) {
 	t.Run("unusual, stale and empty", func(t *testing.T) {
 		body := itemPage(t, stateOf(ranked(free("server-b", "/", 19e9), 1), staled(plain("server-b", "load.avg_15m", 0.6)), plain("server-b", "memory.available_pct", 50)),
 			points, logbook{}, "/item?node=server-b")
-		containsAll(t, "unusual", chartOf(t, body, "disk.free_bytes · / · ext4"), "usually 40.0 GB")
+		containsAll(t, "unusual", chartOf(t, body, "disk.free_bytes / · ext4"), "usually 40.0 GB")
 		containsAll(t, "stale", chartOf(t, body, "load.avg_15m"), "no fresh data")
 		containsAll(t, "empty", chartOf(t, body, "memory.available_pct"), "No data for this window")
 	})
@@ -406,7 +415,7 @@ func TestItemPageMore(t *testing.T) {
 		for target, drawn := range map[string]bool{
 			"/item?node=server-b&window=7d": true, "/item?node=server-b": false, "/item?node=server-b&window=12h": false,
 		} {
-			chart := chartOf(t, itemPage(t, current, old, logbook{}, target), "disk.free_bytes · / · ext4")
+			chart := chartOf(t, itemPage(t, current, old, logbook{}, target), "disk.free_bytes / · ext4")
 			if strings.Contains(chart, "<svg") != drawn || strings.Contains(chart, "No data for this window") == drawn {
 				t.Errorf("%s: chart drawn %v, want %v", target, !drawn, drawn)
 			}
@@ -414,7 +423,7 @@ func TestItemPageMore(t *testing.T) {
 	})
 
 	t.Run("a stale series is still drawn, its links carry the language", func(t *testing.T) {
-		chart := chartOf(t, itemPage(t, current, old, logbook{}, "/item?node=server-b&window=7d&lang=ru"), "disk.free_bytes · / · ext4")
+		chart := chartOf(t, itemPage(t, current, old, logbook{}, "/item?node=server-b&window=7d&lang=ru"), "disk.free_bytes / · ext4")
 		containsAll(t, "chart", chart, "<svg", "нет свежих данных", "lang=ru&amp;metric=disk.free_bytes", "window=7d", "/thresholds?")
 	})
 
