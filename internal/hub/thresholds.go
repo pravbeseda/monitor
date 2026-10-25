@@ -100,19 +100,20 @@ func Thresholds(store ThresholdStore, configured func(node string) bool) http.Ha
 			return
 		}
 
+		name := namesFrom(r.Context(), store).Metrics[ref.Metric]
 		if r.Method == http.MethodPost {
-			save(w, r, store, printer, ref, language(values))
+			save(w, r, store, printer, name, ref, language(values))
 			return
 		}
-		showForm(r.Context(), w, store, printer, ref, language(values), configured(ref.Node))
+		showForm(r.Context(), w, store, printer, name, ref, language(values), configured(ref.Node))
 	})
 }
 
 // showForm draws the form over what is stored.
 func showForm(ctx context.Context, w http.ResponseWriter, store ThresholdStore,
-	printer *i18n.Printer, ref storage.SeriesRef, lang string, configured bool,
+	printer *i18n.Printer, name names.Text, ref storage.SeriesRef, lang string, configured bool,
 ) {
-	view := emptyForm(printer, namesFrom(ctx, store).Metrics[ref.Metric], ref, lang)
+	view := emptyForm(printer, name, ref, lang)
 	if !configured {
 		view.Detached = printer.T("threshold.detached")
 	}
@@ -144,7 +145,7 @@ func showForm(ctx context.Context, w http.ResponseWriter, store ThresholdStore,
 
 // save replaces the whole configuration of one series: a form states it, never patches it.
 func save(w http.ResponseWriter, r *http.Request, store ThresholdStore,
-	printer *i18n.Printer, ref storage.SeriesRef, lang string,
+	printer *i18n.Printer, name names.Text, ref storage.SeriesRef, lang string,
 ) {
 	if err := r.ParseForm(); err != nil {
 		http.Error(w, printer.T("error.query"), http.StatusBadRequest)
@@ -157,7 +158,7 @@ func save(w http.ResponseWriter, r *http.Request, store ThresholdStore,
 	case string(storage.Above):
 		direction = storage.Above
 	default:
-		refuseForm(w, store, printer, ref, lang, r, "threshold.bad_direction")
+		refuseForm(w, printer, name, ref, lang, r, "threshold.bad_direction")
 		return
 	}
 	// A form is the whole configuration, so a save that says nothing about the switch —
@@ -165,22 +166,22 @@ func save(w http.ResponseWriter, r *http.Request, store ThresholdStore,
 	anomalies := r.PostForm.Get("anomalies")
 	exclude := anomalies == "exclude"
 	if !exclude && anomalies != "show" {
-		refuseForm(w, store, printer, ref, lang, r, "threshold.bad_switch")
+		refuseForm(w, printer, name, ref, lang, r, "threshold.bad_switch")
 		return
 	}
 
 	warning, err := parseValue(ref.Metric, r.PostForm.Get("warning"))
 	if err != nil {
-		refuseForm(w, store, printer, ref, lang, r, "threshold.bad_warning")
+		refuseForm(w, printer, name, ref, lang, r, "threshold.bad_warning")
 		return
 	}
 	critical, err := parseValue(ref.Metric, r.PostForm.Get("critical"))
 	if err != nil {
-		refuseForm(w, store, printer, ref, lang, r, "threshold.bad_critical")
+		refuseForm(w, printer, name, ref, lang, r, "threshold.bad_critical")
 		return
 	}
 	if !ordered(direction, warning, critical) {
-		refuseForm(w, store, printer, ref, lang, r, "threshold.unordered")
+		refuseForm(w, printer, name, ref, lang, r, "threshold.unordered")
 		return
 	}
 
@@ -200,10 +201,10 @@ func save(w http.ResponseWriter, r *http.Request, store ThresholdStore,
 }
 
 // refuseForm redraws the form with what the reader typed and says what is wrong with it.
-func refuseForm(w http.ResponseWriter, store ThresholdStore, printer *i18n.Printer, ref storage.SeriesRef, lang string,
+func refuseForm(w http.ResponseWriter, printer *i18n.Printer, name names.Text, ref storage.SeriesRef, lang string,
 	r *http.Request, reason string,
 ) {
-	view := emptyForm(printer, namesFrom(r.Context(), store).Metrics[ref.Metric], ref, lang)
+	view := emptyForm(printer, name, ref, lang)
 	view.Below = r.PostForm.Get("direction") != string(storage.Above)
 	view.Excluded = r.PostForm.Get("anomalies") == "exclude"
 	view.Warning, view.Critical = r.PostForm.Get("warning"), r.PostForm.Get("critical")

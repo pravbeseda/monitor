@@ -8,6 +8,8 @@ import (
 	"regexp"
 	"strings"
 	"time"
+
+	"github.com/pravbeseda/monitor/internal/names"
 )
 
 // MetricID is the shape of every metric id on the wire: ingest refuses one that does not
@@ -44,7 +46,7 @@ type SensorStatus struct {
 }
 
 // Declared is what Names and Families hold: an id, then its name by locale.
-type Declared map[string]map[string]string
+type Declared map[string]names.Text
 
 // Measurement is one reading on the wire.
 type Measurement struct {

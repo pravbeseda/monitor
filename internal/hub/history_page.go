@@ -113,7 +113,7 @@ func historyPage(printer *i18n.Printer, name names.Text, query history.Query, re
 		out.Message = printer.T("history.several")
 		for _, series := range result.Series {
 			out.Series = append(out.Series, seriesLink{
-				Label: series.Node + " · " + notify.Describe(printer, series.Labels),
+				Label: series.Node + " · " + notify.Heading(printer, name, series.Metric, series.Labels),
 				URL:   historyLink(series.Node, series.Metric, series.Labels, lang, window),
 			})
 		}

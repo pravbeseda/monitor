@@ -33,6 +33,19 @@ func (t Text) In(locale i18n.Locale) (string, bool) {
 	return name, ok
 }
 
+// FamilyOf is the family of a metric id: the part before its first dot, or the whole id
+// when it has none.
+func FamilyOf(metric string) string {
+	family, _, _ := strings.Cut(metric, ".")
+	return family
+}
+
+// Bare is a metric's name with its references left out: what it says of every series.
+func Bare(template string) string {
+	bare, _ := Fill(template, nil, nil)
+	return bare
+}
+
 // Family is the name of a family in locale, in English when locale has none, and its id
 // when neither was declared.
 func (b Book) Family(locale i18n.Locale, family string) string {
@@ -94,14 +107,14 @@ func reference(text string) (string, int) {
 }
 
 // Valid reports whether a declared name may be kept: not empty, at most MaxLength
-// characters, and free of control and format characters, which would let a name break a
-// message into lines or turn its text around.
+// characters, and free of control, format and line-separating characters, which would let
+// a name break a message into lines or turn its text around.
 func Valid(name string) bool {
 	if name == "" || !utf8.ValidString(name) || utf8.RuneCountInString(name) > MaxLength {
 		return false
 	}
 	for _, r := range name {
-		if unicode.IsControl(r) || unicode.In(r, unicode.Cf) {
+		if unicode.IsControl(r) || unicode.In(r, unicode.Cf, unicode.Zl, unicode.Zp) {
 			return false
 		}
 	}

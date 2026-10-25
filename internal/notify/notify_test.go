@@ -446,3 +446,17 @@ func TestAPageNameAddsTheVolumeDecoration(t *testing.T) {
 		t.Errorf("Heading = %q, want %q", got, want)
 	}
 }
+
+// spec: metric-names.md#where — the log line says the English name and keeps the metric id
+// among its attributes.
+func TestTheLogLineSaysTheNameAndKeepsTheID(t *testing.T) {
+	logger, out := capture(t)
+	if err := (notify.Log{Logger: logger}).Notify(context.Background(), entering()); err != nil {
+		t.Fatalf("Notify: %v", err)
+	}
+	for _, want := range []string{"metric=disk.free_bytes", "server-b · Free on /data"} {
+		if !strings.Contains(out.String(), want) {
+			t.Errorf("the log line is missing %q:\n%s", want, out)
+		}
+	}
+}

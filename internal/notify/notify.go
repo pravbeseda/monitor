@@ -74,30 +74,33 @@ func Naming(labels map[string]string) string {
 // printer's locale with its labels filled in, then what the labels it did not use name. A
 // metric nobody named reads as its id (docs/specs/metric-names.md#naming).
 func Name(p *i18n.Printer, declared names.Text, metric string, labels map[string]string) string {
-	template, named := declared.In(p.Locale())
-	if !named {
-		template = metric
-	}
-	name, used := names.Fill(template, labels, filled)
-	rest := maps.Clone(labels)
-	maps.DeleteFunc(rest, func(key, _ string) bool { return used[key] })
-	if more := Naming(rest); more != "" {
-		name += " " + more
-	}
-	return name
+	out, _ := name(p, declared, metric, labels)
+	return out
 }
 
 // Heading is how a page heads a series: its Name, then the volume's filesystem and its
 // being removable, which a message leaves out, unless the name already said them.
 func Heading(p *i18n.Printer, declared names.Text, metric string, labels map[string]string) string {
-	template, _ := declared.In(p.Locale())
-	_, used := names.Fill(template, labels, filled)
-	rest := maps.Clone(labels)
-	maps.DeleteFunc(rest, func(key, _ string) bool { return used[key] || !decoration[key] })
-	if volume := Describe(p, rest); volume != "" {
-		return Name(p, declared, metric, labels) + " · " + volume
+	heading, rest := name(p, declared, metric, labels)
+	if suffix := volume(p, rest); suffix != "" {
+		heading += " · " + suffix
 	}
-	return Name(p, declared, metric, labels)
+	return heading
+}
+
+// name is a series' Name and the labels its declared name did not use.
+func name(p *i18n.Printer, declared names.Text, metric string, labels map[string]string) (string, map[string]string) {
+	template, named := declared.In(p.Locale())
+	if !named {
+		template = metric
+	}
+	out, used := names.Fill(template, labels, filled)
+	rest := maps.Clone(labels)
+	maps.DeleteFunc(rest, func(key, _ string) bool { return used[key] })
+	if more := Naming(rest); more != "" {
+		out += " " + more
+	}
+	return out, rest
 }
 
 // filled is a label's value as a name says it: quoted like any label value, and an empty
@@ -109,13 +112,23 @@ func filled(value string) string {
 	return plain(value)
 }
 
-// Describe is how a page names a series: its Naming, then the decoration a message leaves
-// out, since a page has room for a volume's filesystem and whether it can be unplugged.
+// Describe is how a page names a series by its labels: its Naming, then the volume's
+// filesystem and whether it can be unplugged, which a page has room for.
 func Describe(p *i18n.Printer, labels map[string]string) string {
-	parts := make([]string, 0, 3)
+	parts := make([]string, 0, 2)
 	if named := Naming(labels); named != "" {
 		parts = append(parts, named)
 	}
+	if suffix := volume(p, labels); suffix != "" {
+		parts = append(parts, suffix)
+	}
+	return strings.Join(parts, " · ")
+}
+
+// volume is the decoration a message leaves out: a volume's filesystem and whether it is
+// removable.
+func volume(p *i18n.Printer, labels map[string]string) string {
+	parts := make([]string, 0, 2)
 	if fs := labels["fs"]; fs != "" {
 		parts = append(parts, fs)
 	}

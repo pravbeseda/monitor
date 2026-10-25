@@ -53,7 +53,9 @@ func layOut(printer *i18n.Printer, book names.Book, node string, series []series
 	var groups []*matrixGroup
 	for _, row := range series {
 		if len(row.labels) == 0 {
-			own = append(own, rowOf(printer, book, node, row, lang))
+			view := rowOf(printer, node, row, lang)
+			view.Name = notify.Name(printer, book.Metrics[row.metric], row.metric, row.labels)
+			own = append(own, view)
 			continue
 		}
 		family := familyKey(row.metric)
@@ -117,7 +119,7 @@ func matrixOf(printer *i18n.Printer, book names.Book, node string, series []seri
 		}
 		// A column names its metric, not a series: the labels are the rows' to say.
 		if template, named := book.Metrics[metric].In(printer.Locale()); named {
-			label, _ = names.Fill(template, nil, nil)
+			label = names.Bare(template)
 		}
 		out.Columns = append(out.Columns, columnView{Metric: metric, Label: label})
 	}
@@ -159,7 +161,7 @@ func setRowOf(printer *i18n.Printer, node string, set []seriesRow, columns []col
 }
 
 func seriesCellOf(printer *i18n.Printer, node string, row seriesRow, markStale bool, lang string) *seriesCell {
-	out := &seriesCell{rowView: rowOf(printer, names.Book{}, node, row, lang)}
+	out := &seriesCell{rowView: rowOf(printer, node, row, lang)}
 	word := printer.T("level.none")
 	if out.Level != nil {
 		word = out.Level.Word

@@ -2,11 +2,14 @@ package collect
 
 import (
 	"context"
+	"encoding/json"
 	"testing"
 	"time"
 
 	"github.com/pravbeseda/monitor/internal/api"
 	"github.com/pravbeseda/monitor/internal/config"
+	"github.com/pravbeseda/monitor/internal/i18n"
+	"github.com/pravbeseda/monitor/internal/names"
 	"github.com/pravbeseda/monitor/internal/sensor"
 	"github.com/pravbeseda/monitor/internal/version"
 )
@@ -72,5 +75,27 @@ func TestRunCollectsEachServiceNodeAtStart(t *testing.T) {
 	case <-done:
 	case <-time.After(5 * time.Second):
 		t.Fatal("Run kept going after its context ended")
+	}
+}
+
+// named is gdrive saying what its metric is called.
+type named struct{ drive }
+
+func (named) Names() names.Book {
+	return names.Book{Metrics: map[string]names.Text{"gdrive.free_bytes": {i18n.English: "Free on Google Drive"}}}
+}
+
+// spec: metric-names.md#ingest — a sensor the hub runs itself declares its names in the
+// report it hands ingest, as an agent's would.
+func TestASensorTheHubRunsDeclaresItsNames(t *testing.T) {
+	in := reports{got: make(chan api.Request, 4)}
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	go Run(ctx, []config.Node{{Name: "cloud", Class: config.ServiceClass}}, []sensor.Sensor{named{}}, in, func() time.Time { return start })
+
+	manifest := in.next(t).Manifest
+	var declared api.Declared
+	if len(manifest) != 1 || json.Unmarshal(manifest[0].Names, &declared) != nil || declared["gdrive.free_bytes"][i18n.English] != "Free on Google Drive" {
+		t.Errorf("manifest = %+v, want gdrive's name", manifest)
 	}
 }

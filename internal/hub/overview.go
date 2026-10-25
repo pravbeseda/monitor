@@ -87,7 +87,7 @@ type overviewItem struct {
 	series     []state.Subject
 	cell       timeline.Cell
 	lastReport time.Time
-	// names is what the sensors call the item's metrics.
+	// names is every name the sensors declared, the item's metrics among them.
 	names names.Book
 }
 

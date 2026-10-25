@@ -13,7 +13,6 @@ import (
 	"github.com/pravbeseda/monitor/internal/anomaly"
 	"github.com/pravbeseda/monitor/internal/evaluate"
 	"github.com/pravbeseda/monitor/internal/i18n"
-	"github.com/pravbeseda/monitor/internal/names"
 	"github.com/pravbeseda/monitor/internal/notify"
 	"github.com/pravbeseda/monitor/internal/state"
 	"github.com/pravbeseda/monitor/internal/storage"
@@ -155,9 +154,8 @@ func debugOf(printer *i18n.Printer, current state.State, lang string) debugView 
 	return out
 }
 
-func rowOf(printer *i18n.Printer, book names.Book, node string, row seriesRow, lang string) rowView {
+func rowOf(printer *i18n.Printer, node string, row seriesRow, lang string) rowView {
 	out := rowView{
-		Name:       notify.Name(printer, book.Metrics[row.metric], row.metric, row.labels),
 		Metric:     row.metric,
 		Value:      format(printer, row.metric, row.value),
 		History:    historyLink(node, row.metric, row.labels, lang, ""),

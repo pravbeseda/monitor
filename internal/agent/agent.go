@@ -10,7 +10,6 @@ import (
 	"time"
 
 	"github.com/pravbeseda/monitor/internal/api"
-	"github.com/pravbeseda/monitor/internal/names"
 	"github.com/pravbeseda/monitor/internal/sensor"
 	"github.com/pravbeseda/monitor/internal/version"
 )
@@ -229,7 +228,7 @@ func (a *Agent) manifest() []api.SensorStatus {
 
 // declared is one map of a sensor's names as the wire carries it; a map of strings always
 // encodes, so the error is impossible.
-func declared(byID map[string]names.Text) json.RawMessage {
+func declared(byID api.Declared) json.RawMessage {
 	if len(byID) == 0 {
 		return nil
 	}

@@ -6,7 +6,6 @@ package sensor
 import (
 	"context"
 	"math"
-	"strings"
 	"time"
 
 	"github.com/pravbeseda/monitor/internal/i18n"
@@ -43,7 +42,7 @@ type Named interface {
 func Catalogued(metrics ...string) names.Book {
 	book := names.Book{Metrics: map[string]names.Text{}, Families: map[string]names.Text{}}
 	for _, metric := range metrics {
-		family, _, _ := strings.Cut(metric, ".")
+		family := names.FamilyOf(metric)
 		book.Metrics[metric] = catalogued("metric." + metric)
 		book.Families[family] = catalogued("family." + family)
 	}

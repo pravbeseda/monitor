@@ -91,6 +91,8 @@ func TestValid(t *testing.T) {
 		{"Free on {mount}\n✅ resolved", false},
 		{"Free\u202eon", false},
 		{"\x7f", false},
+		{"Free\u2028on", false},
+		{"Free\u2029on", false},
 		{string(make([]rune, 80)), false},
 		{"Свободно Свободно Свободно Свободно Свободно Свободно Свободно Свободно Свободно", true},
 		{"Свободно Свободно Свободно Свободно Свободно Свободно Свободно Свободно Свободноо", false},

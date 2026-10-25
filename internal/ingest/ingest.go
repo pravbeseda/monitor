@@ -12,6 +12,7 @@ import (
 	"log/slog"
 	"math"
 	"net/http"
+	"slices"
 	"strings"
 	"time"
 
@@ -223,30 +224,30 @@ func declaredNames(manifest []api.SensorStatus, measurements []storage.Measureme
 	carried := map[storage.NameKind]map[string]bool{storage.MetricName: {}, storage.FamilyName: {}}
 	for _, m := range measurements {
 		carried[storage.MetricName][m.Metric] = true
-		family, _, _ := strings.Cut(m.Metric, ".")
-		carried[storage.FamilyName][family] = true
+		carried[storage.FamilyName][names.FamilyOf(m.Metric)] = true
 	}
 
 	// Keyed by kind, id and locale, so a later manifest entry replaces an earlier one.
 	kept := map[storage.Name]string{}
-	for _, status := range manifest {
-		for kind, raw := range map[storage.NameKind]json.RawMessage{storage.MetricName: status.Names, storage.FamilyName: status.Families} {
-			var declared api.Declared
-			if len(raw) == 0 || json.Unmarshal(raw, &declared) != nil {
+	keep := func(kind storage.NameKind, raw json.RawMessage) {
+		var declared api.Declared
+		if len(raw) == 0 || json.Unmarshal(raw, &declared) != nil {
+			return
+		}
+		for key, text := range declared {
+			if !carried[kind][key] {
 				continue
 			}
-			for key, byLocale := range declared {
-				if !carried[kind][key] {
-					continue
-				}
-				for tag, text := range byLocale {
-					locale, known := i18n.Parse(tag)
-					if known && string(locale) == tag && names.Valid(text) {
-						kept[storage.Name{Kind: kind, Key: key, Locale: locale}] = text
-					}
+			for locale, name := range text {
+				if slices.Contains(i18n.Locales, locale) && names.Valid(name) {
+					kept[storage.Name{Kind: kind, Key: key, Locale: locale}] = name
 				}
 			}
 		}
+	}
+	for _, status := range manifest {
+		keep(storage.MetricName, status.Names)
+		keep(storage.FamilyName, status.Families)
 	}
 
 	out := make([]storage.Name, 0, len(kept))
