@@ -66,7 +66,7 @@ One row = one test. Anchors: `spec: disk-sensor.md#<heading>`.
 | a container whose shortest mount point is hidden (a hidden `/Volumes/vm` beside a visible `/Volumes/system-a`) | one measurement pair, for the shortest visible mount point; nothing when every member is hidden |
 | several partitions of one physical disk (two NTFS volumes on a stick) | one measurement pair each: separate pools are separate volumes |
 | on macOS, a mounted snapshot of an APFS volume — Time Machine mounts them during a backup | grouped with the container it was taken from, so nothing of its own while that container has a watched volume with a shorter mount point |
-| on macOS, a mounted snapshot whose container has no other watched volume | collected as that container's one measurement pair, like any other sole member |
+| on macOS, a mounted snapshot the OS does not hide, whose container has no other watched volume | collected as that container's one measurement pair, like any other sole member |
 | a volume reporting zero total blocks | nothing: a percentage of nothing is not a number |
 | a volume that vanishes between enumeration and reading | nothing for it; every other volume is still collected |
 | a volume the agent may not read | nothing for it; every other volume is still collected |
