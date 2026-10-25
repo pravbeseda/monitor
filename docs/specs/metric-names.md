@@ -148,6 +148,7 @@ page or message is written in:
 | `/debug`'s table of unlabelled series | the series' name; the metric id on hover |
 | a `/debug` matrix's corner | the family's name |
 | a `/debug` matrix's column | its metric's name with the labels it refers to left out; the metric id on hover |
+| a `/debug` matrix's column whose metric's name is only references to labels | headed as before names: its id less its family; the metric id on hover |
 | the thresholds form | `node · ` the series' name with filesystem and removable; the metric id on hover |
 | an item of the list of what needs attention | `node · ` the series' name |
 | a change on the timeline or the item page | the series' name |

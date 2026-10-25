@@ -7,6 +7,8 @@ import (
 	"testing"
 	"time"
 
+	"github.com/pravbeseda/monitor/internal/i18n"
+	"github.com/pravbeseda/monitor/internal/names"
 	"github.com/pravbeseda/monitor/internal/state"
 	"github.com/pravbeseda/monitor/internal/storage"
 )
@@ -359,5 +361,16 @@ func TestDebugSaysTheDeclaredNames(t *testing.T) {
 	}
 	if want := []string{"disk.free_bytes", "disk.free_pct"}; !slices.Equal(got[0].metrics, want) {
 		t.Errorf("columns on hover = %q, want the ids %q", got[0].metrics, want)
+	}
+}
+
+// spec: metric-names.md#where — a column whose name is only references to labels would be
+// headed by nothing; it keeps the header it had before names.
+func TestAColumnNamedOnlyByReferencesKeepsItsID(t *testing.T) {
+	book := names.Book{Metrics: map[string]names.Text{"disk.free_pct": {i18n.English: "{mount}"}}}
+	body := showDebug(t, stored{states: []storage.NodeState{{Node: "laptop-a", LastSeen: lastSeen, Values: pair(mounted("/"), lastSeen)}}, names: book}, "/debug")
+	got := matrices(t, body)
+	if len(got) != 1 || !slices.Equal(got[0].heads, []string{"free_bytes", "free_pct"}) {
+		t.Errorf("matrices = %+v, want columns headed free_bytes and free_pct", got)
 	}
 }
