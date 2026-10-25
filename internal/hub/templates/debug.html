@@ -46,7 +46,7 @@
           <tbody>
             {{ range .Rows }}
               <tr>
-                <td>{{ .Metric }}</td>
+                <td title="{{ .Metric }}">{{ .Name }}</td>
                 <td><a href="{{ .History }}">{{ .Value }}</a></td>
                 <td>{{ with .Level }}<span class="{{ .Class }}">{{ .Word }}</span>{{ else }}—{{ end }} <a class="set" href="{{ .Thresholds }}">{{ .SetLabel }}</a></td>
                 <td>{{ .Collected }}{{ with .Stale }} <small class="stale">{{ . }}</small>{{ end }}{{ with .Unusual }} <small class="unusual">{{ . }}</small>{{ end }}</td>

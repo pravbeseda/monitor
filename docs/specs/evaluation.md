@@ -315,8 +315,10 @@ that produced it, and how long the subject has been in the level it left (`since
 digest carries a list of those, one entry per subject.
 
 What a channel writes names the series, or two subjects of one metric on one node read
-alike: the node, then a mount point as itself and every other label as the pair it is.
-`fs` and `removable` are left out — they decorate a volume rather than identify it.
+alike: the node, then the series' name ([metric names](metric-names.md#where)) — its
+metric's declared name with a mount point as itself and every other label as the pair it
+is. `fs` and `removable` are left out — they decorate a volume rather than identify it. The
+value follows alone, the name having said what it measures.
 
 | Configuration | Result |
 |---|---|

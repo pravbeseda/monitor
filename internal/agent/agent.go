@@ -4,6 +4,7 @@ package agent
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"log/slog"
 	"time"
@@ -215,9 +216,24 @@ func (a *Agent) trimBuffer() {
 func (a *Agent) manifest() []api.SensorStatus {
 	manifest := make([]api.SensorStatus, 0, len(a.sensors))
 	for _, s := range a.sensors {
-		manifest = append(manifest, api.SensorStatus{Sensor: s.Name(), Applicable: s.Applicable()})
+		status := api.SensorStatus{Sensor: s.Name(), Applicable: s.Applicable()}
+		if named, ok := s.(sensor.Named); ok {
+			book := named.Names()
+			status.Names, status.Families = declared(book.Metrics), declared(book.Families)
+		}
+		manifest = append(manifest, status)
 	}
 	return manifest
+}
+
+// declared is one map of a sensor's names as the wire carries it; a map of strings always
+// encodes, so the error is impossible.
+func declared(byID api.Declared) json.RawMessage {
+	if len(byID) == 0 {
+		return nil
+	}
+	encoded, _ := json.Marshal(byID)
+	return encoded
 }
 
 // apply replaces the configuration wholesale; one it cannot parse leaves the working one

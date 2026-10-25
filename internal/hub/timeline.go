@@ -12,6 +12,7 @@ import (
 
 	"github.com/pravbeseda/monitor/internal/evaluate"
 	"github.com/pravbeseda/monitor/internal/i18n"
+	"github.com/pravbeseda/monitor/internal/names"
 	"github.com/pravbeseda/monitor/internal/notify"
 	"github.com/pravbeseda/monitor/internal/state"
 	"github.com/pravbeseda/monitor/internal/storage"
@@ -146,7 +147,7 @@ func Timeline(read StateReader, store TimelineStore, targets func(node string) (
 			storageFailure(w, printer, err)
 			return
 		}
-		view.Days = changeDays(printer, changes, anomalies, targets, current.At, lang, shownChanges)
+		view.Days = changeDays(printer, current.Names, changes, anomalies, targets, current.At, lang, shownChanges)
 
 		shellHeaders(w)
 		if err := timelineTemplate.Execute(w, view); err != nil {
@@ -275,12 +276,12 @@ type entry struct {
 
 // changeDays is the newest limit of the changes and anomalies, newest first, grouped under
 // the day they happened on (docs/specs/timeline.md#changes).
-func changeDays(printer *i18n.Printer, changes []storage.Transition, anomalies []storage.Anomaly,
+func changeDays(printer *i18n.Printer, book names.Book, changes []storage.Transition, anomalies []storage.Anomaly,
 	targets func(node string) (evaluate.Target, bool), now time.Time, lang string, limit int,
 ) []dayView {
 	entries := make([]entry, 0, len(changes)+2*len(anomalies))
 	for _, change := range changes {
-		entries = append(entries, entry{at: change.At, view: changeOf(printer, change, targets, lang)})
+		entries = append(entries, entry{at: change.At, view: changeOf(printer, book, change, targets, lang)})
 	}
 	for _, record := range anomalies {
 		key, err := record.Key()
@@ -288,9 +289,9 @@ func changeDays(printer *i18n.Printer, changes []storage.Transition, anomalies [
 			slog.Error("identify an anomaly", "node", record.Node, "metric", record.Metric, "error", err)
 			continue
 		}
-		entries = append(entries, entry{at: record.Began, anomaly: true, key: key, view: startOf(printer, record, lang)})
+		entries = append(entries, entry{at: record.Began, anomaly: true, key: key, view: startOf(printer, book, record, lang)})
 		if record.Back != nil {
-			entries = append(entries, entry{at: record.Ended, anomaly: true, key: key, view: endOf(printer, record, lang)})
+			entries = append(entries, entry{at: record.Ended, anomaly: true, key: key, view: endOf(printer, book, record, lang)})
 		}
 	}
 	// Transitions come newest first already, ties as the log recorded them; anomalies are
@@ -325,19 +326,16 @@ func changeDays(printer *i18n.Printer, changes []storage.Transition, anomalies [
 
 // seriesChange is what every change of a series shows: when, which series, and a link to
 // its chart.
-func seriesChange(printer *i18n.Printer, at time.Time, subject storage.Subject, class, lang string) changeView {
-	out := changeView{Time: printer.Clock(at), Class: class, Node: subject.Node, Name: subject.Metric,
+func seriesChange(printer *i18n.Printer, book names.Book, at time.Time, subject storage.Subject, class, lang string) changeView {
+	return changeView{Time: printer.Clock(at), Class: class, Node: subject.Node,
+		Name: notify.Name(printer, book.Metrics[subject.Metric], subject.Metric, subject.Labels),
 		Link: historyLink(subject.Node, subject.Metric, subject.Labels, lang, "")}
-	if named := notify.Naming(subject.Labels); named != "" {
-		out.Name += " · " + named
-	}
-	return out
 }
 
 // startOf is an anomaly's start: the value it was recorded with and the band it was judged
 // against (docs/specs/timeline.md#changes).
-func startOf(printer *i18n.Printer, record storage.Anomaly, lang string) changeView {
-	out := seriesChange(printer, record.Began, record.Subject, "unusual", lang)
+func startOf(printer *i18n.Printer, book names.Book, record storage.Anomaly, lang string) changeView {
+	out := seriesChange(printer, book, record.Began, record.Subject, "unusual", lang)
 	out.Move, out.Value = printer.T("timeline.unusual"), format(printer, record.Metric, record.Value)
 	low, high := format(printer, record.Metric, record.Low), format(printer, record.Metric, record.High)
 	if low == high {
@@ -349,13 +347,13 @@ func startOf(printer *i18n.Printer, record storage.Anomaly, lang string) changeV
 }
 
 // endOf is an anomaly's end: the value it came back at.
-func endOf(printer *i18n.Printer, record storage.Anomaly, lang string) changeView {
-	out := seriesChange(printer, record.Ended, record.Subject, "usual", lang)
+func endOf(printer *i18n.Printer, book names.Book, record storage.Anomaly, lang string) changeView {
+	out := seriesChange(printer, book, record.Ended, record.Subject, "usual", lang)
 	out.Move, out.Value = printer.T("timeline.usual_again"), format(printer, record.Metric, *record.Back)
 	return out
 }
 
-func changeOf(printer *i18n.Printer, change storage.Transition, targets func(node string) (evaluate.Target, bool), lang string) changeView {
+func changeOf(printer *i18n.Printer, book names.Book, change storage.Transition, targets func(node string) (evaluate.Target, bool), lang string) changeView {
 	to, _ := evaluate.ParseLevel(change.To)
 	if change.Metric == evaluate.SilenceMetric {
 		out := changeView{Time: printer.Clock(change.At), Class: to.String(), Node: change.Node, Link: pageLink("/debug", lang)}
@@ -370,7 +368,7 @@ func changeOf(printer *i18n.Printer, change storage.Transition, targets func(nod
 		return out
 	}
 
-	out := seriesChange(printer, change.At, change.Subject, to.String(), lang)
+	out := seriesChange(printer, book, change.At, change.Subject, to.String(), lang)
 	from, _ := evaluate.ParseLevel(change.From)
 	out.Move = printer.T("level."+from.String()) + " → " + printer.T("level."+to.String())
 	if reading, found := change.Readings[change.Metric]; found {

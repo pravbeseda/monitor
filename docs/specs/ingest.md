@@ -61,7 +61,10 @@ Authorization: Bearer <per-node token>
 - `ts` — request time by the agent's clock, RFC 3339 UTC.
 - `manifest` — the sensors this agent build contains and whether each is applicable on
   this machine ([0010](../decisions/0010-agent-configuration.md)). Sent on every request;
-  it is a few hundred bytes and statelessness beats saving them.
+  it is a kilobyte or two and statelessness beats saving them. An entry may carry the
+  names of the sensor's metrics and their families, which the hub keeps
+  ([metric-names.md](metric-names.md#ingest)); a name the hub cannot use is dropped on its
+  own, never the request.
 - `measurements` — may be empty: the base tick is a valid request even when no sensor
   had anything new. A measurement's optional `ts` is its collection time, for sensors
   that collect above the base tick; absent, the request `ts` applies.

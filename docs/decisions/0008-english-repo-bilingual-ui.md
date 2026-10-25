@@ -1,6 +1,7 @@
 # 0008. The repository is English; the interface is bilingual (en/ru)
 
-- **Status:** accepted
+- **Status:** accepted; an external sensor names its own metrics, per
+  [0048](0048-a-sensor-names-its-metrics.md)
 - **Date:** 2026-08-28
 
 ## Context

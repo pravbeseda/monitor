@@ -13,6 +13,7 @@ import (
 	"github.com/pravbeseda/monitor/internal/anomaly"
 	"github.com/pravbeseda/monitor/internal/evaluate"
 	"github.com/pravbeseda/monitor/internal/hub"
+	"github.com/pravbeseda/monitor/internal/names"
 	"github.com/pravbeseda/monitor/internal/storage"
 	"github.com/pravbeseda/monitor/internal/version"
 )
@@ -30,14 +31,18 @@ type stored struct {
 	// pointsErr fails every read of points, and only those.
 	pointsErr error
 	err       error
+	// names is what the sensors call their metrics.
+	names names.Book
 }
 
 func (s stored) SaveIngest(context.Context, storage.Ingest) error    { return nil }
 func (s stored) IntroduceNode(context.Context, storage.Ingest) error { return nil }
 func (s stored) Close() error                                        { return nil }
 
+func (s stored) Names(context.Context) (names.Book, error) { return s.names, nil }
+
 func (s stored) Snapshot(context.Context, []string) (storage.Snapshot, error) {
-	return storage.Snapshot{Nodes: s.states, States: s.levels, Thresholds: s.thresholds, Excluded: s.excluded}, s.err
+	return storage.Snapshot{Nodes: s.states, States: s.levels, Thresholds: s.thresholds, Excluded: s.excluded, Names: s.names}, s.err
 }
 
 func (s stored) Series(context.Context, storage.Selection) ([]storage.SeriesNewest, error) {

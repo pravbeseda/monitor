@@ -15,6 +15,7 @@ import (
 
 	"golang.org/x/oauth2"
 
+	"github.com/pravbeseda/monitor/internal/names"
 	"github.com/pravbeseda/monitor/internal/sensor"
 )
 
@@ -65,6 +66,9 @@ func newSensor(c Credentials, tokenURL, aboutURL string, now func() time.Time) *
 
 // Name is the sensor's id in the configuration and the manifest.
 func (s *Sensor) Name() string { return "gdrive" }
+
+// Names are what this sensor calls its metrics (docs/specs/metric-names.md).
+func (s *Sensor) Names() names.Book { return sensor.Catalogued("gdrive.free_pct", "gdrive.free_bytes") }
 
 // Applicable is always true: the sensor is built only where its credentials are.
 func (s *Sensor) Applicable() bool { return true }

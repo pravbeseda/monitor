@@ -2,10 +2,14 @@ package hub_test
 
 import (
 	"regexp"
+	"slices"
 	"strings"
 	"testing"
 	"time"
 
+	"github.com/pravbeseda/monitor/internal/i18n"
+	"github.com/pravbeseda/monitor/internal/names"
+	"github.com/pravbeseda/monitor/internal/state"
 	"github.com/pravbeseda/monitor/internal/storage"
 )
 
@@ -152,7 +156,7 @@ func TestDebugShowsUnlabelledSeriesAsRowsAboveTheMatrices(t *testing.T) {
 	body := showDebug(t, stored{states: []storage.NodeState{{Node: "laptop-a", LastSeen: lastSeen, Values: values}}}, "/debug")
 
 	own := ownRows(t, body)
-	if len(own) != 2 || !strings.Contains(own[0], "<td>kern.memorystatus_level</td>") || !strings.Contains(own[1], "<td>load.avg_15m</td>") {
+	if len(own) != 2 || !strings.Contains(own[0], ">kern.memorystatus_level</td>") || !strings.Contains(own[1], ">load.avg_15m</td>") {
 		t.Fatalf("rows above the matrix = %q, want the two unlabelled series by metric id", own)
 	}
 	for _, row := range own {
@@ -331,5 +335,42 @@ func TestDebugOrdersMatricesByLabelKeysByteByByte(t *testing.T) {
 	newline, space := strings.Index(body, "label.%0A="), strings.Index(body, "label.&#43;=")
 	if newline < 0 || space < 0 || newline > space {
 		t.Errorf("the newline key at %d, the space key at %d: want the newline's matrix first", newline, space)
+	}
+}
+
+// spec: metric-names.md#where — /debug names an unlabelled row, a matrix's corner and its
+// columns by what the sensors declared, and keeps each id on hover.
+func TestDebugSaysTheDeclaredNames(t *testing.T) {
+	values := append(pair(mounted("/"), lastSeen), storage.Value{Metric: "load.avg_15m", Sensor: "load", Value: 1, TS: lastSeen})
+	book := named(state.State{}).Names
+	body := showDebug(t, stored{states: []storage.NodeState{{Node: "laptop-a", LastSeen: lastSeen, Values: values}}, names: book}, "/debug?lang=ru")
+
+	own := ownRows(t, body)
+	if len(own) != 1 || !strings.Contains(own[0], `<td title="load.avg_15m">Нагрузка 15 мин</td>`) {
+		t.Errorf("rows above the matrix = %q, want the load row by its name", own)
+	}
+	got := matrices(t, body)
+	if len(got) != 1 {
+		t.Fatalf("matrices = %+v, want one", got)
+	}
+	if got[0].corner != "Диск" {
+		t.Errorf("corner = %q, want the family's name", got[0].corner)
+	}
+	if want := []string{"Свободно", "Свободно"}; !slices.Equal(got[0].heads, want) {
+		t.Errorf("columns = %q, want %q", got[0].heads, want)
+	}
+	if want := []string{"disk.free_bytes", "disk.free_pct"}; !slices.Equal(got[0].metrics, want) {
+		t.Errorf("columns on hover = %q, want the ids %q", got[0].metrics, want)
+	}
+}
+
+// spec: metric-names.md#where — a column whose name is only references to labels would be
+// headed by nothing; it keeps the header it had before names.
+func TestAColumnNamedOnlyByReferencesKeepsItsID(t *testing.T) {
+	book := names.Book{Metrics: map[string]names.Text{"disk.free_pct": {i18n.English: "{mount}"}}}
+	body := showDebug(t, stored{states: []storage.NodeState{{Node: "laptop-a", LastSeen: lastSeen, Values: pair(mounted("/"), lastSeen)}}, names: book}, "/debug")
+	got := matrices(t, body)
+	if len(got) != 1 || !slices.Equal(got[0].heads, []string{"free_bytes", "free_pct"}) {
+		t.Errorf("matrices = %+v, want columns headed free_bytes and free_pct", got)
 	}
 }

@@ -12,6 +12,7 @@ import (
 	"sync/atomic"
 	"time"
 
+	"github.com/pravbeseda/monitor/internal/names"
 	"github.com/pravbeseda/monitor/internal/sensor"
 	"github.com/pravbeseda/monitor/internal/weblog"
 )
@@ -73,6 +74,9 @@ func New(sites func() []Site, now func() time.Time) *Sensor {
 
 // Name is the sensor id the configuration and the manifest use.
 func (s *Sensor) Name() string { return Name }
+
+// Names are what this sensor calls its metrics (docs/specs/metric-names.md).
+func (s *Sensor) Names() names.Book { return sensor.Catalogued(weblog.Metrics...) }
 
 // Applicable is true everywhere: any machine may serve a site.
 func (s *Sensor) Applicable() bool { return true }

@@ -31,7 +31,7 @@ One decision per file, each stating what was rejected and why. New records start
 | [0005](decisions/0005-poc-stack.md) | POC stack: Go, SQLite, server-side HTML | accepted, amended by [0035](decisions/0035-mission-control-is-rendered-by-the-hub.md) |
 | [0006](decisions/0006-alerting-rules.md) | Alert on transitions; only critical is instant | accepted, amended by [0032](decisions/0032-thresholds-are-set-in-the-interface.md) |
 | [0007](decisions/0007-public-repository.md) | Public repository from the first commit; nothing personal in it | accepted, amended by [0032](decisions/0032-thresholds-are-set-in-the-interface.md) |
-| [0008](decisions/0008-english-repo-bilingual-ui.md) | The repository is English; the interface is bilingual | accepted |
+| [0008](decisions/0008-english-repo-bilingual-ui.md) | The repository is English; the interface is bilingual | accepted, amended by [0048](decisions/0048-a-sensor-names-its-metrics.md) |
 | [0009](decisions/0009-development-process.md) | Specs for behaviour, plans for work, ADRs for decisions | accepted |
 | [0010](decisions/0010-agent-configuration.md) | The agent's configuration lives on the hub and arrives in the ingest response | accepted, amended by [0032](decisions/0032-thresholds-are-set-in-the-interface.md) and [0033](decisions/0033-a-subject-is-a-series.md) |
 | [0011](decisions/0011-quality-gates.md) | Quality is enforced by tooling, not by attention | accepted |
@@ -71,6 +71,7 @@ One decision per file, each stating what was rejected and why. New records start
 | [0045](decisions/0045-sites-are-a-node-their-hosts-report-for.md) | Sites are a node of their own, which the agent of each site's host reports for | accepted |
 | [0046](decisions/0046-an-overview-of-items-rendered-by-the-hub.md) | An overview of items, rendered by the hub, opens a page per item | accepted |
 | [0047](decisions/0047-a-pull-request-opens-without-a-gate.md) | A pull request opens without a gate; only the merge waits | accepted |
+| [0048](decisions/0048-a-sensor-names-its-metrics.md) | A sensor names its metrics; the hub shows the name wherever a person reads one | accepted |
 
 ## Behaviour specs
 
@@ -97,6 +98,7 @@ can see ([ADR 0017](decisions/0017-one-spec-and-decision-gates.md)). New specs s
 | [attention.md](specs/attention.md) | What needs attention now, in what order, under what headline — the timeline's "Now" | approved |
 | [timeline.md](specs/timeline.md) | `/timeline`: what needs attention now, each node's last 24 hours, and the levels and anomalies that changed | approved |
 | [overview.md](specs/overview.md) | `/overview` and `/item`: a card per server, site and service with its telling numbers, and a page per item with every series charted beside its changes | approved |
+| [metric-names.md](specs/metric-names.md) | What a sensor declares its metrics and their families are called, and how every page and message names a series by it | approved |
 | [thresholds.md](specs/thresholds.md) | The page that sets what a series is judged by — what may be stored as a threshold, and whether it may be shown as unusual | approved |
 | [release.md](specs/release.md) | How a merge tags itself, what a tag publishes, how a release is signed, and how an artifact is checked | approved |
 | [installer.md](specs/installer.md) | One command that installs or upgrades a hub or an agent from a signed release, the hub following the version its host names, and an agent following the one the hub names | approved |
@@ -132,6 +134,7 @@ Reasoning from working sessions, including options that were rejected.
 | [2026-10-03](log/2026-10-03-site-traffic.md) | Site traffic: why access logs rather than a counter, why page views over a sliding day, and whose node a site is |
 | [2026-10-08](log/2026-10-08-debug-matrix.md) | The series table as matrices: why a matrix per label key set and family, and why not collapsing or filtering the page |
 | [2026-10-25](log/2026-10-25-overview.md) | The overview: how it is drawn, the five questions, the seven prototypes, and why sections follow who collects an item |
+| [2026-10-25](log/2026-10-25-metric-names.md) | Readable metric names: catalogue, sensor or interface, and the card style chosen from three |
 
 ## Not written yet
 

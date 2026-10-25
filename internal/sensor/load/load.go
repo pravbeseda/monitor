@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"time"
 
+	"github.com/pravbeseda/monitor/internal/names"
 	"github.com/pravbeseda/monitor/internal/sensor"
 )
 
@@ -29,6 +30,9 @@ func New(source Source, now func() time.Time) *Sensor {
 
 // Name is the sensor id the configuration and the manifest use.
 func (s *Sensor) Name() string { return "load" }
+
+// Names are what this sensor calls its metrics (docs/specs/metric-names.md).
+func (s *Sensor) Names() names.Book { return sensor.Catalogued(metrics[:]...) }
 
 // Applicable is true everywhere: every supported system keeps load averages.
 func (s *Sensor) Applicable() bool { return true }

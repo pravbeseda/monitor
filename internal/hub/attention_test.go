@@ -276,7 +276,7 @@ func TestAVolumesSeriesSitTogether(t *testing.T) {
 		judgedAt(free("server-b", "/b", 1e9), evaluate.Critical),
 		judgedAt(freePct("server-b", "/a", 1), evaluate.Critical),
 		judgedAt(freePct("server-b", "/b", 1), evaluate.Critical),
-	), "/timeline"), "disk.free_bytes · /a", "disk.free_pct · /a", "disk.free_bytes · /b", "disk.free_pct · /b")
+	), "/timeline"), "disk.free_bytes /a", "disk.free_pct /a", "disk.free_bytes /b", "disk.free_pct /b")
 }
 
 // spec: attention.md#order — ordered by what the labels name, not by the label a volume's
@@ -288,7 +288,7 @@ func TestSeriesComeByWhatTheirLabelsName(t *testing.T) {
 		silenceOf("server-b", evaluate.OK),
 		judgedAt(free("server-b", "/b", 1e9), evaluate.Critical),
 		judgedAt(onZFS, evaluate.Critical),
-	), "/timeline"), "disk.free_bytes · /a", "disk.free_bytes · /b")
+	), "/timeline"), "disk.free_bytes /a", "disk.free_bytes /b")
 }
 
 func rankedOn(n int, levels map[int]evaluate.Level) state.State {
@@ -467,4 +467,10 @@ func TestTheListSpeaksTheReadersZone(t *testing.T) {
 	req.AddCookie(&http.Cookie{Name: "tz", Value: "Europe/Moscow"})
 	body := showNow(t, stateOf(silenceOf("server-b", evaluate.Critical)), req)
 	containsAll(t, "the silence item", oneItem(t, body), "13:05 MSK")
+}
+
+// spec: metric-names.md#where — an item names its series by the declared name.
+func TestAnItemSaysTheDeclaredName(t *testing.T) {
+	body := showAttention(t, named(stateOf(silenceOf("server-b", evaluate.OK), judgedAt(freePct("server-b", "/a", 1), evaluate.Critical))), "/timeline?lang=ru")
+	containsAll(t, "attention", body, "server-b · Свободно /a")
 }

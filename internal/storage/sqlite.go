@@ -8,6 +8,8 @@ import (
 	"strings"
 	"time"
 
+	"github.com/pravbeseda/monitor/internal/i18n"
+	"github.com/pravbeseda/monitor/internal/names"
 	_ "modernc.org/sqlite" // the CGO-free driver of ADR 0005
 )
 
@@ -206,6 +208,16 @@ var migrations = []string{
 
 	CREATE UNIQUE INDEX IF NOT EXISTS anomalies_open ON anomalies (node, metric, labels) WHERE ended = '';
 	CREATE INDEX IF NOT EXISTS anomalies_ended ON anomalies (ended);`,
+
+	// What the sensors say their metrics and families are called, newest per locale
+	// (docs/specs/metric-names.md).
+	`CREATE TABLE IF NOT EXISTS names (
+		kind   TEXT NOT NULL,
+		key    TEXT NOT NULL,
+		locale TEXT NOT NULL,
+		name   TEXT NOT NULL,
+		PRIMARY KEY (kind, key, locale)
+	) WITHOUT ROWID;`,
 }
 
 // querier is what a database handle and a transaction both offer, so one read runs either
@@ -377,10 +389,54 @@ func (s *SQLite) SaveIngest(ctx context.Context, in Ingest) (err error) {
 		}
 	}
 
+	for _, name := range in.Names {
+		_, err = tx.ExecContext(ctx, `
+			INSERT INTO names (kind, key, locale, name) VALUES (?, ?, ?, ?)
+			ON CONFLICT (kind, key, locale) DO UPDATE SET name = excluded.name`,
+			name.Kind, name.Key, name.Locale, name.Text)
+		if err != nil {
+			return fmt.Errorf("save the name of %s: %w", name.Key, err)
+		}
+	}
+
 	if err = tx.Commit(); err != nil {
 		return fmt.Errorf("commit ingest of %s: %w", in.Node, err)
 	}
 	return nil
+}
+
+// Names is every name the sensors have declared, the newest per locale.
+func (s *SQLite) Names(ctx context.Context) (names.Book, error) {
+	return readNames(ctx, s.db)
+}
+
+func readNames(ctx context.Context, from querier) (names.Book, error) {
+	rows, err := from.QueryContext(ctx, `SELECT kind, key, locale, name FROM names`)
+	if err != nil {
+		return names.Book{}, fmt.Errorf("read names: %w", err)
+	}
+	defer func() { _ = rows.Close() }()
+
+	book := names.Book{Metrics: map[string]names.Text{}, Families: map[string]names.Text{}}
+	for rows.Next() {
+		var kind NameKind
+		var key, locale, name string
+		if err := rows.Scan(&kind, &key, &locale, &name); err != nil {
+			return names.Book{}, fmt.Errorf("read names: %w", err)
+		}
+		into := book.Metrics
+		if kind == FamilyName {
+			into = book.Families
+		}
+		if into[key] == nil {
+			into[key] = names.Text{}
+		}
+		into[key][i18n.Locale(locale)] = name
+	}
+	if err := rows.Err(); err != nil {
+		return names.Book{}, fmt.Errorf("read names: %w", err)
+	}
+	return book, nil
 }
 
 // IntroduceNode records a node the way SaveIngest would, except that it sets last-seen only

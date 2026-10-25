@@ -10,6 +10,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/pravbeseda/monitor/internal/names"
 	"github.com/pravbeseda/monitor/internal/sensor"
 )
 
@@ -69,6 +70,9 @@ func New(source Source, settings func() Settings, now func() time.Time) *Sensor 
 
 // Name is the sensor id the configuration and the manifest use.
 func (s *Sensor) Name() string { return "disk" }
+
+// Names are what this sensor calls its metrics (docs/specs/metric-names.md).
+func (s *Sensor) Names() names.Book { return sensor.Catalogued(metricFreePct, metricFreeBytes) }
 
 // Applicable is true everywhere: every machine has at least one volume.
 func (s *Sensor) Applicable() bool { return true }

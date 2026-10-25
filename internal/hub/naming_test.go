@@ -5,6 +5,9 @@ import (
 	"testing"
 	"time"
 
+	"github.com/pravbeseda/monitor/internal/i18n"
+	"github.com/pravbeseda/monitor/internal/names"
+	"github.com/pravbeseda/monitor/internal/state"
 	"github.com/pravbeseda/monitor/internal/storage"
 )
 
@@ -35,11 +38,11 @@ func TestEveryPageNamesASeriesByAllItsLabels(t *testing.T) {
 
 	store := served{series: []seriesPoints{siteSeries("blog-a"), siteSeries("shop-c")}}
 	_, chart := page(t, store, "/history?metric=site.requests_per_min&node=sites&label.site=blog-a")
-	if want := "<h1>sites · site.requests_per_min · site=blog-a</h1>"; !strings.Contains(chart, want) {
+	if want := "<h1>sites · site.requests_per_min site=blog-a</h1>"; !strings.Contains(chart, want) {
 		t.Errorf("chart heading is not %q: %s", want, chart)
 	}
 	_, choice := page(t, store, "/history?metric=site.requests_per_min&node=sites")
-	for _, want := range []string{"sites · site=blog-a<", "sites · site=shop-c<"} {
+	for _, want := range []string{"sites · site.requests_per_min site=blog-a<", "sites · site.requests_per_min site=shop-c<"} {
 		if !strings.Contains(choice, want) {
 			t.Errorf("the choice of series does not offer %q: %s", want, choice)
 		}
@@ -47,14 +50,59 @@ func TestEveryPageNamesASeriesByAllItsLabels(t *testing.T) {
 
 	ref := siteSeries("blog-a").SeriesRef
 	_, form := openForm(t, holding(ref), "/thresholds?label.site=blog-a&metric=site.requests_per_min&node=sites")
-	if want := "sites · site.requests_per_min · site=blog-a"; !strings.Contains(form, want) {
+	if want := "sites · site.requests_per_min site=blog-a"; !strings.Contains(form, want) {
 		t.Errorf("thresholds form does not name %q: %s", want, form)
 	}
 
 	spaced := siteSeries("")
 	spaced.Metric, spaced.Labels = "disk.free_pct", map[string]string{"mount": "/Volumes/Backup Disk", "fs": "apfs"}
 	_, quoted := page(t, served{series: []seriesPoints{spaced}}, "/history?metric=disk.free_pct&node=sites")
-	if want := `· &#34;/Volumes/Backup Disk&#34; · apfs</h1>`; !strings.Contains(quoted, want) {
+	if want := ` &#34;/Volumes/Backup Disk&#34; · apfs</h1>`; !strings.Contains(quoted, want) {
 		t.Errorf("a spaced mount is not quoted as %q: %s", want, quoted)
+	}
+}
+
+// spec: metric-names.md#where — the history page and the thresholds form head a series by
+// its declared name, with the filesystem, and keep the id where a machine or a hover reads it.
+func TestHeadingsSayTheDeclaredName(t *testing.T) {
+	book := named(state.State{}).Names
+	volume := siteSeries("")
+	volume.Node, volume.Metric, volume.Labels = "server-b", "disk.free_pct", map[string]string{"mount": "/srv", "fs": "ext4", "removable": "false"}
+
+	_, chart := page(t, served{stored: stored{names: book}, series: []seriesPoints{volume}}, "/history?metric=disk.free_pct&node=server-b&lang=ru")
+	if want := "<h1>server-b · Свободно /srv · ext4</h1>"; !strings.Contains(chart, want) {
+		t.Errorf("chart heading is not %q: %s", want, chart)
+	}
+
+	form := holding(volume.SeriesRef)
+	form.names = book
+	_, body := openForm(t, form, "/thresholds?label.fs=ext4&label.mount=/srv&label.removable=false&metric=disk.free_pct&node=server-b&lang=ru")
+	if want := `<p class="meta" title="disk.free_pct">server-b · Свободно /srv · ext4</p>`; !strings.Contains(body, want) {
+		t.Errorf("thresholds form does not name %q: %s", want, body)
+	}
+}
+
+// spec: metric-names.md#where — the history page's list of several series names each by
+// the declared name, as its heading would.
+func TestTheListOfSeveralSeriesSaysTheDeclaredName(t *testing.T) {
+	book := named(state.State{}).Names
+	a, b := siteSeries(""), siteSeries("")
+	a.Node, a.Metric, a.Labels = "server-b", "disk.free_pct", map[string]string{"mount": "/a", "fs": "ext4"}
+	b.Node, b.Metric, b.Labels = "server-b", "disk.free_pct", map[string]string{"mount": "/b", "fs": "ext4"}
+	_, choice := page(t, served{stored: stored{names: book}, series: []seriesPoints{a, b}}, "/history?metric=disk.free_pct&node=server-b&lang=ru")
+	for _, want := range []string{"server-b · Свободно /a · ext4<", "server-b · Свободно /b · ext4<"} {
+		if !strings.Contains(choice, want) {
+			t.Errorf("the choice of series does not offer %q: %s", want, choice)
+		}
+	}
+}
+
+// spec: metric-names.md#naming — a name is text, never markup, on a page.
+func TestANameIsNeverMarkup(t *testing.T) {
+	current := stateOf(freePct("server-b", "/srv", 40))
+	current.Names = names.Book{Metrics: map[string]names.Text{"disk.free_pct": {i18n.English: "<b>x</b>"}}}
+	body := showOverview(t, current, held{}, "/overview")
+	if !strings.Contains(body, "&lt;b&gt;x&lt;/b&gt; /srv") || strings.Contains(body, "<b>x</b>") {
+		t.Errorf("a name holding markup is not shown as its characters: %s", card(t, body, "server-b"))
 	}
 }

@@ -17,6 +17,7 @@ import (
 	"github.com/pravbeseda/monitor/internal/evaluate"
 	"github.com/pravbeseda/monitor/internal/history"
 	"github.com/pravbeseda/monitor/internal/i18n"
+	"github.com/pravbeseda/monitor/internal/names"
 	"github.com/pravbeseda/monitor/internal/notify"
 	"github.com/pravbeseda/monitor/internal/state"
 	"github.com/pravbeseda/monitor/internal/storage"
@@ -86,6 +87,8 @@ type overviewItem struct {
 	series     []state.Subject
 	cell       timeline.Cell
 	lastReport time.Time
+	// names is every name the sensors declared, the item's metrics among them.
+	names names.Book
 }
 
 // overviewItems are the items the state holds, by section and then as their cards stand.
@@ -116,6 +119,7 @@ func overviewItems(current state.State, layout Layout) []overviewItem {
 		out = append(out, one)
 	}
 	for i := range out {
+		out[i].names = current.Names
 		sort.SliceStable(out[i].series, func(a, b int) bool { return pageBefore(out[i].series[a], out[i].series[b]) })
 	}
 	sort.SliceStable(out, func(i, j int) bool {
@@ -288,12 +292,16 @@ func (it overviewItem) defaultOf(metric string) (state.Subject, bool) {
 	return chosen, true
 }
 
-// rowName is a series as a row names it: its metric id and what its labels name.
-func (it overviewItem) rowName(s state.Subject) string {
-	if named := notify.Naming(it.ownLabels(s)); named != "" {
-		return s.Metric + " " + named
-	}
-	return s.Metric
+// rowName is a series as a row names it: its name without what the card already says
+// (docs/specs/metric-names.md#where).
+func (it overviewItem) rowName(printer *i18n.Printer, s state.Subject) string {
+	return notify.Name(printer, it.names.Metrics[s.Metric], s.Metric, it.ownLabels(s))
+}
+
+// chartName is a series as a small chart names it: its row name with the volume's
+// filesystem and its being removable.
+func (it overviewItem) chartName(printer *i18n.Printer, s state.Subject) string {
+	return notify.Heading(printer, it.names.Metrics[s.Metric], s.Metric, it.ownLabels(s))
 }
 
 func (it overviewItem) link(lang, window string) string {
@@ -422,7 +430,7 @@ func cardOf(ctx context.Context, printer *i18n.Printer, reader history.Reader, i
 	}
 	shown, more := it.cardSeries(attention)
 	for i, s := range shown {
-		row := cardRowView{Name: it.rowName(s), Value: format(printer, s.Metric, *s.Value), Mark: markOf(printer, s)}
+		row := cardRowView{Name: it.rowName(printer, s), Value: format(printer, s.Metric, *s.Value), Mark: markOf(printer, s)}
 		if i < linedRows {
 			line, err := lineOf(ctx, printer, reader, s, history.DefaultWindow, sparkFrame)
 			if err != nil {

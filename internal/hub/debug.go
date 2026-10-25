@@ -65,6 +65,8 @@ type levelView struct {
 // rowView is one series without labels (ADR 0033): its metric, its newest value and what
 // judges it. A nil Level is shown as a dash.
 type rowView struct {
+	// Name is what the row says; Metric, its id, is shown on hover.
+	Name   string
 	Metric string
 	Value  string
 	// History addresses the drill-down page of this series, Thresholds the page that sets
@@ -140,7 +142,7 @@ func debugOf(printer *i18n.Printer, current state.State, lang string) debugView 
 				shown = append(shown, row)
 			}
 		}
-		node.Rows, node.Matrices = layOut(printer, reported.Node, shown, lang)
+		node.Rows, node.Matrices = layOut(printer, current.Names, reported.Node, shown, lang)
 		switch {
 		case len(rows[reported.Node]) == 0:
 			node.Empty = printer.T("node.no_values")

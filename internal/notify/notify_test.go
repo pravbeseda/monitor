@@ -14,6 +14,7 @@ import (
 	"github.com/pravbeseda/monitor/internal/config"
 	"github.com/pravbeseda/monitor/internal/evaluate"
 	"github.com/pravbeseda/monitor/internal/i18n"
+	"github.com/pravbeseda/monitor/internal/names"
 	"github.com/pravbeseda/monitor/internal/notify"
 )
 
@@ -29,6 +30,7 @@ func entering() evaluate.Message {
 		Readings: map[string]float64{"disk.free_bytes": 3e9},
 		Since:    at.Add(-2 * time.Hour),
 		At:       at,
+		Name:     names.Text{i18n.English: "Free on {mount}", i18n.Russian: "Свободно {mount}"},
 	}
 }
 
@@ -96,7 +98,7 @@ func TestARussianMessageComesFromTheRussianCatalogue(t *testing.T) {
 func TestAMessageCarriesEveryField(t *testing.T) {
 	got := notify.Render(i18n.For(i18n.English), entering())
 	for _, want := range []string{
-		"server-b", "/data", "disk.free_bytes", "critical", "warning", "3.0 GB", "2026-08-30 07:00",
+		"server-b · Free on /data", "critical", "warning", "3.0 GB", "2026-08-30 07:00",
 	} {
 		if !strings.Contains(got, want) {
 			t.Fatalf("the message is missing %q: %s", want, got)
@@ -124,7 +126,7 @@ func TestAValueIsRenderedInTheUnitItsMetricIDDeclares(t *testing.T) {
 			message.Readings = map[string]float64{tc.metric: tc.value}
 
 			got := notify.Render(i18n.For(i18n.English), message)
-			if want := tc.metric + " is " + tc.want; !strings.Contains(got, want) {
+			if want := " — " + tc.want; !strings.HasSuffix(got, want) {
 				t.Fatalf("the message reads %q, want it to carry %q", got, want)
 			}
 		})
@@ -336,7 +338,8 @@ func TestAMessageNamesTheSeriesItIsAbout(t *testing.T) {
 	// A volume still reads as its mount point, without the labels that decorate it.
 	volume := entering()
 	volume.Labels = map[string]string{"mount": "/data", "fs": "ext4", "removable": "false"}
-	if got := notify.Render(printer, volume); !strings.Contains(got, "server-b /data:") {
+	volume.Name = nil
+	if got := notify.Render(printer, volume); !strings.Contains(got, "server-b · disk.free_bytes /data:") {
 		t.Errorf("message = %q, want the volume named by its mount point alone", got)
 	}
 }
@@ -376,5 +379,85 @@ func TestLabelsThatWouldReadAlikeAreQuoted(t *testing.T) {
 	}
 	if !strings.Contains(second, "queue=payments region=eu") {
 		t.Errorf("message = %q, want two plain pairs", second)
+	}
+}
+
+// spec: metric-names.md#where — a notification names the series by its metric's declared
+// name in the channel's locale, and says the value alone after the dash.
+func TestANotificationReadsTheDeclaredName(t *testing.T) {
+	message := entering()
+	message.Metric = "disk.free_pct"
+	message.Labels = map[string]string{"mount": "/srv", "fs": "ext4", "removable": "false"}
+	message.Readings = map[string]float64{"disk.free_pct": 4}
+
+	got := notify.Render(i18n.For(i18n.Russian), message)
+	if want := "server-b · Свободно /srv: критично (было предупреждение с 30.08.2026 07:00 UTC) — 4,0 %"; got != want {
+		t.Errorf("message = %q, want %q", got, want)
+	}
+}
+
+// spec: metric-names.md#naming — a metric no sensor named reads as its id, then its labels.
+func TestAnUnnamedMetricReadsAsItsID(t *testing.T) {
+	message := entering()
+	message.Metric, message.Name = "queue.depth", nil
+	message.Labels = map[string]string{"queue": "payments"}
+	message.Readings = map[string]float64{"queue.depth": 42}
+
+	got := notify.Render(i18n.For(i18n.English), message)
+	if !strings.HasPrefix(got, "server-b · queue.depth queue=payments: ") {
+		t.Errorf("message = %q, want the id and the label", got)
+	}
+}
+
+// spec: metric-names.md#naming — the labels a name does not use follow it, and a filled
+// value is quoted as a label value is.
+func TestANameIsFollowedByTheLabelsItDoesNotUse(t *testing.T) {
+	printer := i18n.For(i18n.English)
+	cases := []struct {
+		name   names.Text
+		labels map[string]string
+		want   string
+	}{
+		{names.Text{i18n.English: "Time Machine backup"}, map[string]string{"destination": "backup-a"}, "Time Machine backup destination=backup-a"},
+		{names.Text{i18n.English: "Free on {mount}"}, map[string]string{"mount": "/Volumes/Backup Disk"}, `Free on "/Volumes/Backup Disk"`},
+		{names.Text{i18n.English: "Free on {mount}"}, map[string]string{"mount": ""}, `Free on ""`},
+		{names.Text{i18n.English: "Free on {mount} ({fs})"}, map[string]string{"mount": "/srv", "fs": "ext4"}, "Free on /srv (ext4)"},
+		{names.Text{i18n.Russian: "Память"}, map[string]string{}, "memory.x"},
+		{names.Text{i18n.English: "<b>x</b>"}, map[string]string{}, "<b>x</b>"},
+		{names.Text{i18n.English: "{queue}"}, map[string]string{"site": "a"}, "memory.x site=a"},
+	}
+	for _, c := range cases {
+		if got := notify.Name(printer, c.name, "memory.x", c.labels); got != c.want {
+			t.Errorf("Name(%v, %v) = %q, want %q", c.name, c.labels, got, c.want)
+		}
+	}
+}
+
+// spec: metric-names.md#where — a page that shows a volume's filesystem and its being
+// removable puts them after the name, unless the name already used them.
+func TestAPageNameAddsTheVolumeDecoration(t *testing.T) {
+	printer := i18n.For(i18n.English)
+	name := names.Text{i18n.English: "Free on {mount}"}
+	labels := map[string]string{"mount": "/Volumes/x-a", "fs": "apfs", "removable": "true"}
+	if got, want := notify.Heading(printer, name, "disk.free_pct", labels), "Free on /Volumes/x-a · apfs · removable"; got != want {
+		t.Errorf("Heading = %q, want %q", got, want)
+	}
+	used := names.Text{i18n.English: "Free on {mount} ({fs})"}
+	if got, want := notify.Heading(printer, used, "disk.free_pct", labels), "Free on /Volumes/x-a (apfs) · removable"; got != want {
+		t.Errorf("Heading = %q, want %q", got, want)
+	}
+}
+
+// spec: metric-names.md#where — the log line says the English name and keeps the metric id
+// among its attributes.
+func TestTheLogLineSaysTheNameAndKeepsTheID(t *testing.T) {
+	logger, out := capture(t)
+	if err := (notify.Log{Logger: logger}).Notify(context.Background(), entering()); err != nil {
+		t.Fatalf("Notify: %v", err)
+	}
+	for _, want := range []string{"metric=disk.free_bytes", "server-b · Free on /data"} {
+		if !strings.Contains(out.String(), want) {
+			t.Errorf("the log line is missing %q:\n%s", want, out)
+		}
 	}
 }

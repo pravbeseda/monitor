@@ -8,6 +8,7 @@ import (
 	"math"
 	"time"
 
+	"github.com/pravbeseda/monitor/internal/names"
 	"github.com/pravbeseda/monitor/internal/sensor"
 )
 
@@ -31,6 +32,9 @@ func New(source Source, now func() time.Time) *Sensor {
 
 // Name is the sensor id the configuration and the manifest use.
 func (s *Sensor) Name() string { return "uptime" }
+
+// Names are what this sensor calls its metrics (docs/specs/metric-names.md).
+func (s *Sensor) Names() names.Book { return sensor.Catalogued(metricBootSeconds) }
 
 // Applicable is true everywhere: every machine booted once.
 func (s *Sensor) Applicable() bool { return true }

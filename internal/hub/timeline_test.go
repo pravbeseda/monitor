@@ -6,6 +6,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"regexp"
+	"slices"
 	"sort"
 	"strings"
 	"testing"
@@ -315,11 +316,11 @@ func TestTheChangesListWhatTheLogRecorded(t *testing.T) {
 
 	want := []string{
 		"09:05 laptop-a · снова на связи",
-		"09:03 server-b · disk.free_pct · /data критично → норма 30,0 %",
-		"09:02 server-b · disk.free_pct · /data предупреждение → критично 4,0 %",
+		"09:03 server-b · disk.free_pct /data критично → норма 30,0 %",
+		"09:02 server-b · disk.free_pct /data предупреждение → критично 4,0 %",
 		"07:05 laptop-a · замолчал нет отчётов 2,0 д",
-		"09:05 server-b · disk.free_pct · /data критично → предупреждение 12,0 %",
-		"08:05 server-b · disk.free_pct · /data норма → критично 3,0 %",
+		"09:05 server-b · disk.free_pct /data критично → предупреждение 12,0 %",
+		"08:05 server-b · disk.free_pct /data норма → критично 3,0 %",
 	}
 	if strings.Join(got, "\n") != strings.Join(want, "\n") {
 		t.Fatalf("changes\n%s\nwant\n%s", strings.Join(got, "\n"), strings.Join(want, "\n"))
@@ -479,11 +480,11 @@ func TestTheChangesListAnomalies(t *testing.T) {
 	body := showTimeline(t, store, "/timeline")
 	raw, got := changesOf(body)
 	want := []string{
-		"09:35 server-b · disk.free_pct · /data unusual 95.0% usually 20.0% to 60.0%",
-		"08:35 server-b · disk.free_pct · /data unusual 90.0% usually 20.0% to 60.0%",
-		"08:05 server-b · disk.free_pct · /data usual again 40.0%",
-		"08:05 server-b · disk.free_pct · /data ok → warning 12.0%",
-		"07:05 server-b · disk.free_pct · /data unusual 5.0% usually 20.0% to 60.0%",
+		"09:35 server-b · disk.free_pct /data unusual 95.0% usually 20.0% to 60.0%",
+		"08:35 server-b · disk.free_pct /data unusual 90.0% usually 20.0% to 60.0%",
+		"08:05 server-b · disk.free_pct /data usual again 40.0%",
+		"08:05 server-b · disk.free_pct /data ok → warning 12.0%",
+		"07:05 server-b · disk.free_pct /data unusual 5.0% usually 20.0% to 60.0%",
 	}
 	if strings.Join(got, "\n") != strings.Join(want, "\n") {
 		t.Fatalf("changes\n%s\nwant\n%s", strings.Join(got, "\n"), strings.Join(want, "\n"))
@@ -569,5 +570,16 @@ func TestTheLanesReadTheAnomalies(t *testing.T) {
 	}
 	if title := cells["laptop-a"][20][1]; title != "07:00 unusual" {
 		t.Errorf("hover = %q", title)
+	}
+}
+
+// spec: metric-names.md#where — a change names its series by the declared name.
+func TestAChangeSaysTheDeclaredName(t *testing.T) {
+	store := timelineStore(reportingNode("server-b"))
+	store.names = named(state.State{}).Names
+	store.events = []storage.Transition{dataChange(-63*time.Minute, "warning", "critical", 4)}
+	_, got := changesOf(showTimeline(t, store, "/timeline?lang=ru"))
+	if want := []string{"09:02 server-b · Свободно /data предупреждение → критично 4,0 %"}; !slices.Equal(got, want) {
+		t.Errorf("changes = %q, want %q", got, want)
 	}
 }

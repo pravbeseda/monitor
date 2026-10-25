@@ -10,6 +10,7 @@ import (
 
 	"github.com/pravbeseda/monitor/internal/history"
 	"github.com/pravbeseda/monitor/internal/i18n"
+	"github.com/pravbeseda/monitor/internal/names"
 	"github.com/pravbeseda/monitor/internal/notify"
 )
 
@@ -59,7 +60,7 @@ func offeredFor(window time.Duration) (string, bool) {
 }
 
 // HistoryPage draws one series, or says why it cannot.
-func HistoryPage(reader history.Reader) http.Handler {
+func HistoryPage(reader history.Reader, namer NameReader) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		values := r.URL.Query()
 		printer := i18n.For(i18n.Negotiate(values.Get("lang"), r.Header.Get("Accept-Language"))).In(zoneOf(r))
@@ -74,11 +75,12 @@ func HistoryPage(reader history.Reader) http.Handler {
 			refuse(w, printer, language(values), err)
 			return
 		}
-		render(w, http.StatusOK, historyPage(printer, query, result, language(values), values.Get("window")))
+		book := namesFrom(r.Context(), namer).Metrics[query.Metric]
+		render(w, http.StatusOK, historyPage(printer, book, query, result, language(values), values.Get("window")))
 	})
 }
 
-func historyPage(printer *i18n.Printer, query history.Query, result history.Result, lang, window string) historyView {
+func historyPage(printer *i18n.Printer, name names.Text, query history.Query, result history.Result, lang, window string) historyView {
 	out := historyView{
 		shell:       shellOf(printer, "history.title", "", lang),
 		LatestLabel: printer.T("history.latest"),
@@ -102,7 +104,7 @@ func historyPage(printer *i18n.Printer, query history.Query, result history.Resu
 		series := result.Series[0]
 		newest := series.Points[len(series.Points)-1]
 		drawn := draw(printer, series, result.Window, fullFrame)
-		out.Heading = series.Node + " · " + series.Metric + " · " + notify.Describe(printer, series.Labels)
+		out.Heading = series.Node + " · " + notify.Heading(printer, name, series.Metric, series.Labels)
 		out.Latest = format(printer, series.Metric, newest.Value) + " · " + printer.Time(newest.TS)
 		out.Chart = &drawn
 		out.Thresholds = thresholdLink(series.Node, series.Metric, series.Labels, lang)
@@ -111,7 +113,7 @@ func historyPage(printer *i18n.Printer, query history.Query, result history.Resu
 		out.Message = printer.T("history.several")
 		for _, series := range result.Series {
 			out.Series = append(out.Series, seriesLink{
-				Label: series.Node + " · " + notify.Describe(printer, series.Labels),
+				Label: series.Node + " · " + notify.Heading(printer, name, series.Metric, series.Labels),
 				URL:   historyLink(series.Node, series.Metric, series.Labels, lang, window),
 			})
 		}

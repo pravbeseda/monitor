@@ -7,6 +7,8 @@ import (
 	"context"
 	"iter"
 	"time"
+
+	"github.com/pravbeseda/monitor/internal/i18n"
 )
 
 // Measurement is one reading of one metric, as it was collected. Sensor names what
@@ -38,6 +40,26 @@ type Ingest struct {
 	ReceivedAt   time.Time
 	Manifest     []SensorStatus
 	Measurements []Measurement
+	// Names are what the request's sensors declared their metrics and families are called,
+	// already checked by ingest (docs/specs/metric-names.md#ingest).
+	Names []Name
+}
+
+// NameKind says whether a name is a metric's or a family's.
+type NameKind string
+
+// The two kinds of a declared name.
+const (
+	MetricName NameKind = "metric"
+	FamilyName NameKind = "family"
+)
+
+// Name is one declared name in one locale.
+type Name struct {
+	Kind   NameKind
+	Key    string
+	Locale i18n.Locale
+	Text   string
 }
 
 // NodeState is what a node looks like right now: when it was last heard from, which agent

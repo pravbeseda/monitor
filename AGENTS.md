@@ -188,9 +188,11 @@ Each line is an index into the ADR that owns it.
   credentials in `hub.env`. → 0039
 - **Sensors are in-process modules** (`Sensor: collect() -> []Measurement`); the interface
   must not reveal whether an implementation is built in or external. → 0003
-- **A metric costs no code**: a measurement declares itself, its id carries its unit, and
-  what a series is judged by — a direction and up to two values — is set on its page and
-  stored with the data. What an agent collects and how often stays configuration. → 0032, 0033
+- **A metric costs no code**: a measurement declares itself, its id carries its unit, its
+  sensor names it in both languages (shown wherever a person reads it), and what a series
+  is judged by — a direction and up to two values — is set on its page and
+  stored with the data. What an agent collects and how often stays configuration.
+  → 0032, 0033, 0048
 - **The semantic core is the single source of truth**; the State API carries semantics only,
   never skin-specific fields. Skins are equal consumers of it, and drill-down, `at=` time
   travel and the event stream live outside them. → 0001

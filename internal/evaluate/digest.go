@@ -5,6 +5,7 @@ import (
 	"log/slog"
 	"time"
 
+	"github.com/pravbeseda/monitor/internal/names"
 	"github.com/pravbeseda/monitor/internal/storage"
 )
 
@@ -64,7 +65,7 @@ func (e *Evaluator) openDigestWindow(ctx context.Context) (time.Time, error) {
 // digest sends the day's summary when the tick crosses the configured hour. The window is
 // closed even when there was nothing to say, so a warning that appears after the hour
 // waits for tomorrow rather than going out at once.
-func (e *Evaluator) digest(ctx context.Context, subjects []Subject, watch watching, since, now time.Time) error {
+func (e *Evaluator) digest(ctx context.Context, subjects []Subject, watch watching, since, now time.Time, book names.Book) error {
 	// The occurrence decides whether a digest is due; the tick time records what has been
 	// reported, which is why it is the mark below.
 	occurrence := e.schedule.mostRecent(now)
@@ -75,6 +76,9 @@ func (e *Evaluator) digest(ctx context.Context, subjects []Subject, watch watchi
 	entries, err := e.entries(ctx, subjects, since, now, occurrence)
 	if err != nil {
 		return err
+	}
+	for i := range entries {
+		entries[i].Name = book.Metrics[entries[i].Metric]
 	}
 	// A hub that judges nothing says so every day until something is set: silence while
 	// all is well means nothing when nothing is being watched.

@@ -52,8 +52,8 @@ and neither is a removable volume that was unplugged, as `/debug` hides one too
 ([history](history.md#page)).
 
 **A series item names its series** the way a notification does
-([evaluation](evaluation.md#messages)): the node, the metric, a mount point as itself and
-every other label as the pair it is, `fs` and `removable` left out. It carries the newest
+([evaluation](evaluation.md#messages)): the node, then the series' name
+([metric names](metric-names.md#naming)), `fs` and `removable` left out. It carries the newest
 value, and, by kind: a level item its level's word and since when it holds, plus the usual
 value when the series also ranks; an anomaly item its usual value — the norm; a no-fresh-data
 item the time of its newest value, and no level.
@@ -66,8 +66,9 @@ item the time of its newest value, and no level.
    remain, one line saying how many more;
 4. watched series with no fresh data, by node.
 
-Inside a node, series come ordered by the name a [message](evaluation.md#messages) gives
-them, then by their labels and by metric, as `/debug` orders the rows of a matrix: a
+Inside a node, series come ordered by what their labels name in a
+[message](evaluation.md#messages) — never by their metric's name, which depends on the
+reader's language — then by their labels and by metric, as `/debug` orders the rows of a matrix: a
 volume's series together ([history](history.md#page)).
 
 **The headline** states how things stand, above the items, in the reader's language. The

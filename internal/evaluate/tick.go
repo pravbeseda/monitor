@@ -8,6 +8,7 @@ import (
 	"sync/atomic"
 	"time"
 
+	"github.com/pravbeseda/monitor/internal/names"
 	"github.com/pravbeseda/monitor/internal/storage"
 )
 
@@ -132,11 +133,11 @@ func (e *Evaluator) Tick(ctx context.Context) error {
 			}
 		}
 		event, recorded := newest[key]
-		e.deliver(ctx, subject, event, recorded, now)
+		e.deliver(ctx, subject, event, recorded, now, snapshot.Names)
 	}
 	// The digest runs after the levels, so a warning this pass recorded is in the window it
 	// closes; anomalies come last, so nothing they fail on costs a level or a message.
-	if err := e.digest(ctx, subjects, watch, since, now); err != nil {
+	if err := e.digest(ctx, subjects, watch, since, now, snapshot.Names); err != nil {
 		return err
 	}
 	return e.anomalies(ctx, snapshot, now)
@@ -221,11 +222,12 @@ func (e *Evaluator) forget(ctx context.Context, subjects []Subject, snap storage
 // deliver sends what the subject is owed, if anything, and records the delivery only once
 // the channel has taken it: a failure leaves last_notified_at where it was, so the next
 // tick tries again. Failure is per message, so one subject never costs the others theirs.
-func (e *Evaluator) deliver(ctx context.Context, subject Subject, newest storage.Transition, recorded bool, now time.Time) {
+func (e *Evaluator) deliver(ctx context.Context, subject Subject, newest storage.Transition, recorded bool, now time.Time, book names.Book) {
 	message, owed := due(subject, newest, recorded, now)
 	if !owed {
 		return
 	}
+	message.Name = book.Metrics[message.Metric]
 	if err := e.send(ctx, func(ctx context.Context) error {
 		return e.notifier.Notify(ctx, message)
 	}); err != nil {

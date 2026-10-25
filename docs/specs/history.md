@@ -201,7 +201,7 @@ staleness still has an answer — the node's longest sensor interval
 | Request | What the reader sees |
 |---|---|
 | `/history?node=server-b&metric=disk.free_pct&label.mount=/` | an SVG chart of that series over 24 hours, a time axis, and a value axis running from zero to above the highest value in the window |
-| any chart | its node, metric and what its labels name above it, and the newest value in the window with the time it was collected |
+| any chart | its node and the series' name ([metric names](metric-names.md#where)) above it, and the newest value in the window with the time it was collected |
 | the window the page is showing | marked among the links rather than offered as one, whatever the query spelled it as; a query naming no window is showing the first |
 | the same with `&window=7d` | the same chart over 7 days |
 | any of the above | window links 24h / 7d / 30d, each keeping node, metric, labels and language |
@@ -211,13 +211,13 @@ staleness still has an answer — the node's longest sensor interval
 | a series with a two-day silence inside a seven-day window | the line broken across the gap, not drawn straight through it |
 | a query the endpoint refuses, or a read that fails | the same status the endpoint answers, as a translated page |
 | a value on `/debug` | a link to the history page of its series, carrying the node, the metric and every label |
-| a series on `/debug` without labels | one row of its own: its metric id, its newest value and the time it was collected, in one table above the node's matrices, ordered by metric id |
+| a series on `/debug` without labels | one row of its own: its series' name ([metric names](metric-names.md#where)), its newest value and the time it was collected, in one table above the node's matrices, ordered by metric id |
 | the labelled series of one node | matrices, one per label key set and family — the part of the metric id before its first dot, all of it when the id has no dot: a row per label set, named by what its labels name, and a column per metric that a series shown in it carries, each cell holding the newest value of that series, linked to its chart. One volume's two series make a matrix of one row, two sites' five series one of two rows |
 | a label set without a metric its matrix carries, or whose series of that metric is left out | a dash in that cell |
 | a label set whose every series is left out | no row; a matrix left with no row is not shown |
-| a matrix | its family in the corner above its names, and its columns ordered by metric id, each headed by the id less its family and the dot — `requests_per_min` under `site`; the whole id on hover. An id with no dot is a family of its own: the corner left empty, its column headed by the whole id |
-| the matrices of one node | ordered by family, then by label keys; the rows of each by the name a [message](evaluation.md#messages) gives their series — a volume's filesystem not counted — then by their labels as [state](state.md#ordering) compares them; the grouping and the order are the page's own, since the State API privileges no label |
-| what the labels name, on `/debug`, the chart and the [thresholds](thresholds.md) form | the name a [message](evaluation.md#messages) gives the series — a mount point as itself, any other label as `key=value`, quoted when it carries a space or an `=` — then a volume's filesystem and, if it is removable, that it is. Two sites, `site=blog-a` and `site=shop-c`, never read alike |
+| a matrix | its family's name in the corner above its rows' names, and its columns ordered by metric id, each headed by its metric's name ([metric names](metric-names.md#where)); the whole id on hover. An id with no dot is a family of its own |
+| the matrices of one node | ordered by family, then by label keys; the rows of each by what their labels name in a [message](evaluation.md#messages) — a volume's filesystem not counted, and never their metric's name — then by their labels as [state](state.md#ordering) compares them; the grouping and the order are the page's own, since the State API privileges no label |
+| what the labels name, on `/debug` and in a series' name ([metric names](metric-names.md#naming)) | the name a [message](evaluation.md#messages) gives the labels — a mount point as itself, any other label as `key=value`, quoted when it carries a space or an `=` — then a volume's filesystem and, if it is removable, that it is. Two sites, `site=blog-a` and `site=shop-c`, never read alike |
 | a row of its own | a link to the page that sets what that series is judged by ([thresholds.md](thresholds.md)) |
 | a cell of a matrix | no such link: the chart its value links to carries one, and the line shown when nothing is watched ([state](state.md#page)) says to open a series |
 | a chart of one series | a link to the page that sets what that series is judged by, in the reader's language |

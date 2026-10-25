@@ -13,7 +13,6 @@ import (
 	"github.com/pravbeseda/monitor/internal/evaluate"
 	"github.com/pravbeseda/monitor/internal/history"
 	"github.com/pravbeseda/monitor/internal/i18n"
-	"github.com/pravbeseda/monitor/internal/notify"
 	"github.com/pravbeseda/monitor/internal/state"
 	"github.com/pravbeseda/monitor/internal/storage"
 )
@@ -196,7 +195,7 @@ func itemPageOf(ctx context.Context, printer *i18n.Printer, reader history.Reade
 	} else {
 		rows, _ := it.cardSeries(itemsOf(current))
 		for _, s := range rows {
-			out.Numbers = append(out.Numbers, cardRowView{Name: it.rowName(s), Value: format(printer, s.Metric, *s.Value), Mark: markOf(printer, s)})
+			out.Numbers = append(out.Numbers, cardRowView{Name: it.rowName(printer, s), Value: format(printer, s.Metric, *s.Value), Mark: markOf(printer, s)})
 		}
 	}
 	for _, s := range shown {
@@ -206,7 +205,7 @@ func itemPageOf(ctx context.Context, printer *i18n.Printer, reader history.Reade
 		}
 		if n := len(out.Families); n == 0 || out.Families[n-1].key != familyKey(s.Metric) {
 			family, _ := familyOf(s.Metric)
-			out.Families = append(out.Families, familyView{key: familyKey(s.Metric), Name: family})
+			out.Families = append(out.Families, familyView{key: familyKey(s.Metric), Name: it.names.Family(printer.Locale(), family)})
 		}
 		last := &out.Families[len(out.Families)-1]
 		last.Charts = append(last.Charts, view)
@@ -216,7 +215,7 @@ func itemPageOf(ctx context.Context, printer *i18n.Printer, reader history.Reade
 	if err != nil {
 		return out, err
 	}
-	out.Days = changeDays(printer, changes, anomalies, targets, current.At, lang, itemChanges)
+	out.Days = changeDays(printer, current.Names, changes, anomalies, targets, current.At, lang, itemChanges)
 	return out, nil
 }
 
@@ -226,15 +225,12 @@ func smallChartOf(ctx context.Context, printer *i18n.Printer, reader history.Rea
 	it overviewItem, s state.Subject, window time.Duration, lang string,
 ) (chartView, error) {
 	out := chartView{
-		Name:       s.Metric,
+		Name:       it.chartName(printer, s),
 		Value:      format(printer, s.Metric, *s.Value),
 		Mark:       markOf(printer, s),
 		Collected:  printer.Time(s.TS),
 		History:    historyLink(s.Node, s.Metric, s.Labels, lang, windowName(window)),
 		Thresholds: thresholdLink(s.Node, s.Metric, s.Labels, lang),
-	}
-	if described := notify.Describe(printer, it.ownLabels(s)); described != "" {
-		out.Name += " · " + described
 	}
 	if s.Anomaly != nil && s.Anomaly.Rank > 0 {
 		out.Usual = fmt.Sprintf(printer.T("attention.usually"), format(printer, s.Metric, s.Anomaly.Norm))
