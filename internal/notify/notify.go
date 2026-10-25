@@ -95,6 +95,11 @@ func name(p *i18n.Printer, declared names.Text, metric string, labels map[string
 		template = metric
 	}
 	out, used := names.Fill(template, labels, filled)
+	// A name made only of references to labels the series lacks fills to nothing; the id
+	// still names it.
+	if out == "" {
+		out, used = metric, nil
+	}
 	rest := maps.Clone(labels)
 	maps.DeleteFunc(rest, func(key, _ string) bool { return used[key] })
 	if more := Naming(rest); more != "" {

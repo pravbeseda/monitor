@@ -118,7 +118,7 @@ func matrixOf(printer *i18n.Printer, book names.Book, node string, series []seri
 			label = strings.TrimPrefix(metric, family+".")
 		}
 		// A column names its metric, not a series: the labels are the rows' to say.
-		if template, named := book.Metrics[metric].In(printer.Locale()); named {
+		if template, named := book.Metrics[metric].In(printer.Locale()); named && names.Bare(template) != "" {
 			label = names.Bare(template)
 		}
 		out.Columns = append(out.Columns, columnView{Metric: metric, Label: label})

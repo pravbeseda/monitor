@@ -110,7 +110,7 @@ func reference(text string) (string, int) {
 // characters, and free of control, format and line-separating characters, which would let
 // a name break a message into lines or turn its text around.
 func Valid(name string) bool {
-	if name == "" || !utf8.ValidString(name) || utf8.RuneCountInString(name) > MaxLength {
+	if strings.TrimSpace(name) == "" || !utf8.ValidString(name) || utf8.RuneCountInString(name) > MaxLength {
 		return false
 	}
 	for _, r := range name {

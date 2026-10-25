@@ -87,7 +87,7 @@ One row = one test. Anchors: `spec: metric-names.md#<heading>`.
 | two manifest entries of one request naming the same metric | the later entry in the manifest wins |
 | a manifest entry with no `names` or `families` (an older agent) | accepted; every name declared earlier stays |
 | a name for a locale the interface does not have | ignored; the rest of the declaration is kept |
-| an empty name | that name is ignored; the request is accepted |
+| an empty name, or one of spaces only | that name is ignored; the request is accepted |
 | a name longer than 80 characters | that name is ignored; the request is accepted |
 | a name carrying a control, format or line-separating character — a line break, U+2028, a bidirectional override | that name is ignored; the request is accepted |
 | a sensor the hub runs itself declares names | kept the same way as an agent's |
@@ -110,6 +110,7 @@ followed by what the labels it does not use name today
 | `disk.free_pct {mount: "/Volumes/Backup Disk"}` | en | `Free on "/Volumes/Backup Disk"`: a value is quoted as a label value is quoted today |
 | `disk.free_pct {mount: ""}` | en | `Free on ""`: an empty value still tells the series apart |
 | a name referring to `{queue}`, on a series without that label | en | the name with `{queue}` left out and the spaces around it closed up |
+| a name that is only `{queue}`, on a series without that label | en | the metric id followed by its labels: a series is never left without a name |
 | a name referring to `{fs}` | en | the filesystem filled in, and not repeated after the name |
 | a label value that itself contains `{site}` | en | filled in as it is; nothing is filled in twice |
 | `Free {` | en | `Free {`: a brace that opens no reference is literal |

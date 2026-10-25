@@ -424,6 +424,7 @@ func TestANameIsFollowedByTheLabelsItDoesNotUse(t *testing.T) {
 		{names.Text{i18n.English: "Free on {mount} ({fs})"}, map[string]string{"mount": "/srv", "fs": "ext4"}, "Free on /srv (ext4)"},
 		{names.Text{i18n.Russian: "Память"}, map[string]string{}, "memory.x"},
 		{names.Text{i18n.English: "<b>x</b>"}, map[string]string{}, "<b>x</b>"},
+		{names.Text{i18n.English: "{queue}"}, map[string]string{"site": "a"}, "memory.x site=a"},
 	}
 	for _, c := range cases {
 		if got := notify.Name(printer, c.name, "memory.x", c.labels); got != c.want {
