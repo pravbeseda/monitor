@@ -433,15 +433,20 @@ func cardOf(ctx context.Context, printer *i18n.Printer, reader history.Reader, s
 		return out, nil
 	}
 	shown, more := it.cardSeries(attention)
+	var first storage.Threshold
+	var firstReadable bool
 	for i, s := range shown {
 		row := cardRowView{Name: it.rowName(printer, s), Value: format(printer, s.Metric, *s.Value), Mark: markOf(printer, s)}
 		if i >= linedRows {
 			out.Rest = append(out.Rest, row)
 			continue
 		}
-		_, _, levels, err := levelsOf(ctx, store, s)
+		th, readable, levels, err := levelsOf(ctx, store, s)
 		if err != nil {
 			return out, err
+		}
+		if i == 0 {
+			first, firstReadable = th, readable
 		}
 		if row.Line, err = lineOf(ctx, printer, reader, s, history.DefaultWindow, sparkFrame, levels...); err != nil {
 			return out, err
@@ -454,9 +459,8 @@ func cardOf(ctx context.Context, printer *i18n.Printer, reader history.Reader, s
 	if more > 0 {
 		out.More = fmt.Sprintf(printer.T("overview.more"), more)
 	}
-	var err error
-	out.Reason, err = it.reason(ctx, printer, store, shown)
-	return out, err
+	out.Reason = it.reason(printer, shown, first, firstReadable)
+	return out, nil
 }
 
 // lastReported is when the item last reported, said only once it is silent or holds no
@@ -469,50 +473,48 @@ func (it overviewItem) lastReported(printer *i18n.Printer) string {
 }
 
 // reason is why the card holds its state, said at its foot (docs/specs/overview.md#card).
-// Rows needing attention come first, so the first row is the one to explain.
-func (it overviewItem) reason(ctx context.Context, printer *i18n.Printer, store ThresholdReader, shown []state.Subject) (string, error) {
-	first := shown[0]
+// Rows needing attention come first, so a critical or warning card's first row holds its
+// level; th is that row's stored threshold, and readable whether this build can read it.
+func (it overviewItem) reason(printer *i18n.Printer, shown []state.Subject, th storage.Threshold, readable bool) string {
 	switch it.cell {
 	case timeline.Silent, timeline.NoFreshData:
-		return it.lastReported(printer), nil
+		return it.lastReported(printer)
 	case timeline.Critical, timeline.Warning:
-		name := it.rowName(printer, first)
-		th, readable, _, err := levelsOf(ctx, store, first)
-		if err != nil {
-			return "", err
-		}
+		name := it.rowName(printer, shown[0])
 		value := th.Warning
-		if *first.Level == evaluate.Critical {
+		if it.cell == timeline.Critical {
 			value = th.Critical
 		}
 		if !readable || value == nil {
-			return fmt.Sprintf(printer.T("overview.reason_level"), name, printer.T("level."+first.Level.String())), nil
+			return fmt.Sprintf(printer.T("overview.reason_level"), name, printer.T(cellNames[it.cell].word))
 		}
-		return fmt.Sprintf(printer.T("overview.reason_"+string(th.Direction)), name, format(printer, first.Metric, *value)), nil
+		return fmt.Sprintf(printer.T("overview.reason_"+string(th.Direction)), name, format(printer, shown[0].Metric, *value))
 	case timeline.Unusual:
 		for _, s := range shown {
-			if mark := markOf(printer, s); mark != nil && mark.Class == "level-unusual" {
-				usual := fmt.Sprintf(printer.T("attention.usually"), format(printer, s.Metric, s.Anomaly.Norm))
-				return it.rowName(printer, s) + " " + usual, nil
+			if !s.Stale && s.Anomaly != nil && s.Anomaly.Rank > 0 {
+				return it.rowName(printer, s) + " " + usualOf(printer, s)
 			}
 		}
 	case timeline.OK:
-		if first.Stale {
-			return fmt.Sprintf(printer.T("overview.reason_stale"), it.rowName(printer, first), printer.Time(first.TS)), nil
+		// Under ok the only mark a row can carry is that it holds no fresh data.
+		for _, s := range shown {
+			if s.Stale {
+				return fmt.Sprintf(printer.T("overview.reason_stale"), it.rowName(printer, s), printer.Time(s.TS))
+			}
 		}
-		return printer.T("overview.all_within"), nil
+		return printer.T("overview.all_within")
 	}
-	return "", nil
+	return ""
 }
 
 // areasOf fills under each stretch of a line, down to the plot's baseline.
 func areasOf(line chart) []string {
 	out := make([]string, 0, len(line.Lines))
+	baseline := strconv.FormatFloat(line.Baseline, 'f', -1, 64)
 	for _, points := range line.Lines {
 		first, _, _ := strings.Cut(points, ",")
 		last := points[strings.LastIndexByte(points, ' ')+1:]
 		last, _, _ = strings.Cut(last, ",")
-		baseline := strconv.FormatFloat(line.Baseline, 'f', -1, 64)
 		out = append(out, first+","+baseline+" "+points+" "+last+","+baseline)
 	}
 	return out

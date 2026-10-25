@@ -40,6 +40,11 @@ type ThresholdReader interface {
 	ThresholdOf(ctx context.Context, ref storage.SeriesRef) (storage.Threshold, bool, error)
 }
 
+// usualOf is a ranking series' usual value, as "now" says it.
+func usualOf(printer *i18n.Printer, s state.Subject) string {
+	return fmt.Sprintf(printer.T("attention.usually"), format(printer, s.Metric, s.Anomaly.Norm))
+}
+
 // levelsOf is a series' stored threshold, whether this build can read it, and the values
 // a chart draws across its line.
 func levelsOf(ctx context.Context, store ThresholdReader, s state.Subject) (storage.Threshold, bool, []threshold, error) {
@@ -255,7 +260,7 @@ func smallChartOf(ctx context.Context, printer *i18n.Printer, reader history.Rea
 		Thresholds: thresholdLink(s.Node, s.Metric, s.Labels, lang),
 	}
 	if s.Anomaly != nil && s.Anomaly.Rank > 0 {
-		out.Usual = fmt.Sprintf(printer.T("attention.usually"), format(printer, s.Metric, s.Anomaly.Norm))
+		out.Usual = usualOf(printer, s)
 	}
 
 	_, _, levels, err := levelsOf(ctx, store, s)

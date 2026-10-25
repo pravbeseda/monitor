@@ -265,7 +265,7 @@ filled. The rows after them follow in a run that wraps. A reason closes the card
 | the same, the threshold unreadable or holding no value for that level | the reason: the row's name and the level's word |
 | a card `unusual` | the reason: the first row marked unusual, its name and its usual value, as "now" says it ([attention](attention.md#model)) |
 | a card `ok` whose rows carry no mark | the reason "All within thresholds" |
-| a card `ok` whose first row holds no fresh data | the reason: the row's name and that it holds no fresh data since its newest value |
+| a card `ok` with a row marked as holding no fresh data | the reason: the first such row's name and that it holds no fresh data since its newest value |
 | a card silent or with no fresh data | its last report as the reason |
 | a card "reporting, nothing watched" | no reason: its pill says it |
 

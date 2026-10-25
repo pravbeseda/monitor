@@ -134,7 +134,7 @@ var (
 	cardPattern    = regexp.MustCompile(`(?s)<a class="card [^"]*" href="[^"]*" data-item="([^"]*)">.*?</a>`)
 	cardState      = regexp.MustCompile(`<span class="card-state">([^<]*)</span>`)
 	rowPattern     = regexp.MustCompile(`(?s)<li class="row[^"]*" data-series="([^"]*)">.*?</li>`)
-	markPattern    = regexp.MustCompile(`<span class="row-mark[^"]*">([^<]*)</span>`)
+	markPattern    = regexp.MustCompile(`<span class="row-mark-word">([^<]*)</span>`)
 )
 
 // sections are each section's heading and the names of its cards, in page order.

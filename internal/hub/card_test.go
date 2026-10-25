@@ -166,6 +166,49 @@ func TestOverviewCard(t *testing.T) {
 		}
 	})
 
+	t.Run("a warning card says the warning value, above", func(t *testing.T) {
+		th := storage.Threshold{Direction: storage.Above, Warning: f(80), Critical: f(95)}
+		body := showCard(t, stateOf(judgedAt(freePct("server-b", "/srv", 85), evaluate.Warning)), held{},
+			limits{heldKey(volumeRef("/srv")): th}, "server-b")
+		if got := reason(body); got != "disk.free_pct /srv above 80.0%" {
+			t.Errorf("reason = %q", got)
+		}
+	})
+
+	t.Run("an unreadable threshold", func(t *testing.T) {
+		th := storage.Threshold{Direction: "sideways", Critical: f(5)}
+		body := showCard(t, stateOf(judgedAt(freePct("server-b", "/srv", 4), evaluate.Critical)), held{},
+			limits{heldKey(volumeRef("/srv")): th}, "server-b")
+		if got := reason(body); got != "disk.free_pct /srv: critical" {
+			t.Errorf("reason = %q", got)
+		}
+	})
+
+	t.Run("a silent card says when it last reported", func(t *testing.T) {
+		body := showCard(t, stateOf(silenceOf("server-b", evaluate.Critical), freePct("server-b", "/", 40)), held{}, limits{}, "server-b")
+		if got := reason(body); !strings.HasPrefix(got, "last report ") {
+			t.Errorf("reason = %q", got)
+		}
+	})
+
+	t.Run("an ok card with a later row stale", func(t *testing.T) {
+		current := stateOf(judgedAt(freePct("server-b", "/", 40), evaluate.OK), staled(plain("server-b", "memory.available_pct", 50)))
+		if got := reason(showCard(t, current, held{}, limits{}, "server-b")); !strings.HasPrefix(got, "memory.available_pct: no fresh data since ") {
+			t.Errorf("reason = %q", got)
+		}
+	})
+
+	t.Run("both main numbers carry a line", func(t *testing.T) {
+		recent := func(v float64) []storage.Point {
+			return []storage.Point{{TS: lastSeen.Add(-10 * time.Minute), Value: v}, {TS: lastSeen.Add(-5 * time.Minute), Value: v}}
+		}
+		both := held{heldKey(volumeRef("/a")): recent(40), heldKey(volumeRef("/b")): recent(30)}
+		body := showCard(t, stateOf(judgedAt(freePct("server-b", "/a", 40), evaluate.Critical), freePct("server-b", "/b", 30)), both, limits{}, "server-b")
+		if strings.Count(body, `<svg class="spark"`) != 2 {
+			t.Errorf("want two lines: %s", body)
+		}
+	})
+
 	t.Run("reporting with nothing watched gives no reason", func(t *testing.T) {
 		if body := showCard(t, stateOf(computer...), held{}, limits{}, "server-b"); strings.Contains(body, "card-reason") {
 			t.Errorf("a reason on a card that watches nothing: %s", body)

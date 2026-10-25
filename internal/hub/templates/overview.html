@@ -46,7 +46,7 @@
     .rest .row-value { font-variant-numeric: tabular-nums; }
     .rest .row-mark { margin-left: 0.25rem; vertical-align: middle; }
     p.card-reason { margin: 0; font-size: 0.85rem; color: var(--muted); }
-    .row-mark-word { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); }
+    .row-mark-word { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
   </style>
 </head>
 <body>
@@ -92,4 +92,4 @@
   {{ end }}
 </body>
 </html>
-{{ define "mark" }}{{ with . }}<span class="row-mark {{ .Class }}" title="{{ .Word }}"></span><span class="row-mark-word">{{ .Word }}</span>{{ end }}{{ end }}
+{{ define "mark" }}{{ with . }} <span class="row-mark {{ .Class }}" title="{{ .Word }}"></span><span class="row-mark-word">{{ .Word }}</span> {{ end }}{{ end }}
