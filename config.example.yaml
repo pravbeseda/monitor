@@ -12,7 +12,8 @@ filesystems: [apfs, ext4, xfs, btrfs, zfs, ntfs]
 # or per class or node. Absent, nodes install nothing (docs/decisions/0028).
 # agent_target: latest
 
-# Mount points not worth watching. An empty list watches everything the allow-list admits.
+# Mount points not worth watching. An empty list watches everything the allow-list admits
+# and the OS does not hide.
 skip_mounts: ["/System/Volumes/", "/Library/Developer/CoreSimulator/"]
 
 sensors:

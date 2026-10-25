@@ -80,7 +80,9 @@ tick instead. A hub upgrades itself unattended
 ([0025](../decisions/0025-the-hub-checks-hourly-and-downloads-a-binary-to-install-it.md)),
 so a release that brings a sensor must not turn a tick the file chose into a crash loop.
 The skip list names mount points no one watches — the system volumes of a Mac and the
-simulator images — and says nothing about any installation.
+simulator images — and says nothing about any installation. Agents skip those on their
+own, as volumes macOS hides from its user ([disk sensor](disk-sensor.md#enumeration)); the
+defaults stay for agents that predate that rule.
 
 **Deployment settings** (no defaults, absent means a startup error): the `nodes` map, each
 node's `class` and — except on a `service` or `sites` node, which has no token of its own — `token_env`. Tokens themselves live in the environment, never in the
@@ -162,7 +164,7 @@ The node is listed in `nodes`; the layers apply most-specific-last.
 | the node sets `sensors.<s>.enabled: false` for a sensor in its profile | that sensor is delivered as `enabled: false`, so the agent stops running it |
 | the node sets `sensors.<s>.enabled: true` for a sensor outside its profile | that sensor is delivered, at its resolved interval |
 | the class sets `base_tick`, `filesystems` or `skip_mounts` | wins over the top level; a node entry wins over the class |
-| `skip_mounts` set to an empty list | nothing is skipped: an empty list is a value, not an omission |
+| `skip_mounts` set to an empty list | nothing is skipped by the list: an empty list is a value, not an omission; volumes macOS hides are still skipped ([disk sensor](disk-sensor.md#enumeration)) |
 | a sensor no layer mentions | absent from the delivered configuration |
 | the node hosts sites of the sites node | `access_log` delivered with its sites, at the sites node's interval, beside its own sensors ([site-traffic.md](site-traffic.md#configuration)) |
 | a node of the compiled-in `server` class, the file setting no `profile` for it | `load` and `memory` every 5m; `disk`, `uptime` and `systemd` every 15m |

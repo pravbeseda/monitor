@@ -23,6 +23,8 @@ type Mount struct {
 	Path      string
 	FS        string
 	Removable bool
+	// Hidden is the OS hiding the volume from its user: nobrowse on macOS.
+	Hidden bool
 	// Container groups volumes that share one pool of free space: an APFS container, a
 	// device with bind mounts. Empty means the mount stands alone.
 	Container string
@@ -102,8 +104,8 @@ func (s *Sensor) Collect(context.Context) ([]sensor.Measurement, error) {
 	return out, nil
 }
 
-// watched keeps the volumes worth reading: the filesystem type is on the hub's allow-list
-// and the mount point is not under a skipped prefix.
+// watched keeps the volumes worth reading: the OS does not hide them, the filesystem type is
+// on the hub's allow-list and the mount point is not under a skipped prefix.
 func watched(mounts []Mount, settings Settings) []Mount {
 	allowed := make(map[string]bool, len(settings.Filesystems))
 	for _, fs := range settings.Filesystems {
@@ -112,7 +114,7 @@ func watched(mounts []Mount, settings Settings) []Mount {
 
 	kept := make([]Mount, 0, len(mounts))
 	for _, mount := range mounts {
-		if allowed[strings.ToLower(mount.FS)] && !skipped(mount.Path, settings.SkipMounts) {
+		if !mount.Hidden && allowed[strings.ToLower(mount.FS)] && !skipped(mount.Path, settings.SkipMounts) {
 			kept = append(kept, mount)
 		}
 	}
