@@ -117,11 +117,10 @@ item's page.
 A tie goes to the series first in the page order. A metric the item does not have gives no
 row.
 
-**A row's name** is its series' metric id followed by what its labels name as a
-[message](evaluation.md#messages) and "now" name them — `fs` and `removable` left out —
-and **a small chart's name** is the one the history page gives its chart, a volume's
-filesystem and its being removable included ([history](history.md#page)); either leaves out
-the `site` label on a site's own card and page. A family is headed by its id.
+**A row's name** is its series' name ([metric names](metric-names.md#naming)) — `fs` and
+`removable` left out — and **a small chart's name** is the same with a volume's filesystem
+and its being removable; either leaves out the `site` label on a site's own card and page.
+A family is headed by its family's name.
 
 On a narrow screen the cards flow one to a line, each section's heading above its own.
 
@@ -134,7 +133,7 @@ On a narrow screen the cards flow one to a line, each section's heading above it
   ([history](history.md#page));
 - every series of the item that `/debug` would show — a removable volume that is stale left
   out ([history](history.md#page)) — as a small chart over the window, grouped under its
-  family's id, in the page order; "No series yet" when there is none;
+  family's name, in the page order; "No series yet" when there is none;
 - the changes of the item: the newest 20 of its series' transitions and anomaly starts and
   ends, and the silence transitions of its node — for a site, of the `sites` node and of its
   host — written and grouped by day as the timeline writes them
@@ -267,9 +266,9 @@ English catalogue's; every one of them has its Russian. `sites` is the node of c
 | `&window=168h` | the same as `7d`, "7d" marked: the window is marked whatever the query spelled it as |
 | `&window=12h` | every chart over 12 hours, no window link marked |
 | any window link | the same item, that window and the language |
-| a computer with `disk.free_pct /`, `load.avg_1m`, `memory.available_pct` and `uptime.boot_seconds` | four families headed `disk`, `load`, `memory`, `uptime`, in that order |
-| two volumes, each with `free_bytes` and `free_pct` | four charts under `disk`: `/a`'s two, then `/b`'s two |
-| `load.avg_1m`, `load.avg_15m` and `load.avg_5m` | under `load` in metric id order: `avg_15m`, `avg_1m`, `avg_5m` |
+| a computer with `disk.free_pct /`, `load.avg_1m`, `memory.available_pct` and `uptime.boot_seconds` | four families headed by their names — "Disk", "Load", "Memory", "Uptime" in English — in the order of their ids `disk`, `load`, `memory`, `uptime` |
+| two volumes, each with `free_bytes` and `free_pct` | four charts under the family `disk`: `/a`'s two, then `/b`'s two |
+| `load.avg_1m`, `load.avg_15m` and `load.avg_5m` | under the family `load` in metric id order: `avg_15m`, `avg_1m`, `avg_5m` |
 | 60 `queue.depth` series of one node | 60 charts |
 | a removable volume that is stale | no chart for it |
 | a series holding `warning: 10GB` and `critical: 5GB` | its chart with a yellow line at 10 GB named "warning" and a red one at 5 GB named "critical" |
@@ -357,8 +356,6 @@ English catalogue's; every one of them has its Russian. `sites` is the node of c
   ([0046](../decisions/0046-an-overview-of-items-rendered-by-the-hub.md)).
 - **A norm band drawn on a chart** — the State API carries the norm, not the band, and the
   band of the current hour drawn over a month would mislead.
-- **Readable names for metrics** — every page names a series by its metric id; a catalogue
-  of names would change all of them at once, not this one.
 - **Choosing a card's rows in the interface** — the defaults stand until they prove wrong.
 - **Figures across items** — "6 of 7 reporting", "least free space anywhere": new fields of
   the core first.
