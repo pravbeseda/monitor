@@ -659,3 +659,34 @@ func TestReadHoldsItsAnswerNotItsWindow(t *testing.T) {
 		t.Fatalf("one read allocated %d bytes over %d stored points, want the size of its answer", grew, count)
 	}
 }
+
+// ReadOne reads exactly the series named, however many others carry its labels and more:
+// an item's page draws one series per chart (docs/specs/overview.md#item-page).
+func TestReadOneSelectsExactlyTheSeries(t *testing.T) {
+	bare := seriesPoints{SeriesRef: storage.SeriesRef{Node: "server-b", Metric: "disk.free_pct", Labels: map[string]string{}}, Points: []storage.Point{at(-time.Hour, 7)}}
+	src := &source{series: []seriesPoints{bare}}
+	for i := range 60 {
+		src.series = append(src.series, series("server-b", "/m"+string(rune('a'+i%26))+string(rune('a'+i/26)), at(-time.Hour, 42)))
+	}
+	got, window, err := reader(src).ReadOne(context.Background(), bare.SeriesRef, 24*time.Hour)
+	if err != nil {
+		t.Fatalf("ReadOne: %v", err)
+	}
+	if got == nil || len(got.Points) != 1 || got.Points[0].Value != 7 || !window.To.Equal(now) {
+		t.Fatalf("ReadOne = %+v over %v, want the bare series' one point", got, window)
+	}
+
+	empty, _, err := reader(src).ReadOne(context.Background(), series("server-b", "/none").SeriesRef, 24*time.Hour)
+	if err != nil || empty != nil {
+		t.Errorf("ReadOne of a series without points = %+v, %v; want nil, nil", empty, err)
+	}
+}
+
+func TestParseWindow(t *testing.T) {
+	if got, err := history.ParseWindow("7d"); err != nil || got != 7*24*time.Hour {
+		t.Errorf("ParseWindow(7d) = %v, %v", got, err)
+	}
+	if _, err := history.ParseWindow("2w"); err == nil {
+		t.Errorf("ParseWindow(2w) accepted")
+	}
+}
