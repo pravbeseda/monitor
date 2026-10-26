@@ -39,7 +39,7 @@ func TestBuiltInSensorsNameTheirMetrics(t *testing.T) {
 		{systemd.New(nil, nil), map[string]name{"systemd": {"Services", "Сервисы"}}, map[string]name{
 			"systemd.failed_units": {"Failed units", "Упавшие юниты"}}},
 		{timemachine.New(nil, nil), map[string]name{"timemachine": {"Time Machine", "Time Machine"}}, map[string]name{
-			"timemachine.backup_age_seconds": {"Time Machine backup {destination}", "Бэкап Time Machine {destination}"}}},
+			"timemachine.backup_age_seconds": {"Backup {destination}", "Бэкап {destination}"}}},
 		{gdrive.New(gdrive.Credentials{}), map[string]name{"gdrive": {"Google Drive", "Google Drive"}}, map[string]name{
 			"gdrive.free_pct":   {"Free on Google Drive", "Свободно на Google Drive"},
 			"gdrive.free_bytes": {"Free on Google Drive", "Свободно на Google Drive"}}},
