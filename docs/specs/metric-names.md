@@ -53,7 +53,7 @@ and its family:
 | family `systemd` | Services | Сервисы |
 | `systemd.failed_units` | Failed units | Упавшие юниты |
 | family `timemachine` | Time Machine | Time Machine |
-| `timemachine.backup_age_seconds` | Time Machine backup {destination} | Бэкап Time Machine {destination} |
+| `timemachine.backup_age_seconds` | Backup {destination} | Бэкап {destination} |
 | family `gdrive` | Google Drive | Google Drive |
 | `gdrive.free_pct`, `gdrive.free_bytes` | Free on Google Drive | Свободно на Google Drive |
 | family `site` | Site | Сайт |
