@@ -17,8 +17,8 @@ every sensor it decides nothing: the series has no level until someone sets one 
 ([thresholds.md](thresholds.md)).
 
 It takes no parameter: Time Machine keeps its own list of destinations, so there is nothing
-for the configuration to name. Backups that do need one are
-[#51](https://github.com/pravbeseda/monitor/issues/51).
+for the configuration to name. Other backups report through a file their job writes
+([backup-sensor.md](backup-sensor.md)).
 
 ## Measurements
 
@@ -97,7 +97,7 @@ One row = one test. Anchors: `spec: timemachine-sensor.md#<heading>`.
 
 ## Out of scope
 
-- Backups other than Time Machine → [#51](https://github.com/pravbeseda/monitor/issues/51).
+- Backups other than Time Machine → [backup-sensor.md](backup-sensor.md).
 - A failed backup attempt: an attempt that did not complete leaves the age growing, and that
   is what a threshold sees.
 - Free space on the destination: the disk sensor reports it while the volume is mounted.

@@ -72,6 +72,7 @@ One decision per file, each stating what was rejected and why. New records start
 | [0046](decisions/0046-an-overview-of-items-rendered-by-the-hub.md) | An overview of items, rendered by the hub, opens a page per item | accepted |
 | [0047](decisions/0047-a-pull-request-opens-without-a-gate.md) | A pull request opens without a gate; only the merge waits | accepted |
 | [0048](decisions/0048-a-sensor-names-its-metrics.md) | A sensor names its metrics; the hub shows the name wherever a person reads one | accepted |
+| [0049](decisions/0049-a-backup-job-reports-through-a-status-file.md) | A backup job reports through a status file the agent reads | accepted |
 
 ## Behaviour specs
 
@@ -89,6 +90,7 @@ can see ([ADR 0017](decisions/0017-one-spec-and-decision-gates.md)). New specs s
 | [services.md](specs/services.md) | Service nodes the hub collects itself, when one falls silent, and the Google Drive sensor | approved |
 | [host-sensors.md](specs/host-sensors.md) | The load, memory, uptime and failed-units sensors: what each reads on Linux and macOS, and the metrics it reports | approved |
 | [timemachine-sensor.md](specs/timemachine-sensor.md) | The Time Machine sensor: where a Mac's backup dates are read from, and the age it reports per destination | approved |
+| [backup-sensor.md](specs/backup-sensor.md) | The backup sensor: the status file a backup job writes after each run, and the failures, ages, counts and sizes it reports | approved |
 | [site-traffic.md](specs/site-traffic.md) | Web sites' traffic, errors, response time and page views, read from each site's access log by its host's agent and reported for the sites node | approved |
 | [agent.md](specs/agent.md) | The agent: local configuration, tick loop, delivery and configuration application | approved |
 | [evaluation.md](specs/evaluation.md) | Levels, hysteresis, the event log, silence, digests and the notifier boundary | approved |
@@ -135,6 +137,7 @@ Reasoning from working sessions, including options that were rejected.
 | [2026-10-08](log/2026-10-08-debug-matrix.md) | The series table as matrices: why a matrix per label key set and family, and why not collapsing or filtering the page |
 | [2026-10-25](log/2026-10-25-overview.md) | The overview: how it is drawn, the five questions, the seven prototypes, and why sections follow who collects an item |
 | [2026-10-25](log/2026-10-25-metric-names.md) | Readable metric names: catalogue, sensor or interface, and the card style chosen from three |
+| [2026-10-28](log/2026-10-28-backup-sensor.md) | Backups a job reports: where the figures come from, who reports them, and why the path is the spec's |
 
 ## Not written yet
 

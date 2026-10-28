@@ -413,7 +413,8 @@ entered again nothing alerts. Do it in this order:
 
 The release that brings the [host sensors](specs/host-sensors.md) — `load`, `memory`,
 `uptime` and `systemd` — adds them to the compiled-in profiles of `laptop` and `server`, and
-the one that brings [`timemachine`](specs/timemachine-sensor.md) adds it to `laptop`; a node
+the one that brings [`timemachine`](specs/timemachine-sensor.md) adds it to `laptop`, and the
+one that brings [`backup`](specs/backup-sensor.md) adds it to both; a node
 that takes its profile from code starts collecting them once its agent has updated.
 **A class whose `profile` is written in `hub.yaml` keeps exactly that list**: a profile in the
 file replaces the compiled-in one ([hub-config.md](specs/hub-config.md#resolution)). A file

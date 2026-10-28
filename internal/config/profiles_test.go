@@ -36,11 +36,11 @@ func TestResolveCompiledInProfiles(t *testing.T) {
 	}{
 		{"server", map[string]time.Duration{
 			"disk": 15 * time.Minute, "load": 5 * time.Minute, "memory": 5 * time.Minute,
-			"uptime": 15 * time.Minute, "systemd": 15 * time.Minute,
+			"uptime": 15 * time.Minute, "systemd": 15 * time.Minute, "backup": 15 * time.Minute,
 		}},
 		{"laptop", map[string]time.Duration{
 			"disk": time.Hour, "load": 5 * time.Minute, "memory": 5 * time.Minute,
-			"uptime": 15 * time.Minute, "timemachine": time.Hour,
+			"uptime": 15 * time.Minute, "timemachine": time.Hour, "backup": 15 * time.Minute,
 		}},
 	}
 	for _, tt := range tests {
@@ -65,7 +65,7 @@ func TestResolveRaisesACompiledInIntervalToTheTick(t *testing.T) {
 	body := withClass("laptop", "classes:\n  laptop:\n    base_tick: 1h\n")
 	want := map[string]time.Duration{
 		"disk": time.Hour, "load": time.Hour, "memory": time.Hour, "uptime": time.Hour,
-		"timemachine": time.Hour,
+		"timemachine": time.Hour, "backup": time.Hour,
 	}
 	if got := intervals(t, body); !maps.Equal(got, want) {
 		t.Fatalf("sensors = %v, want %v", got, want)

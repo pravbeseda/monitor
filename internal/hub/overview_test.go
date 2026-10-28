@@ -364,6 +364,10 @@ func tmAge(node, destination string, value float64) state.Subject {
 	return reading(node, "timemachine.backup_age_seconds", map[string]string{"destination": destination}, value)
 }
 
+func jobAge(node, backup string, value float64) state.Subject {
+	return reading(node, "backup.success_age_seconds", map[string]string{"backup": backup, "job": "create"}, value)
+}
+
 // spec: overview.md#rows
 func TestOverviewRows(t *testing.T) {
 	linux := []state.Subject{
@@ -390,6 +394,9 @@ func TestOverviewRows(t *testing.T) {
 		{"the oldest backup", []state.Subject{tmAge("laptop-a", "a", 2*86400), tmAge("laptop-a", "b", 9*86400)}, "laptop-a", []string{"timemachine.backup_age_seconds destination=b"}},
 		{"the oldest fresh backup", []state.Subject{tmAge("laptop-a", "a", 2*86400), staled(tmAge("laptop-a", "b", 9*86400)), plain("laptop-a", "load.avg_15m", 1)}, "laptop-a",
 			[]string{"load.avg_15m", "timemachine.backup_age_seconds destination=a"}},
+		{"the oldest backup job", []state.Subject{jobAge("server-b", "a", 2*86400), jobAge("server-b", "b", 9*86400)}, "server-b", []string{"backup.success_age_seconds backup=b job=create"}},
+		{"the oldest fresh backup job", []state.Subject{jobAge("server-b", "a", 2*86400), staled(jobAge("server-b", "b", 9*86400)), plain("server-b", "load.avg_15m", 1)}, "server-b",
+			[]string{"load.avg_15m", "backup.success_age_seconds backup=a job=create"}},
 		{"a site", []state.Subject{siteOf("blog-a", "site.pageviews_24h", 9), siteOf("blog-a", "site.response_p95_seconds", 0.3), siteOf("blog-a", "site.server_error_pct", 0), siteOf("blog-a", "site.requests_per_min", 4)}, "blog-a",
 			[]string{"site.requests_per_min", "site.server_error_pct", "site.response_p95_seconds"}},
 		{"a service", []state.Subject{reading("gdrive-a", "gdrive.free_pct", map[string]string{}, 75), reading("gdrive-a", "gdrive.free_bytes", map[string]string{}, 8e10)}, "gdrive-a", []string{"gdrive.free_pct"}},

@@ -44,7 +44,7 @@ func loadSites(t *testing.T, body string) *config.Config {
 // spec: hub-config.md#resolution — beside its own sensors.
 func TestSitesReachTheirHost(t *testing.T) {
 	cfg := loadSites(t, minimal+hosts+sitesNode)
-	for _, own := range []string{"disk", "load", "memory", "uptime", "systemd"} {
+	for _, own := range []string{"disk", "load", "memory", "uptime", "systemd", "backup"} {
 		if !node(t, cfg, "server-b").Agent.Sensors[own].Enabled {
 			t.Errorf("server-b lost its own %s", own)
 		}

@@ -1,0 +1,37 @@
+# 2026-10-28 — Backups a job reports
+
+The reader asked to see backup jobs in the monitor: how many archives each repository
+holds, their sizes and dates, the failures, and the results of the checks. The setup in
+mind is a common one — hosts archiving nightly to a backup host, a machine that copies the
+repositories elsewhere, prunes and checks them, and a periodic restore test. Decision:
+[0049](../decisions/0049-a-backup-job-reports-through-a-status-file.md).
+
+## Where the figures come from
+
+Three ways were weighed:
+
+1. **The jobs write a status file, a sensor reads it.** The jobs already hold every figure
+   at the end of a run; the agent needs no secret and opens no repository. Chosen.
+2. **The sensor reads the repositories itself.** The jobs stay as they are, but the agent
+   would hold every key and passphrase and fight the backups for the repository's lock.
+3. **A generic file of arbitrary metrics.** It would serve any script, but the monitor would
+   no longer know the names and units of what it shows.
+
+## Who reports
+
+Three places could report: the host that makes the archive, the host that stores it, and
+the machine that copies it. The storing host cannot read a repository without its key, so
+it sees only the size and the time of the last write, and a client that fails to write
+reports its own failure. The first version therefore has the making host and the copying
+machine report; the storing host can join later as one more job in the same format.
+
+## Where the path lives
+
+A parameter from the hub ([0044](../decisions/0044-a-sensor-takes-its-parameters-from-the-hub.md))
+was weighed against a directory the spec fixes. Only the job and the sensor need the path,
+so the spec names it to both, and the hub's file stays as it is.
+
+## Beside the monitor
+
+An external dead-man check, where a job already pings one, keeps its place: a monitor
+whose hub shares a host with a backup it watches cannot report that host going down.

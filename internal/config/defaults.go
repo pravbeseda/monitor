@@ -31,18 +31,19 @@ var defaultSensors = map[string]fileSensor{
 	"uptime":      {Interval: "15m"},
 	"systemd":     {Interval: "15m"},
 	"timemachine": {Interval: "1h"},
+	"backup":      {Interval: "15m"},
 	"gdrive":      {Interval: "1h"},
 	"access_log":  {Interval: "5m"},
 }
 
 var defaultClasses = map[string]fileClass{
 	"laptop": {
-		Profile:      []string{"disk", "load", "memory", "uptime", "timemachine"},
+		Profile:      []string{"disk", "load", "memory", "uptime", "timemachine", "backup"},
 		SilenceAfter: "48h",
 		Sensors:      map[string]fileSensor{"disk": {Interval: "1h"}},
 	},
 	"server": {
-		Profile:      []string{"disk", "load", "memory", "uptime", "systemd"},
+		Profile:      []string{"disk", "load", "memory", "uptime", "systemd", "backup"},
 		SilenceAfter: "10m",
 	},
 	// No profile: a service sensor needs credentials, so it runs only where the file enables

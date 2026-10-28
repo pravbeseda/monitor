@@ -25,8 +25,9 @@ page are the other half, and nothing here makes a statement about them.
 
 ## Where things live
 
-Every path is fixed by [0019](../decisions/0019-deployment-layout.md). Nothing here varies
-per installation, which is what lets the unit files be constants.
+Every path is fixed by [0019](../decisions/0019-deployment-layout.md), the backup status
+directory by [0049](../decisions/0049-a-backup-job-reports-through-a-status-file.md).
+Nothing here varies per installation, which is what lets the unit files be constants.
 
 | What | Debian | macOS | Owner, mode |
 |---|---|---|---|
@@ -49,6 +50,7 @@ per installation, which is what lets the unit files be constants.
 | hub update service and timer | `/etc/systemd/system/monitor-hub-update.service`, `monitor-hub-update.timer` | — | root, 0644 |
 | agent update service and timer | `/etc/systemd/system/monitor-agent-update.service`, `monitor-agent-update.timer` | `/Library/LaunchDaemons/io.github.pravbeseda.monitor-agent-update.plist` | root, 0644 |
 | agent update log, macOS only | — | `/var/log/monitor-agent-update.log` | root, 0600 |
+| backup status directory, created by the backup jobs' provisioning ([backup sensor](backup-sensor.md#the-status-file)) | `/var/lib/monitor-agent/backup` | `/usr/local/var/lib/monitor-agent/backup` | the jobs' account, 0755; the agent reads it as root |
 
 The hub is a Debian service only ([0005](../decisions/0005-poc-stack.md)); the agent runs on
 both.

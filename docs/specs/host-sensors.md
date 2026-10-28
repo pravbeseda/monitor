@@ -130,8 +130,8 @@ One row = one test. Anchors: `spec: host-sensors.md#<heading>`.
 
 ## Out of scope
 
-- Backups → Time Machine's are [timemachine-sensor.md](timemachine-sensor.md)'s; the rest
-  [#51](https://github.com/pravbeseda/monitor/issues/51).
+- Backups → Time Machine's are [timemachine-sensor.md](timemachine-sensor.md)'s; a job's
+  are [backup-sensor.md](backup-sensor.md)'s.
 - Per-process CPU or memory, swap, temperatures, network — later sensors, not these.
 - Which unit failed, and restarting it: the monitor observes, it does not operate.
 - Normalising load by core count: a derived series belongs to the semantic engine, not to a

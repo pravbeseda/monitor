@@ -230,7 +230,7 @@ func (it overviewItem) owns(s state.Subject) bool {
 // order a card shows them.
 var defaultMetrics = []string{
 	"disk.free_pct", "memory.available_pct", "load.avg_15m", "systemd.failed_units",
-	"timemachine.backup_age_seconds",
+	"timemachine.backup_age_seconds", "backup.success_age_seconds",
 	"site.requests_per_min", "site.server_error_pct", "site.response_p95_seconds",
 	"gdrive.free_pct",
 }
@@ -285,7 +285,8 @@ func (it overviewItem) defaultOf(metric string) (state.Subject, bool) {
 	for _, s := range pool[1:] {
 		switch {
 		case metric == "disk.free_pct" && *s.Value < *chosen.Value,
-			metric == "timemachine.backup_age_seconds" && *s.Value > *chosen.Value:
+			metric == "timemachine.backup_age_seconds" && *s.Value > *chosen.Value,
+			metric == "backup.success_age_seconds" && *s.Value > *chosen.Value:
 			chosen = s
 		}
 	}
