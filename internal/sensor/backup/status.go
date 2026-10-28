@@ -6,11 +6,14 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"math"
 	"regexp"
 	"strconv"
 	"time"
 	"unicode"
 	"unicode/utf8"
+
+	"github.com/pravbeseda/monitor/internal/sensor"
 )
 
 const (
@@ -76,7 +79,7 @@ func parse(data []byte) (status, error) {
 	}
 
 	var st status
-	for key, read := range readers {
+	for _, key := range keys {
 		raw, given := values[key]
 		if given && string(raw) == "null" {
 			given = false
@@ -87,7 +90,7 @@ func parse(data []byte) (status, error) {
 			}
 			continue
 		}
-		if err := read(&st, raw); err != nil {
+		if err := readers[key](&st, raw); err != nil {
 			return status{}, fmt.Errorf("%q: %w", key, err)
 		}
 	}
@@ -95,6 +98,11 @@ func parse(data []byte) (status, error) {
 }
 
 var required = map[string]bool{"backup": true, "job": true, "failed": true}
+
+// keys are the listed keys in the table's order, so a file missing several is always
+// reported by the same one.
+var keys = []string{"backup", "job", "failed", "last_success", "archives", "latest_archive",
+	"stored_bytes", "latest_archive_original_bytes"}
 
 var readers = map[string]func(*status, json.RawMessage) error{
 	"backup":       func(st *status, raw json.RawMessage) (err error) { st.backup, err = label(raw); return },
@@ -133,8 +141,9 @@ func label(raw json.RawMessage) (string, error) {
 		return "", fmt.Errorf("%d characters, not 1 to %d", n, maxLabelRunes)
 	}
 	for _, r := range s {
-		if unicode.IsControl(r) {
-			return "", errors.New("holds a control character")
+		// A replacement character is what an escaped lone surrogate decodes to.
+		if unicode.In(r, unicode.Cc, unicode.Cf, unicode.Zl, unicode.Zp) || r == utf8.RuneError {
+			return "", fmt.Errorf("holds the character %U", r)
 		}
 	}
 	return s, nil
@@ -156,7 +165,7 @@ func when(raw json.RawMessage) (*time.Time, error) {
 		return nil, err
 	}
 	if !timeForm.MatchString(s) {
-		return nil, fmt.Errorf("%q is not YYYY-MM-DDThh:mm:ss with a zone", s)
+		return nil, fmt.Errorf("%.40q is not YYYY-MM-DDThh:mm:ss with a zone", s)
 	}
 	t, err := time.Parse(time.RFC3339Nano, s)
 	if err != nil {
@@ -167,11 +176,49 @@ func when(raw json.RawMessage) (*time.Time, error) {
 
 func count(raw json.RawMessage) (*uint64, error) {
 	if !countForm.Match(raw) {
-		return nil, fmt.Errorf("%s is not a count in digits", raw)
+		return nil, fmt.Errorf("%.40q is not a count in digits", raw)
 	}
 	n, err := strconv.ParseUint(string(raw), 10, 64)
 	if err != nil || n > maxCount {
-		return nil, fmt.Errorf("%s is over %d", raw, uint64(maxCount))
+		return nil, fmt.Errorf("%.40q is over %d", raw, uint64(maxCount))
 	}
 	return &n, nil
+}
+
+type pair struct{ backup, job string }
+
+func (st status) measurements(at time.Time) []sensor.Measurement {
+	var out []sensor.Measurement
+	add := func(metric string, value float64) {
+		out = append(out, sensor.Measurement{
+			Metric: metric,
+			Labels: map[string]string{"backup": st.backup, "job": st.job},
+			Value:  value,
+			TS:     at,
+		})
+	}
+	failed := 0.0
+	if st.failed {
+		failed = 1
+	}
+	add(metricFailed, failed)
+	age := func(metric string, t *time.Time) {
+		if t == nil {
+			return
+		}
+		if d := at.Sub(*t); d >= 0 {
+			add(metric, math.Floor(d.Seconds()))
+		}
+	}
+	count := func(metric string, n *uint64) {
+		if n != nil {
+			add(metric, float64(*n))
+		}
+	}
+	age(metricSuccessAge, st.lastSuccess)
+	count(metricArchives, st.archives)
+	age(metricLatestArchiveAge, st.latestArchive)
+	count(metricStored, st.storedBytes)
+	count(metricLatestOriginal, st.latestOriginalBytes)
+	return out
 }

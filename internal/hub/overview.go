@@ -285,7 +285,8 @@ func (it overviewItem) defaultOf(metric string) (state.Subject, bool) {
 	for _, s := range pool[1:] {
 		switch {
 		case metric == "disk.free_pct" && *s.Value < *chosen.Value,
-			(metric == "timemachine.backup_age_seconds" || metric == "backup.success_age_seconds") && *s.Value > *chosen.Value:
+			metric == "timemachine.backup_age_seconds" && *s.Value > *chosen.Value,
+			metric == "backup.success_age_seconds" && *s.Value > *chosen.Value:
 			chosen = s
 		}
 	}

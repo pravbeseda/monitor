@@ -8,7 +8,6 @@ import (
 	"fmt"
 	"io"
 	"io/fs"
-	"math"
 	"os"
 	"path/filepath"
 	"runtime"
@@ -37,8 +36,8 @@ func DirectoryOf(goos string) string {
 	return "/var/lib/monitor-agent/backup"
 }
 
-// System is the status directory of the system the agent runs on.
-func System() string { return DirectoryOf(runtime.GOOS) }
+// SystemDirectory is the status directory of the system the agent runs on.
+func SystemDirectory() string { return DirectoryOf(runtime.GOOS) }
 
 // Sensor reports each job's status file by the agent's clock.
 type Sensor struct {
@@ -158,42 +157,4 @@ func readRegular(path string) ([]byte, error) {
 		return nil, fmt.Errorf("larger than %d bytes", maxSize)
 	}
 	return data[:n], nil
-}
-
-type pair struct{ backup, job string }
-
-func (st status) measurements(at time.Time) []sensor.Measurement {
-	var out []sensor.Measurement
-	add := func(metric string, value float64) {
-		out = append(out, sensor.Measurement{
-			Metric: metric,
-			Labels: map[string]string{"backup": st.backup, "job": st.job},
-			Value:  value,
-			TS:     at,
-		})
-	}
-	failed := 0.0
-	if st.failed {
-		failed = 1
-	}
-	add(metricFailed, failed)
-	age := func(metric string, t *time.Time) {
-		if t == nil {
-			return
-		}
-		if d := at.Sub(*t); d >= 0 {
-			add(metric, math.Floor(d.Seconds()))
-		}
-	}
-	count := func(metric string, n *uint64) {
-		if n != nil {
-			add(metric, float64(*n))
-		}
-	}
-	age(metricSuccessAge, st.lastSuccess)
-	count(metricArchives, st.archives)
-	age(metricLatestArchiveAge, st.latestArchive)
-	count(metricStored, st.storedBytes)
-	count(metricLatestOriginal, st.latestOriginalBytes)
-	return out
 }

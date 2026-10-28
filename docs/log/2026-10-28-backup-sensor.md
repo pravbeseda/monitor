@@ -1,9 +1,9 @@
 # 2026-10-28 — Backups a job reports
 
-The reader runs nightly archives from servers to a backup host, copies the repositories to
-a disk at home, prunes and checks them there, and tests a restore monthly. They asked to
-see in the monitor how many archives each repository holds, their sizes and dates, the
-failures, and the results of the checks. Decision:
+The reader asked to see backup jobs in the monitor: how many archives each repository
+holds, their sizes and dates, the failures, and the results of the checks. The setup in
+mind is a common one — hosts archiving nightly to a backup host, a machine that copies the
+repositories elsewhere, prunes and checks them, and a periodic restore test. Decision:
 [0049](../decisions/0049-a-backup-job-reports-through-a-status-file.md).
 
 ## Where the figures come from
@@ -33,5 +33,5 @@ so the spec names it to both, and the hub's file stays as it is.
 
 ## Beside the monitor
 
-The external dead-man checks the jobs already ping stay: the hub runs on one of the hosts
-whose backup it watches, and a monitor that went down with that host could not say so.
+An external dead-man check, where a job already pings one, keeps its place: a monitor
+whose hub shares a host with a backup it watches cannot report that host going down.

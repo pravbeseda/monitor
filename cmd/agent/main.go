@@ -104,7 +104,7 @@ func run(ctx context.Context, args []string, out io.Writer) error {
 			uptime.New(uptime.System(), time.Now),
 			systemd.New(systemd.System(), time.Now),
 			timemachine.New(timemachine.System(), time.Now),
-			backup.New(backup.System(), time.Now),
+			backup.New(backup.SystemDirectory(), time.Now),
 			traffic,
 		},
 		Client: agent.NewHTTPClient(opts.hub, opts.token, requestTimeout),

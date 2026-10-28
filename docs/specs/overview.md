@@ -221,6 +221,8 @@ English catalogue's; every one of them has its Russian. `sites` is the node of c
 | volumes `/a` and `/b`, both at 12.0% | the default row is `/a`'s, the first in the page order |
 | a Mac with Time Machine destinations backed up 2 days and 9 days ago, both fresh | the 9-day one |
 | the 9-day destination stale, the 2-day one fresh | the 2-day one |
+| a server with backup jobs that last succeeded 2 days and 9 days ago, both fresh | the 9-day one |
+| the 9-day job stale, the 2-day one fresh | the 2-day one |
 | a site | `site.requests_per_min`, `site.server_error_pct`, `site.response_p95_seconds` |
 | a Google Drive service node | `gdrive.free_pct` |
 | a Mac with no `systemd` series | no `systemd.failed_units` row |

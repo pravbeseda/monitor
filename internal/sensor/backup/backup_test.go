@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"runtime"
 	"slices"
 	"strings"
 	"syscall"
@@ -248,6 +249,27 @@ func TestCollectSkipsAFileReplacedByAPipe(t *testing.T) {
 	}
 }
 
+// spec: backup-sensor.md#files — a file a symbolic link replaces after the listing is not
+// followed.
+func TestCollectDoesNotFollowALinkSwappedIn(t *testing.T) {
+	dir := t.TempDir()
+	write(t, dir, "a.json", valid)
+	swapped := write(t, dir, "b.json", `{"backup": "site-b", "job": "create", "failed": true}`)
+	target := write(t, t.TempDir(), "c.json", `{"backup": "site-c", "job": "create", "failed": true}`)
+	s := backup.New(dir, func() time.Time { return collected })
+	backup.BeforeRead(s, func(name string) {
+		if name == "b.json" {
+			_ = os.Remove(swapped)
+			_ = os.Symlink(target, swapped)
+		}
+	})
+	got, err := s.Collect(context.Background())
+	if err != nil {
+		t.Fatalf("Collect: %v", err)
+	}
+	assertSeries(t, got, validSeries)
+}
+
 // spec: backup-sensor.md#files — a file that cannot be read, beside a valid one.
 func TestCollectAnUnreadableFile(t *testing.T) {
 	skipAsRoot(t)
@@ -331,6 +353,9 @@ func TestCollectChecksTheContent(t *testing.T) {
 		{"backup of 64 Cyrillic characters", `{"backup": "` + label(64, "д") + `", "job": "create", "failed": true}`,
 			[]string{"backup.failed " + label(64, "д") + "/create=1"}},
 		{"job holding a newline", `{"backup": "site-w", "job": "cre\nate", "failed": true}`, nil},
+		{"job holding a right-to-left override", `{"backup": "site-w", "job": "cre\u202eate", "failed": true}`, nil},
+		{"job holding a line separator", `{"backup": "site-w", "job": "cre\u2028ate", "failed": true}`, nil},
+		{"job holding a lone surrogate", `{"backup": "site-w", "job": "cre\ud800ate", "failed": true}`, nil},
 		{"backup carried byte for byte", `{"backup": "Сайт — A", "job": "create", "failed": true}`, []string{"backup.failed Сайт — A/create=1"}},
 		{"archives 14.0", withArchives("14.0"), nil},
 		{"archives 14.5", withArchives("14.5"), nil},
@@ -397,10 +422,13 @@ func TestCollectValues(t *testing.T) {
 		{"an age of 0", `{"backup": "b", "job": "j", "failed": false, "last_success": "` + at(0) + `"}`,
 			[]string{"backup.failed b/j=0", "backup.success_age_seconds b/j=0"}},
 		{"never succeeded", `{"backup": "b", "job": "j", "failed": true}`, []string{"backup.failed b/j=1"}},
+		{"only the required keys", `{"job": "j", "failed": false, "backup": "b"}`, []string{"backup.failed b/j=0"}},
 		{"an empty count beside a date", `{"backup": "b", "job": "j", "failed": false, "archives": 0, "latest_archive": "` + at(-3*time.Hour) + `"}`,
 			[]string{"backup.failed b/j=0", "backup.archives b/j=0", "backup.latest_archive_age_seconds b/j=10800"}},
-		{"dates ahead of the clock", `{"backup": "b", "job": "j", "failed": false, "archives": 3, "last_success": "` + at(500*time.Millisecond) + `", "latest_archive": "` + at(24*time.Hour) + `"}`,
-			[]string{"backup.failed b/j=0", "backup.archives b/j=3"}},
+		{"a success ahead of the clock", `{"backup": "b", "job": "j", "failed": false, "archives": 3, "last_success": "` + at(500*time.Millisecond) + `", "latest_archive": "` + at(-time.Hour) + `"}`,
+			[]string{"backup.failed b/j=0", "backup.archives b/j=3", "backup.latest_archive_age_seconds b/j=3600"}},
+		{"an archive ahead of the clock", `{"backup": "b", "job": "j", "failed": false, "archives": 3, "last_success": "` + at(-time.Hour) + `", "latest_archive": "` + at(24*time.Hour) + `"}`,
+			[]string{"backup.failed b/j=0", "backup.archives b/j=3", "backup.success_age_seconds b/j=3600"}},
 		{"sizes unchanged", `{"backup": "b", "job": "j", "failed": false, "stored_bytes": 4000000000, "latest_archive_original_bytes": 2500000000}`,
 			[]string{"backup.failed b/j=0", "backup.stored_bytes b/j=4e+09", "backup.latest_archive_original_bytes b/j=2.5e+09"}},
 	}
@@ -424,11 +452,15 @@ func TestCollectAgesByTheJobsDateNotTheFiles(t *testing.T) {
 	assertSeries(t, collectOK(t, dir), "backup.failed b/j=0", "backup.success_age_seconds b/j=259200")
 }
 
-// spec: backup-sensor.md#applicability
+// spec: backup-sensor.md#applicability — the sensor is applicable on the system the test
+// runs on, and reads that system's directory.
 func TestApplicableOnLinuxAndMacOS(t *testing.T) {
-	s := backup.New(t.TempDir(), time.Now)
+	s := backup.New(backup.SystemDirectory(), time.Now)
 	if s.Name() != "backup" || !s.Applicable() {
 		t.Fatalf("sensor %q applicable %v, want backup and true", s.Name(), s.Applicable())
+	}
+	if got, want := backup.SystemDirectory(), backup.DirectoryOf(runtime.GOOS); got != want {
+		t.Fatalf("SystemDirectory() = %q, want %q", got, want)
 	}
 }
 

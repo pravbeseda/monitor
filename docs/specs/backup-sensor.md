@@ -65,14 +65,17 @@ bytes; whitespace may follow it, a second value may not.
 | `stored_bytes` | count | no | what the repository occupies on its disk |
 | `latest_archive_original_bytes` | count | no | the size of the data the newest archive holds, before compression and deduplication |
 
-- **A label** is a string of 1 to 64 characters with no control character.
+- **A label** is a string of 1 to 64 characters, none of them a control, format or
+  separator character (Unicode Cc, Cf, Zl, Zp) or U+FFFD, what an escaped lone surrogate
+  decodes to.
 - **A time** is `YYYY-MM-DDThh:mm:ss`, optionally a fraction of a second, then `Z` or an
   offset `±hh:mm` — what `date -u +%Y-%m-%dT%H:%M:%SZ` prints on Linux and macOS alike.
 - **A count** is a number written in digits only — no sign, fraction or exponent — from 0 to
   9 007 199 254 740 992 (2⁵³).
 - **`null` on an optional key** means the key is absent, so a job may write `null` for a
   figure it does not have; on a required key it is an error.
-- **Keys match exactly**: `Failed` is not `failed` but a key the table does not list, and a
+- **Keys match exactly**, once JSON's escapes are decoded: `Failed` is not `failed` but a key
+  the table does not list, and a
   key the table does not list is ignored, so a job may carry more than the sensor reads. A
   listed key given twice is an error.
 
@@ -116,6 +119,7 @@ One row = one test. Anchors: `spec: backup-sensor.md#<heading>`.
 | beside a valid file: a subdirectory named `d.json`, a symbolic link to a valid file, a named pipe `p.json`, `.hidden.json`, `X.JSON` and `x.json.tmp` | the valid file's metrics only, no error, and the pipe does not hold the collection up |
 | a file listed and then deleted before it is read, beside a valid one | the valid file's metrics, and no error: a backup being retired |
 | a file that cannot be read, beside a valid one | the valid file's metrics, and an error the agent logs naming the other |
+| a file a symbolic link replaces after the listing, beside a valid one | the valid file's metrics, and no error: the link is not followed |
 | two valid files naming the same `backup` and `job`, beside a third | the third's metrics only, and an error the agent logs naming both files and the pair: one series cannot hold two files |
 | an invalid file naming the same `backup` and `job` as a valid one | the valid file's metrics, and an error naming the invalid one: only valid files make a pair |
 | two invalid files beside a valid one | the valid file's metrics, and one error naming both files |
@@ -140,7 +144,7 @@ the case gives either the error the agent logs naming the file, or the file's ow
 | `failed` the string `"false"` | error |
 | `backup` `""`, or 65 characters | error |
 | `backup` 64 characters of Cyrillic | read |
-| `job` holding a newline | error |
+| `job` holding a newline, a right-to-left override (U+202E), a line separator (U+2028) or an escaped lone surrogate `\ud800` | error, one case each |
 | `backup` `Сайт — A` | labelled `Сайт — A`, byte for byte |
 | `archives` `14.0`, `14.5`, `1e3`, `-1`, `"14"` or 9 007 199 254 740 993 | error, one case each |
 | `archives` 9 007 199 254 740 992 | read |
@@ -157,14 +161,15 @@ the case gives either the error the agent logs naming the file, or the file's ow
 | `failed` true | `backup.failed` 1 |
 | `failed` false | `backup.failed` 0 |
 | `last_success` 1 day, 2 hours and 0.9 s before the agent's clock | `backup.success_age_seconds` 93 600 |
-| `last_success` `2026-08-28T07:30:00+03:00`, the agent's clock at 05:30 UTC that day | `backup.success_age_seconds` 3 600 |
+| `last_success` `2026-08-28T12:00:00+03:00`, the agent's clock at 10:00 UTC that day | `backup.success_age_seconds` 3 600 |
 | `last_success` equal to the agent's clock | `backup.success_age_seconds` 0 |
 | `last_success` 3 days before the agent's clock, in a file written a second ago | `backup.success_age_seconds` 259 200: the file's modification time is not the job's date |
 | `failed` true and no `last_success` — a job that never succeeded | `backup.failed` 1 and no `backup.success_age_seconds` |
 | only the required keys | `backup.failed` alone |
 | `archives` 0 beside a `latest_archive` | `backup.archives` 0 and the age of `latest_archive`: an empty count is a reading, and the figures are not checked against each other |
 | `latest_archive` 3 hours before the agent's clock | `backup.latest_archive_age_seconds` 10 800 |
-| `last_success` 0.5 s, or `latest_archive` a day, later than the agent's clock — a clock set back — beside the other keys | no measurement of that age, the others collected, and no error: a negative age is not a reading |
+| `last_success` 0.5 s later than the agent's clock — a clock set back — beside a `latest_archive` before it | no `backup.success_age_seconds`, the archive's age and the rest collected, and no error: a negative age is not a reading |
+| `latest_archive` a day later than the agent's clock, beside a `last_success` before it | no `backup.latest_archive_age_seconds`, the success age and the rest collected, and no error |
 | `stored_bytes` 4 000 000 000 and `latest_archive_original_bytes` 2 500 000 000 | those two values, unchanged |
 
 ### Applicability
