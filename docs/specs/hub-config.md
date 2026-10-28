@@ -46,7 +46,7 @@ classes:
   laptop:
     # A written profile replaces the compiled-in one, so the class misses the sensors
     # later releases add to it; leave it out to follow them.
-    profile: [disk, load, memory, uptime, timemachine]
+    profile: [disk, load, memory, uptime, timemachine, backup]
     silence_after: 48h
     agent_target: 1.4.0
     sensors:
@@ -69,9 +69,9 @@ nodes:
 **Product defaults** (compiled in, overridable at every layer): `base_tick` 5m, the
 filesystem allow-list and the skip list above, `disk` every 15m, the
 [host sensors](host-sensors.md) `load` and `memory` every 5m and `uptime` and `systemd` every
-15m, [`timemachine`](timemachine-sensor.md) and `gdrive` every 1h, and classes
-`laptop` (profile `[disk, load, memory, uptime, timemachine]`, disk every 1h), `server` (profile
-`[disk, load, memory, uptime, systemd]`) and `service` (no profile, `silence_after` 3h), whose
+15m, [`backup`](backup-sensor.md) every 15m, [`timemachine`](timemachine-sensor.md) and
+`gdrive` every 1h, and classes `laptop` (profile `[disk, load, memory, uptime, timemachine,
+backup]`, disk every 1h), `server` (profile `[disk, load, memory, uptime, systemd, backup]`) and `service` (no profile, `silence_after` 3h), whose
 nodes the hub collects itself ([services.md](services.md)), and `sites` (profile
 `[access_log]`, `access_log` every 5m, `silence_after` 30m), whose node the hosts of its sites
 report for ([site-traffic.md](site-traffic.md#the-file)). A compiled-in interval never stops the hub
@@ -167,8 +167,8 @@ The node is listed in `nodes`; the layers apply most-specific-last.
 | `skip_mounts` set to an empty list | nothing is skipped by the list: an empty list is a value, not an omission; volumes macOS hides are still skipped ([disk sensor](disk-sensor.md#enumeration)) |
 | a sensor no layer mentions | absent from the delivered configuration |
 | the node hosts sites of the sites node | `access_log` delivered with its sites, at the sites node's interval, beside its own sensors ([site-traffic.md](site-traffic.md#configuration)) |
-| a node of the compiled-in `server` class, the file setting no `profile` for it | `load` and `memory` every 5m; `disk`, `uptime` and `systemd` every 15m |
-| a node of the compiled-in `laptop` class, the file setting no `profile` for it | `load` and `memory` every 5m, `uptime` every 15m, `disk` and `timemachine` every 1h |
+| a node of the compiled-in `server` class, the file setting no `profile` for it | `load` and `memory` every 5m; `disk`, `uptime`, `systemd` and `backup` every 15m |
+| a node of the compiled-in `laptop` class, the file setting no `profile` for it | `load` and `memory` every 5m, `uptime` and `backup` every 15m, `disk` and `timemachine` every 1h |
 | the file sets `profile: [disk]` for a compiled-in class | only `disk`: a profile in the file replaces the compiled-in one, it does not add to it |
 | the file sets `base_tick: 1h` for `laptop`, and no interval for the host sensors | the hub starts, and `load`, `memory` and `uptime` collect every 1h: a compiled-in interval below the tick is raised to it |
 | top-level `agent_target` | the node's target |

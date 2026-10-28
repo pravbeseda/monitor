@@ -197,4 +197,12 @@ var catalogue = map[string]map[Locale]string{
 	"metric.site.server_error_pct":          {English: "Server errors", Russian: "Ошибки сервера"},
 	"metric.site.response_p95_seconds":      {English: "Response time, p95", Russian: "Время ответа, p95"},
 	"metric.site.pageviews_24h":             {English: "Page views, 24 h", Russian: "Просмотры за сутки"},
+
+	"family.backup":                               {English: "Backups", Russian: "Бэкапы"},
+	"metric.backup.failed":                        {English: "Failed {backup} {job}", Russian: "Сбой {backup} {job}"},
+	"metric.backup.success_age_seconds":           {English: "Since success {backup} {job}", Russian: "С успеха {backup} {job}"},
+	"metric.backup.archives":                      {English: "Archives {backup} {job}", Russian: "Архивов {backup} {job}"},
+	"metric.backup.latest_archive_age_seconds":    {English: "Newest archive {backup} {job}", Russian: "Свежий архив {backup} {job}"},
+	"metric.backup.stored_bytes":                  {English: "Stored {backup} {job}", Russian: "Занято {backup} {job}"},
+	"metric.backup.latest_archive_original_bytes": {English: "Newest archive data {backup} {job}", Russian: "Данные архива {backup} {job}"},
 }

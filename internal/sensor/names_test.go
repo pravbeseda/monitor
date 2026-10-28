@@ -6,6 +6,7 @@ import (
 	"github.com/pravbeseda/monitor/internal/i18n"
 	"github.com/pravbeseda/monitor/internal/sensor"
 	"github.com/pravbeseda/monitor/internal/sensor/accesslog"
+	"github.com/pravbeseda/monitor/internal/sensor/backup"
 	"github.com/pravbeseda/monitor/internal/sensor/disk"
 	"github.com/pravbeseda/monitor/internal/sensor/gdrive"
 	"github.com/pravbeseda/monitor/internal/sensor/load"
@@ -40,6 +41,13 @@ func TestBuiltInSensorsNameTheirMetrics(t *testing.T) {
 			"systemd.failed_units": {"Failed units", "Упавшие юниты"}}},
 		{timemachine.New(nil, nil), map[string]name{"timemachine": {"Time Machine", "Time Machine"}}, map[string]name{
 			"timemachine.backup_age_seconds": {"Backup {destination}", "Бэкап {destination}"}}},
+		{backup.New("", nil), map[string]name{"backup": {"Backups", "Бэкапы"}}, map[string]name{
+			"backup.failed":                        {"Failed {backup} {job}", "Сбой {backup} {job}"},
+			"backup.success_age_seconds":           {"Since success {backup} {job}", "С успеха {backup} {job}"},
+			"backup.archives":                      {"Archives {backup} {job}", "Архивов {backup} {job}"},
+			"backup.latest_archive_age_seconds":    {"Newest archive {backup} {job}", "Свежий архив {backup} {job}"},
+			"backup.stored_bytes":                  {"Stored {backup} {job}", "Занято {backup} {job}"},
+			"backup.latest_archive_original_bytes": {"Newest archive data {backup} {job}", "Данные архива {backup} {job}"}}},
 		{gdrive.New(gdrive.Credentials{}), map[string]name{"gdrive": {"Google Drive", "Google Drive"}}, map[string]name{
 			"gdrive.free_pct":   {"Free on Google Drive", "Свободно на Google Drive"},
 			"gdrive.free_bytes": {"Free on Google Drive", "Свободно на Google Drive"}}},

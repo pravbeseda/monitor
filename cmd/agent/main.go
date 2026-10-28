@@ -18,6 +18,7 @@ import (
 	"github.com/pravbeseda/monitor/internal/logging"
 	"github.com/pravbeseda/monitor/internal/sensor"
 	"github.com/pravbeseda/monitor/internal/sensor/accesslog"
+	"github.com/pravbeseda/monitor/internal/sensor/backup"
 	"github.com/pravbeseda/monitor/internal/sensor/disk"
 	"github.com/pravbeseda/monitor/internal/sensor/load"
 	"github.com/pravbeseda/monitor/internal/sensor/memory"
@@ -103,6 +104,7 @@ func run(ctx context.Context, args []string, out io.Writer) error {
 			uptime.New(uptime.System(), time.Now),
 			systemd.New(systemd.System(), time.Now),
 			timemachine.New(timemachine.System(), time.Now),
+			backup.New(backup.System(), time.Now),
 			traffic,
 		},
 		Client: agent.NewHTTPClient(opts.hub, opts.token, requestTimeout),

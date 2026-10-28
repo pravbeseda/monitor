@@ -109,6 +109,7 @@ item's page.
 | `load.avg_15m` | — |
 | `systemd.failed_units` | — |
 | `timemachine.backup_age_seconds` | the destination whose backup is oldest among those not stale; among all when every one is stale |
+| `backup.success_age_seconds` | the job whose last success is oldest among those not stale; among all when every one is stale |
 | `site.requests_per_min` | — |
 | `site.server_error_pct` | — |
 | `site.response_p95_seconds` | — |

@@ -87,8 +87,8 @@ health wait for sources that report on their own
 2. **MVP** — the machine itself beside its disks: load, memory, uptime and failed services
    from the agents ([host sensors](specs/host-sensors.md)). Finance and health follow once
    they have automatic sources. Time Machine reports its own backups, so a Mac's backups need
-   no configuration ([spec](specs/timemachine-sensor.md)); backups that name a file or a job
-   have their own design question ([#51](https://github.com/pravbeseda/monitor/issues/51)).
+   no configuration ([spec](specs/timemachine-sensor.md)); any other backup job reports
+   through a status file it writes after each run ([spec](specs/backup-sensor.md)).
 3. **Semantic engine** — health, anomalies, trends, forecasts, time travel. The anomaly
    rank came first, as the slice mission control read
    ([log](log/2026-09-23-mission-control.md)).

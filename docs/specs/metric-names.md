@@ -54,6 +54,13 @@ and its family:
 | `systemd.failed_units` | Failed units | Упавшие юниты |
 | family `timemachine` | Time Machine | Time Machine |
 | `timemachine.backup_age_seconds` | Backup {destination} | Бэкап {destination} |
+| family `backup` | Backups | Бэкапы |
+| `backup.failed` | Failed {backup} {job} | Сбой {backup} {job} |
+| `backup.success_age_seconds` | Since success {backup} {job} | С успеха {backup} {job} |
+| `backup.archives` | Archives {backup} {job} | Архивов {backup} {job} |
+| `backup.latest_archive_age_seconds` | Newest archive {backup} {job} | Свежий архив {backup} {job} |
+| `backup.stored_bytes` | Stored {backup} {job} | Занято {backup} {job} |
+| `backup.latest_archive_original_bytes` | Newest archive data {backup} {job} | Данные архива {backup} {job} |
 | family `gdrive` | Google Drive | Google Drive |
 | `gdrive.free_pct`, `gdrive.free_bytes` | Free on Google Drive | Свободно на Google Drive |
 | family `site` | Site | Сайт |
