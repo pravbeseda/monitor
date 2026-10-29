@@ -73,6 +73,7 @@ One decision per file, each stating what was rejected and why. New records start
 | [0047](decisions/0047-a-pull-request-opens-without-a-gate.md) | A pull request opens without a gate; only the merge waits | accepted |
 | [0048](decisions/0048-a-sensor-names-its-metrics.md) | A sensor names its metrics; the hub shows the name wherever a person reads one | accepted |
 | [0049](decisions/0049-a-backup-job-reports-through-a-status-file.md) | A backup job reports through a status file the agent reads | accepted |
+| [0050](decisions/0050-macos-means-apple-silicon.md) | A macOS node is an Apple Silicon Mac; Intel Macs are not supported | accepted |
 
 ## Behaviour specs
 

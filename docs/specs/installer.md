@@ -14,7 +14,8 @@
   [0024](../decisions/0024-the-hub-follows-a-target-with-a-kept-install-script.md),
   [0025](../decisions/0025-the-hub-checks-hourly-and-downloads-a-binary-to-install-it.md),
   [0027](../decisions/0027-the-hub-installer-reuses-the-binary-in-place.md),
-  [0028](../decisions/0028-agents-follow-a-target-the-hub-serves.md)
+  [0028](../decisions/0028-agents-follow-a-target-the-hub-serves.md),
+  [0050](../decisions/0050-macos-means-apple-silicon.md)
 
 ## Purpose
 
@@ -192,6 +193,7 @@ tables is proved by the suite.
 | no `curl`, `openssl`, `tar` or `find` on `PATH` | the run names the one that is missing |
 | a script truncated in transit | nothing runs at all |
 | a machine whose shell runs under Rosetta | the `darwin-arm64` asset is what lands: the run reads `uname` and `sysctl.proc_translated` off `PATH` |
+| an Intel Mac | nothing is installed, and the run says Intel Macs are not supported ([0050](../decisions/0050-macos-means-apple-silicon.md)) |
 | a run that installs anything | it prints the version it installed, every path it wrote, and the command that shows the service's state |
 | `-h` | the usage on stdout, exit 0 |
 | no role, an unknown role, or a role given twice | the usage on stderr |

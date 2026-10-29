@@ -1,5 +1,5 @@
 # Publishing rules from docs/specs/release.md. Only a tag releases — pushed, or named when the
-# run is started by hand or by auto-tag.yml — and a run either publishes nine files or
+# run is started by hand or by auto-tag.yml — and a run either publishes eight files or
 # publishes nothing. Every action is pinned by commit: the publish job signs what the build
 # jobs produce, so the chain is only as pinned as its least pinned link.
 name: Release
@@ -100,7 +100,7 @@ jobs:
   build-darwin:
     needs: guard
     # The darwin half of the disk sensor is cgo (ADR 0014), so only a macOS runner compiles
-    # it; the amd64 slice cross-compiles from the arm64 runner with the same toolchain.
+    # it; Intel Macs are not supported (ADR 0050), so arm64 is the only slice.
     runs-on: macos-latest
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
@@ -111,16 +111,14 @@ jobs:
       - name: go test
         run: go test -race ./...
 
-      - name: Build the agent for both Macs
+      - name: Build the agent for Apple Silicon
         env:
           VERSION: ${{ needs.guard.outputs.version }}
         run: |
           mkdir dist
-          for arch in arm64 amd64; do
-            CGO_ENABLED=1 GOOS=darwin GOARCH="$arch" go build \
-              -ldflags "-X github.com/pravbeseda/monitor/internal/version.Current=$VERSION" \
-              -o "dist/monitor-agent-$VERSION-darwin-$arch" ./cmd/agent
-          done
+          CGO_ENABLED=1 GOOS=darwin GOARCH=arm64 go build \
+            -ldflags "-X github.com/pravbeseda/monitor/internal/version.Current=$VERSION" \
+            -o "dist/monitor-agent-$VERSION-darwin-arm64" ./cmd/agent
 
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
@@ -164,20 +162,19 @@ jobs:
             --sort=name --mtime=@0 --owner=0 --group=0 --numeric-owner \
             -C "$RUNNER_TEMP" monitor-installer
 
-      - name: The seven assets are all here
+      - name: The six assets are all here
         run: |
           cd dist
           for asset in \
             "monitor-agent-$VERSION-linux-amd64" \
             "monitor-agent-$VERSION-linux-arm64" \
-            "monitor-agent-$VERSION-darwin-amd64" \
             "monitor-agent-$VERSION-darwin-arm64" \
             "monitor-hub-$VERSION-linux-amd64" \
             "monitor-hub-$VERSION-linux-arm64" \
             "monitor-installer-$VERSION.tar.gz"; do
             [ -f "$asset" ] || { echo "missing $asset" >&2; exit 1; }
           done
-          [ "$(ls | wc -l)" -eq 7 ] || { echo "dist holds more than the seven assets" >&2; ls >&2; exit 1; }
+          [ "$(ls | wc -l)" -eq 6 ] || { echo "dist holds more than the six assets" >&2; ls >&2; exit 1; }
 
       # A draft owns no tag, so one left by a run that died mid-upload would make the tag
       # ambiguous and could be published in place of this run's.
@@ -220,7 +217,7 @@ jobs:
             deploy/verify-release.sh --key deploy/release-signing-key.pub "$asset"
           done
 
-      # Created as a draft and published in one call at the end, once all nine files are
+      # Created as a draft and published in one call at the end, once all eight files are
       # attached: no client sees a release holding half of them.
       - name: Publish the release
         run: |

@@ -7,7 +7,8 @@ everything later grows from without a rewrite:
 
 **agent on a node → ingest on the hub → storage → web page → Telegram alert.**
 
-Scope: laptop-class nodes (macOS) and server-class nodes (Debian). Windows comes later,
+Scope: laptop-class nodes (macOS on Apple Silicon,
+[0050](decisions/0050-macos-means-apple-silicon.md)) and server-class nodes (Debian). Windows comes later,
 but cross-platform support is a stack requirement from day one.
 
 Metrics: free space (bytes and percent) per mounted volume per node. The agent's

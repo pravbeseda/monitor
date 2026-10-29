@@ -310,6 +310,68 @@ func TestABootstrapRunInstallsTheNewestRelease(t *testing.T) {
 	}
 }
 
+// spec: installer.md#fetching-and-checking-a-release — a Mac gets the darwin-arm64 asset, under
+// Rosetta too, and an Intel Mac gets nothing. uname and sysctl are stubs ahead of PATH, so the
+// row holds on any host.
+func TestAMacIsAnAppleSiliconOne(t *testing.T) {
+	tests := []struct {
+		name       string
+		arch       string // what uname -m reports
+		translated string // what sysctl.proc_translated reports
+		refuses    string // empty when the run installs darwin-arm64
+	}{
+		{name: "an Apple Silicon Mac", arch: "arm64", translated: "0"},
+		{name: "a shell under Rosetta", arch: "x86_64", translated: "1"},
+		{name: "an Intel Mac", arch: "x86_64", translated: "0", refuses: "Intel Macs are not supported"},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			o := newOrigin(t)
+			asset := "monitor-agent-" + o.version + "-darwin-arm64"
+			o.set(asset, syntheticBinary("agent", o.version))
+			o.sign(t)
+			stubs := t.TempDir()
+			writeStub(t, stubs, "uname", "case $1 in -s) echo Darwin ;; -m) echo "+test.arch+" ;; esac\n")
+			writeStub(t, stubs, "sysctl", "echo "+test.translated+"\n")
+			run := newBootstrapRun(t, o, "agent", "--hub", "https://hub.example.com", "--node", "laptop-a")
+			run.pathDir = stubs + string(os.PathListSeparator) + os.Getenv("PATH")
+
+			stdout, stderr, err := run.start(t)
+
+			asked := strings.Join(o.requests(), " ")
+			if test.refuses == "" {
+				if err != nil {
+					t.Fatalf("the run failed: %v\n%s%s", err, stdout, stderr)
+				}
+				if !strings.Contains(asked, asset) {
+					t.Errorf("the run did not ask for %s: %s", asset, asked)
+				}
+				return
+			}
+			if err == nil {
+				t.Fatalf("the run succeeded; it had to refuse\n%s%s", stdout, stderr)
+			}
+			if !strings.Contains(stderr, test.refuses) {
+				t.Errorf("the refusal does not say %q:\n%s", test.refuses, stderr)
+			}
+			if _, err := os.Stat(run.record); err == nil {
+				t.Error("a refusal still handed over to an installer")
+			}
+			if strings.Contains(asked, "monitor-agent-") {
+				t.Errorf("an Intel Mac still fetched a binary: %s", asked)
+			}
+		})
+	}
+}
+
+func writeStub(t *testing.T, dir, name, body string) {
+	t.Helper()
+	if err := os.WriteFile(filepath.Join(dir, name), []byte("#!/bin/sh\n"+body), 0o755); err != nil {
+		t.Fatal(err)
+	}
+}
+
 // spec: installer.md#fetching-and-checking-a-release — every way a release can fail to be
 // what it says it is, and none of them installs anything.
 func TestABootstrapRunThatMustInstallNothing(t *testing.T) {

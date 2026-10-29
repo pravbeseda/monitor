@@ -343,6 +343,7 @@ platform_name() {
 	arm64 | aarch64) arch=arm64 ;;
 	*) refuse "unsupported architecture: $arch" ;;
 	esac
+	[ "$os-$arch" != darwin-amd64 ] || refuse "Intel Macs are not supported"
 	printf '%s-%s' "$os" "$arch"
 }
 

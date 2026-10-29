@@ -5,6 +5,8 @@
   agent; [0023](0023-proxy-holds-the-web-perimeter.md) (the hub authenticates only ingest);
   answers [0024](0024-the-hub-follows-a-target-with-a-kept-install-script.md) point 7 for a
   kept script on a node
+- **Amended by:** [0050](0050-macos-means-apple-silicon.md), which drops the Intel Mac this
+  ADR's issue #17 consequence describes
 - **Date:** 2026-09-17
 - **Source:** [issue #32](https://github.com/pravbeseda/monitor/issues/32), the half of
   [0022](0022-updates-are-pulled.md) that [0024](0024-the-hub-follows-a-target-with-a-kept-install-script.md)

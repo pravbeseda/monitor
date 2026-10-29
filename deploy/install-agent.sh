@@ -212,9 +212,8 @@ create_file() {
 
 # A temporary next to $1, under a name nothing can predict, in $temp. Every write after the
 # creation re-opens the path by name and would follow a symlink dropped there in between, and
-# the directory need not be root's — on a Homebrew Mac /usr/local/etc is not. mktemp creates
-# it 0600, which is the environment file's own mode; a caller that needs another one chmods
-# before the rename.
+# the directory need not be root's. mktemp creates it 0600, which is the environment file's
+# own mode; a caller that needs another one chmods before the rename.
 create_temp() {
 	mkdir -p "$(dirname "$1")"
 	temp=$(mktemp "$1.XXXXXXXX")
