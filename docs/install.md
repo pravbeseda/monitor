@@ -94,8 +94,9 @@ curl -fLO "$base/SHA256SUMS"
 curl -fLO "$base/SHA256SUMS.sig"
 ```
 
-The agent comes as `linux-amd64`, `linux-arm64`, `darwin-amd64` and `darwin-arm64`, the hub
-as `linux-amd64` and `linux-arm64`; download the ones your machines need.
+The agent comes as `linux-amd64`, `linux-arm64` and `darwin-arm64`, the hub as `linux-amd64`
+and `linux-arm64`; download the ones your machines need. Intel Macs are not supported
+([ADR 0050](decisions/0050-macos-means-apple-silicon.md)).
 
 Check every binary **before renaming it**, since the manifest names the asset it published.
 The verifier and the key live in this checkout:
@@ -143,9 +144,10 @@ GOOS=linux GOARCH=amd64 CGO_ENABLED=0 go build -o dist/monitor-hub ./cmd/hub
 Use `GOARCH=arm64` for an arm server. The hub cross-compiles because its SQLite driver needs
 no cgo ([ADR 0005](decisions/0005-poc-stack.md)).
 
-**The macOS agent must be built on a Mac.** Its disk sensor is cgo
+**The macOS agent must be built on an Apple Silicon Mac.** Its disk sensor is cgo
 ([ADR 0014](decisions/0014-macos-available-space.md)), so `GOOS=darwin` from Linux is not an
-option:
+option, and an Intel Mac is not supported
+([ADR 0050](decisions/0050-macos-means-apple-silicon.md)):
 
 ```sh
 go build -o dist/monitor-agent ./cmd/agent
@@ -253,8 +255,7 @@ agent built before them does not know, and the install would report success on a
 exits every time it starts.
 
 The macOS node is the same command with its own name (`--node laptop-a`) and its own
-binary — a `darwin-arm64` or `darwin-amd64` asset, verified and renamed the same way. The
-script picks
+binary — the `darwin-arm64` asset, verified and renamed the same way. The script picks
 systemd or launchd from the system it is running on. It prints every path it wrote and the
 command that shows the service's state.
 
@@ -537,10 +538,6 @@ sudo rm -r "$home/monitor"
 sudo launchctl bootstrap system "/Library/LaunchDaemons/$plist"
 sudo tail -n 20 /var/log/monitor-agent-update.log
 ```
-
-On an Intel Mac with Homebrew, `/usr/local` belongs to an admin account, and so does what root
-runs from under it — the binary and this script alike
-([issue #17](https://github.com/pravbeseda/monitor/issues/17)).
 
 **Pinning a node, a class or the fleet** is an `agent_target` edit and a hub restart; every
 node takes it within the hour. **Stop the timer first** before stopping an agent on purpose, or
