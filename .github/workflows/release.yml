@@ -225,7 +225,7 @@ jobs:
             --draft --title "$GITHUB_REF_NAME" --generate-notes \
             dist/*
           attached=$(gh release view "$GITHUB_REF_NAME" --json assets --jq '.assets | length')
-          [ "$attached" -eq 9 ] || { echo "the draft holds $attached assets, not 9" >&2; exit 1; }
+          [ "$attached" -eq 8 ] || { echo "the draft holds $attached assets, not 8" >&2; exit 1; }
           # make_latest=legacy rather than gh's --latest: runs for two tags pushed together
           # can finish in either order, and "latest" must be the higher version rather than
           # whichever run got here last. GitHub does that comparison itself.
