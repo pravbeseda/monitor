@@ -89,6 +89,7 @@ One row = one test. Anchors: `spec: thresholds.md#<heading>`.
 | a series whose stored threshold this build cannot read | the form, with the unreadable values blank and a line saying the stored configuration could not be read and saving will replace it |
 | the page at any time | never refreshed under the reader, typing or not: nothing on a form changes by itself, and a refresh would replace what they typed — or the refusal they are reading — with the stored configuration ([web.md](web.md#live)) |
 | a query naming fewer labels than the series carries, or an extra one | `404`: the address names one series or none |
+| a series `{queue: ""}` addressed with `label.queue=` | its form; the same address without `label.queue=` answers `404`, and a save from the form is kept for `{queue: ""}`, not for `{}` |
 | a metric or label value that is not a valid query at all | `400` as a page, in the manner of [history](history.md#refusals) |
 | the page in Russian | every label, unit and message from the Russian catalogue ([0008](../decisions/0008-english-repo-bilingual-ui.md)) |
 | a method other than `GET` or `POST` | `405` |

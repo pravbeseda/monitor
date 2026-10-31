@@ -229,6 +229,27 @@ func TestThresholdFormRefusesAnUnknownSeries(t *testing.T) {
 	}
 }
 
+// spec: thresholds.md#form — a series carrying a label empty is addressed with that label
+// empty; without it the address names another series, and a save is kept for this one.
+func TestThresholdFormOfASeriesWithAnEmptyLabel(t *testing.T) {
+	queue := storage.SeriesRef{Node: "server-b", Metric: "queue.depth", Labels: map[string]string{"queue": ""}}
+	store := holding(queue)
+	address := "/thresholds?label.queue=&metric=queue.depth&node=server-b"
+
+	if status, body := openForm(t, store, address); status != http.StatusOK {
+		t.Fatalf("GET %s = %d, want 200: %s", address, status, body)
+	}
+	if status, body := openForm(t, store, "/thresholds?metric=queue.depth&node=server-b"); status != http.StatusNotFound {
+		t.Errorf("GET without label.queue = %d, want 404: %s", status, body)
+	}
+	if rec := saveForm(t, store, address, form("above", "10", ""), ""); rec.Code != http.StatusSeeOther {
+		t.Fatalf("save = %d, want 303: %s", rec.Code, rec.Body)
+	}
+	if _, kept := store.held[key(queue)]; !kept || len(store.held) != 1 {
+		t.Errorf("store = %+v, want the threshold kept for the empty queue alone", store.held)
+	}
+}
+
 // spec: thresholds.md#form — a method other than GET or POST is refused.
 func TestThresholdPageRefusesOtherMethods(t *testing.T) {
 	for _, method := range []string{http.MethodDelete, http.MethodPut} {

@@ -1,7 +1,10 @@
 package hub_test
 
 import (
+	"context"
+	"html"
 	"net/http"
+	"slices"
 	"strings"
 	"testing"
 	"time"
@@ -240,6 +243,7 @@ func TestHistoryPageTranslatesEveryRefusal(t *testing.T) {
 		"/history?node=server-b":                            "метрика",
 		"/history?metric=disk.free_pct&window=2w":           "Окно задаётся",
 		"/history?metric=disk.free_pct&node=":               "без значения",
+		"/history?metric=disk.free_pct&label.=%2F":          "не называет метку",
 		"/history?metric=disk.free_pct&at=now":              "которого панель не знает",
 		"/history?metric=disk.free_pct&window=1h&window=2h": "больше одного раза",
 	} {
@@ -286,5 +290,91 @@ func TestHistoryPageDrawsExtremeValues(t *testing.T) {
 	_, body = page(t, served{series: []seriesPoints{huge}}, "/history?metric=disk.free_bytes&node=server-b")
 	if strings.Contains(body, "NaN") || strings.Contains(body, "Inf") {
 		t.Errorf("page = %q, want finite axis labels", body)
+	}
+}
+
+// servedAndLogged answers with series and with an event log, so the pages that link a
+// series from its changes draw those links too.
+type servedAndLogged struct {
+	served
+	log logged
+}
+
+func (s servedAndLogged) EventsBetween(ctx context.Context, from, to time.Time) ([]storage.Transition, error) {
+	return s.log.EventsBetween(ctx, from, to)
+}
+
+func (s servedAndLogged) RecentEvents(ctx context.Context, nodes []string, limit int) ([]storage.Transition, error) {
+	return s.log.RecentEvents(ctx, nodes, limit)
+}
+
+// spec: history.md#page — every link drawn for a series one of whose labels is empty opens
+// that series: /debug's, the timeline's changes, an item page's and a several-series page's,
+// then the chart's own window and threshold links.
+func TestLinksToASeriesWithAnEmptyLabelOpenIt(t *testing.T) {
+	queue := func(name string) seriesPoints {
+		return seriesPoints{
+			SeriesRef: storage.SeriesRef{Node: "server-b", Metric: "queue.depth", Labels: map[string]string{"queue": name}},
+			Points:    []storage.Point{{TS: collected.Add(-time.Hour), Value: 2}},
+		}
+	}
+	empty, named := queue(""), queue("a")
+	var values []storage.Value
+	for _, series := range []seriesPoints{empty, named} {
+		values = append(values, storage.Value{Metric: series.Metric, Labels: series.Labels, Value: 2, TS: collected.Add(-time.Hour)})
+	}
+	store := servedAndLogged{
+		served: served{
+			stored: stored{states: []storage.NodeState{{Node: "server-b", LastSeen: collected, Values: values}}},
+			series: []seriesPoints{empty, named},
+		},
+		log: logged{events: []storage.Transition{{
+			Subject: storage.Subject(empty.SeriesRef),
+			At:      collected.Add(-time.Hour), From: "ok", To: "warning", FromSince: collected.Add(-48 * time.Hour),
+			Readings: map[string]float64{"queue.depth": 2},
+		}}},
+	}
+
+	// Each page the row names is opened, then every series link found is followed in turn.
+	drawers := []string{"/debug", "/timeline", "/item?node=server-b", "/history?metric=queue.depth&node=server-b"}
+	opened := map[string]bool{}
+	pending := append([]string(nil), drawers...)
+	for len(pending) > 0 {
+		target := pending[0]
+		pending = pending[1:]
+		recorder := get(t, store, target)
+		if recorder.Code != http.StatusOK {
+			t.Errorf("GET %s = %d, want 200: %s", target, recorder.Code, recorder.Body)
+			continue
+		}
+		drawn := slices.Contains(drawers, target)
+		reachesEmpty, reachesNamed := false, false
+		for _, match := range hrefPattern.FindAllStringSubmatch(recorder.Body.String(), -1) {
+			link := html.UnescapeString(match[1])
+			if !strings.HasPrefix(link, "/history?") && !strings.HasPrefix(link, "/thresholds?") {
+				continue
+			}
+			reachesEmpty = reachesEmpty || strings.Contains(link, "label.queue=&")
+			reachesNamed = reachesNamed || strings.Contains(link, "label.queue=a&")
+			if !opened[link] {
+				opened[link] = true
+				pending = append(pending, link)
+			}
+		}
+		if drawn && !reachesEmpty {
+			t.Errorf("GET %s draws no link to the empty queue", target)
+		}
+		// The chart of the empty queue is that series alone, not every queue.
+		if !drawn && strings.Contains(target, "label.queue=&") && reachesNamed {
+			t.Errorf("GET %s links the named queue too, want the empty one alone", target)
+		}
+	}
+	for _, want := range []string{
+		"/history?label.queue=&metric=queue.depth&node=server-b&window=7d",
+		"/thresholds?label.queue=&metric=queue.depth&node=server-b",
+	} {
+		if !opened[want] {
+			t.Errorf("links followed = %v, want %s among them", opened, want)
+		}
 	}
 }

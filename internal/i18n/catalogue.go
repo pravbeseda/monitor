@@ -158,6 +158,10 @@ var catalogue = map[string]map[Locale]string{
 		English: "A parameter of this query carries no value",
 		Russian: "Параметр запроса остался без значения",
 	},
+	"history.error.label_name": {
+		English: "A label filter of this query names no label",
+		Russian: "Фильтр по метке в запросе не называет метку",
+	},
 	"history.error.unknown_parameter": {
 		English: "This query carries a parameter the panel does not know",
 		Russian: "В запросе есть параметр, которого панель не знает",

@@ -25,8 +25,8 @@ func TestParseQueryRefuses(t *testing.T) {
 		"metric=",
 		"metric=Disk%20Free",
 		"metric=disk.free_pct&node=",
-		"metric=disk.free_pct&label.mount=",
 		"metric=disk.free_pct&label.=%2F",
+		"metric=disk.free_pct&label.",
 		"metric=disk.free_pct&metric=disk.free_bytes",
 		"metric=disk.free_pct&window=1h&window=2h",
 		"metric=disk.free_pct&windwo=7d",
@@ -79,6 +79,25 @@ func TestParseQueryKeepsFilters(t *testing.T) {
 	}
 	if q.Labels["mount"] != "/" || q.Labels["fs"] != "ext4" || len(q.Labels) != 2 {
 		t.Fatalf("labels = %v, want mount=/ and fs=ext4", q.Labels)
+	}
+}
+
+// spec: history.md#selection — a label filter may ask for a label whose value is empty,
+// spelled with or without the `=`.
+func TestParseQueryKeepsAnEmptyLabelFilter(t *testing.T) {
+	for _, raw := range []string{"metric=queue.depth&label.queue=", "metric=queue.depth&label.queue"} {
+		for name, parse := range map[string]func(url.Values, ...string) (history.Query, error){
+			"ParseQuery": history.ParseQuery, "ParseSelection": history.ParseSelection,
+		} {
+			q, err := parse(values(t, raw))
+			if err != nil {
+				t.Errorf("%s(%q): %v", name, raw, err)
+				continue
+			}
+			if value, named := q.Labels["queue"]; !named || value != "" || len(q.Labels) != 1 {
+				t.Errorf("%s(%q).Labels = %v, want queue empty alone", name, raw, q.Labels)
+			}
+		}
 	}
 }
 
