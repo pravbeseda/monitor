@@ -143,6 +143,35 @@ func TestReadFiltersByLabel(t *testing.T) {
 	}
 }
 
+// spec: history.md#selection — an empty label filter selects the series carrying that label
+// empty, not one without it nor one with a value.
+func TestReadFiltersByAnEmptyLabel(t *testing.T) {
+	queue := func(labels map[string]string) seriesPoints {
+		return seriesPoints{
+			SeriesRef: storage.SeriesRef{Node: "server-b", Metric: "queue.depth", Labels: labels},
+			Points:    []storage.Point{at(-time.Hour, 2)},
+		}
+	}
+	src := &source{series: []seriesPoints{
+		queue(map[string]string{"queue": ""}),
+		queue(map[string]string{}),
+		queue(map[string]string{"queue": "a"}),
+	}}
+
+	q := history.Query{Metric: "queue.depth", Window: 24 * time.Hour}
+	if got := read(t, src, q); len(got.Series) != 3 {
+		t.Fatalf("unfiltered series = %+v, want all three", got.Series)
+	}
+	q.Labels = map[string]string{"queue": ""}
+	got := read(t, src, q)
+	if len(got.Series) != 1 {
+		t.Fatalf("series = %+v, want the empty queue alone", got.Series)
+	}
+	if value, named := got.Series[0].Labels["queue"]; !named || value != "" {
+		t.Fatalf("labels = %v, want queue empty", got.Series[0].Labels)
+	}
+}
+
 // spec: history.md#selection — a filter naming a label no series carries matches nothing.
 func TestReadFilterThatMatchesNothing(t *testing.T) {
 	src := &source{series: []seriesPoints{series("server-b", "/", at(-time.Hour, 42))}}

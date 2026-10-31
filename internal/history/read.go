@@ -146,11 +146,12 @@ func tooMany(count int) error {
 	return refuse("too_many_series", "this query selects %d series, more than the %d one answer carries", count, maxSeries)
 }
 
-// matches is exact equality on every named label. A filter cannot demand that a series
-// carry no other label, which is why a link meant for one series names them all.
+// matches is exact equality on every named label, and a label the series does not carry
+// matches no filter, an empty one included. A filter cannot demand that a series carry no
+// other label, which is why a link meant for one series names them all.
 func matches(labels, filters map[string]string) bool {
 	for name, want := range filters {
-		if labels[name] != want {
+		if got, carried := labels[name]; !carried || got != want {
 			return false
 		}
 	}

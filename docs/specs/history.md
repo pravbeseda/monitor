@@ -119,6 +119,7 @@ holds, so a consumer can see what a reduction cost it.
 | `metric=disk.free_pct&node=server-b` | only that node's series |
 | `metric=disk.free_pct&label.mount=/` | only series whose `mount` label is exactly `/` |
 | `metric=disk.free_pct&label.mount=/&label.fs=ext4` | only series matching both labels |
+| `metric=queue.depth&label.queue=`, or `label.queue` with no `=` | of a node's series `{queue: ""}`, `{}` and `{queue: "a"}`, only the first; with no label filter, all three |
 | `metric=disk.free_pct&label.mount=/nowhere` | 200, no series |
 | `metric=nothing.reported` | 200, no series |
 | a series whose every stored point is outside the window | not returned |
@@ -140,7 +141,7 @@ learns which nodes, metrics and label sets exist without being configured with t
 | no `metric`, or `metric=` | 400 |
 | `metric` not matching `[a-z0-9_.]+` | 400 |
 | `node=` | 400 |
-| `label.mount=` or `label.=/` | 400 |
+| `label.=/`, or `label.` with no `=` | 400 |
 | the same parameter given twice | 400 |
 | `window` given to `/api/v1/series` | 400 |
 | a parameter outside `metric`, `node`, `window`, `label.*` (`lang` too, on the page) | 400 |
@@ -211,6 +212,7 @@ staleness still has an answer — the node's longest sensor interval
 | a series with a two-day silence inside a seven-day window | the line broken across the gap, not drawn straight through it |
 | a query the endpoint refuses, or a read that fails | the same status the endpoint answers, as a translated page |
 | a value on `/debug` | a link to the history page of its series, carrying the node, the metric and every label |
+| any link drawn for a series one of whose labels is empty — on `/debug`, the timeline's changes, the charts of an item page, the per-series links of a page selecting several series, a chart's window and threshold links | a history link leads to that series' chart, a threshold link to its form; none answers `400` |
 | a series on `/debug` without labels | one row of its own: its series' name ([metric names](metric-names.md#where)), its newest value and the time it was collected, in one table above the node's matrices, ordered by metric id |
 | the labelled series of one node | matrices, one per label key set and family — the part of the metric id before its first dot, all of it when the id has no dot: a row per label set, named by what its labels name, and a column per metric that a series shown in it carries, each cell holding the newest value of that series, linked to its chart. One volume's two series make a matrix of one row, two sites' five series one of two rows |
 | a label set without a metric its matrix carries, or whose series of that metric is left out | a dash in that cell |
@@ -286,6 +288,10 @@ unit reads naturally.
   lives until metrics are declared.
 - **A label filter naming a label no series carries** matches nothing rather than being
   ignored.
+- **A label filter with an empty value** selects the series that carry that label empty,
+  and only them: an empty value is part of what tells one series from another
+  ([evaluation](evaluation.md#messages)), so a link that names every label reaches such a
+  series too. A label that is absent is not an empty one.
 - **A node whose interval was changed** ages by the interval it resolves now, so a line drawn
   today may break where yesterday's did not. Evaluation has the same property.
 

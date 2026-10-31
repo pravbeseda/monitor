@@ -73,9 +73,10 @@ func parse(values url.Values, selectors []string, allow []string) (Query, error)
 		switch {
 		case slices.Contains(selectors, key) || slices.Contains(allow, key):
 		case strings.HasPrefix(key, LabelPrefix):
+			// An empty value is a value: it selects the series carrying that label empty.
 			name := strings.TrimPrefix(key, LabelPrefix)
-			if name == "" || given[0] == "" {
-				return Query{}, refuse("empty_parameter", "label filter %q names no label or no value", key)
+			if name == "" {
+				return Query{}, refuse("label_name", "label filter %q names no label", key)
 			}
 			query.Labels[name] = given[0]
 		default:
