@@ -19,8 +19,9 @@
     nav.windows { margin: 0 0 1rem; font-size: 0.9rem; }
     nav.windows .zone { color: var(--faint); }
     nav.windows a, nav.windows strong { margin-right: 0.6rem; }
-    .columns { display: grid; grid-template-columns: 1fr minmax(16rem, 22rem); gap: 1.5rem; align-items: start; }
-    @media (max-width: 60rem) { .columns { grid-template-columns: 1fr; } }
+    .columns { display: grid; grid-template-columns: minmax(0, 1fr) minmax(16rem, 22rem); gap: 1.5rem; align-items: start; }
+    .columns > * { min-width: 0; }
+    @media (max-width: 60rem) { .columns { grid-template-columns: minmax(0, 1fr); } }
     h2.family-heading { font-size: 0.8rem; text-transform: uppercase; letter-spacing: 0.06em; color: var(--muted); font-weight: 600; margin: 0 0 0.6rem; }
     section.family { margin-bottom: 1.4rem; }
     .charts { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(100%, 19rem), 1fr)); gap: 0.8rem; }
