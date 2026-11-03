@@ -46,8 +46,12 @@ type SeriesNewest struct {
 // with the sensor its newest value named. It reads the series table rather than ranking
 // points, so it costs what it answers (ADR 0031).
 func (s *SQLite) Series(ctx context.Context, sel Selection) ([]SeriesNewest, error) {
+	return readSeries(ctx, s.db, sel)
+}
+
+func readSeries(ctx context.Context, from querier, sel Selection) ([]SeriesNewest, error) {
 	query, args := seriesStatement(sel)
-	rows, err := s.db.QueryContext(ctx, query, args...)
+	rows, err := from.QueryContext(ctx, query, args...)
 	if err != nil {
 		return nil, fmt.Errorf("read series of %s: %w", sel.Metric, err)
 	}

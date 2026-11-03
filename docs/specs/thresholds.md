@@ -79,8 +79,8 @@ It belongs to the metric, whichever entry of the manifest declares it.
 
 **A series is seeded once.** When a request stores a measurement of a series and its
 manifest declares a default for the series' metric, the default becomes the series'
-threshold — unless something is stored already — unless the series was seeded before, or
-had its threshold changed by a save of this build or a later one. The hub does not
+threshold unless one is stored already; a series seeded before, or whose threshold a save
+of this build or a later one changed, is not seeded again. The hub does not
 remember a declaration between requests, as it remembers a name: a series is seeded only
 by a request that carries both. From then on the threshold is the page's like any other.
 
@@ -237,7 +237,8 @@ own address.
 ## Invariants
 
 - The store never holds what the form would refuse: a direction outside `below`/`above`, a
-  value that is not finite, or a `critical` that is not strictly beyond its `warning`.
+  value that is not finite, neither value, or a `critical` that is not strictly beyond its
+  `warning`.
 - A configuration belongs to exactly one series, and a series has at most one; so does an
   exclusion. Applying to every series writes one configuration per series, and leaves no
   rule behind it.

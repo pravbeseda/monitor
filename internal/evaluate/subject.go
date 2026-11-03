@@ -202,7 +202,7 @@ func seriesSubjects(target Target, node storage.NodeState, watched map[string]st
 		if !isWatched {
 			continue
 		}
-		if !Readable(threshold) {
+		if !threshold.Readable() {
 			slog.Warn("a stored threshold this build cannot read",
 				"node", subject.Node, "metric", subject.Metric, "direction", string(threshold.Direction))
 			continue

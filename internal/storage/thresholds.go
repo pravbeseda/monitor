@@ -5,6 +5,7 @@ import (
 	"database/sql"
 	"errors"
 	"fmt"
+	"math"
 )
 
 // Direction is which side of a threshold is bad (docs/specs/thresholds.md#model).
@@ -24,6 +25,41 @@ type Threshold struct {
 	Direction
 	Warning  *float64
 	Critical *float64
+}
+
+// Readable reports whether a stored threshold is one this build can judge by: a direction
+// it knows, and values that are finite. Anything else is skipped rather than guessed at —
+// an unknown direction read as its opposite would alert upside down, and a NaN is never
+// entered and never left, so it would latch a subject at its level for good
+// (docs/specs/evaluation.md#configuration-changes).
+func (th Threshold) Readable() bool {
+	if th.Direction != Below && th.Direction != Above {
+		return false
+	}
+	for _, value := range []*float64{th.Warning, th.Critical} {
+		if value != nil && (math.IsNaN(*value) || math.IsInf(*value, 0)) {
+			return false
+		}
+	}
+	return true
+}
+
+// Ordered reports whether critical is strictly beyond warning in the direction. Equal values
+// would leave one of the two levels unreachable.
+func Ordered(direction Direction, warning, critical *float64) bool {
+	if warning == nil || critical == nil {
+		return true
+	}
+	if direction == Above {
+		return *critical > *warning
+	}
+	return *critical < *warning
+}
+
+// Storable reports whether the store may hold th: readable, with a value, and its critical
+// strictly beyond its warning (docs/specs/thresholds.md#invariants).
+func (th Threshold) Storable() bool {
+	return th.Readable() && (th.Warning != nil || th.Critical != nil) && Ordered(th.Direction, th.Warning, th.Critical)
 }
 
 // ThresholdOf reads what one series is judged by. The second result is false when

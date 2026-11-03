@@ -325,22 +325,17 @@ func applyMigration(db *sql.DB, step int) error {
 }
 
 // SaveIngest stores one request in a single transaction; a failure stores nothing.
-func (s *SQLite) SaveIngest(ctx context.Context, in Ingest) (err error) {
+func (s *SQLite) SaveIngest(ctx context.Context, in Ingest) error {
 	node, err := nodeArgs(in)
 	if err != nil {
 		return err
 	}
+	return s.inTransaction(ctx, "ingest of "+in.Node, func(tx *sql.Tx) error {
+		return saveIngest(ctx, tx, in, node)
+	})
+}
 
-	tx, err := s.db.BeginTx(ctx, nil)
-	if err != nil {
-		return fmt.Errorf("begin transaction: %w", err)
-	}
-	defer func() {
-		if err != nil {
-			_ = tx.Rollback()
-		}
-	}()
-
+func saveIngest(ctx context.Context, tx *sql.Tx, in Ingest, node []any) (err error) {
 	_, err = tx.ExecContext(ctx, insertNode+`
 		ON CONFLICT(node) DO UPDATE SET
 			last_seen      = excluded.last_seen,
@@ -414,8 +409,25 @@ func (s *SQLite) SaveIngest(ctx context.Context, in Ingest) (err error) {
 		}
 	}
 
+	return nil
+}
+
+// inTransaction runs write in one transaction, committed only when it succeeds.
+func (s *SQLite) inTransaction(ctx context.Context, what string, write func(*sql.Tx) error) (err error) {
+	tx, err := s.db.BeginTx(ctx, nil)
+	if err != nil {
+		return fmt.Errorf("begin %s: %w", what, err)
+	}
+	defer func() {
+		if err != nil {
+			_ = tx.Rollback()
+		}
+	}()
+	if err = write(tx); err != nil {
+		return err
+	}
 	if err = tx.Commit(); err != nil {
-		return fmt.Errorf("commit ingest of %s: %w", in.Node, err)
+		return fmt.Errorf("commit %s: %w", what, err)
 	}
 	return nil
 }

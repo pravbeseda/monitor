@@ -222,21 +222,31 @@ func (a *Agent) manifest() []api.SensorStatus {
 			status.Names, status.Families, status.Groups = declared(book.Metrics), declared(book.Families), declared(book.Groups)
 		}
 		if defaulted, ok := s.(sensor.Defaulted); ok {
-			status.Thresholds = declared(defaulted.Defaults())
+			status.Thresholds = declared(wired(defaulted.Defaults()))
 		}
 		manifest = append(manifest, status)
 	}
 	return manifest
 }
 
-// declared is one map of a sensor's declarations as the wire carries it; a map of strings or
-// of defaults always encodes, so the error is impossible.
+// declared is one map of a sensor's declarations as the wire carries it. A map of strings
+// always encodes; one of defaults does not when a value is not finite, and the entry then
+// declares none, which is what the hub would make of it anyway.
 func declared[V any](byID map[string]V) json.RawMessage {
 	if len(byID) == 0 {
 		return nil
 	}
 	encoded, _ := json.Marshal(byID)
 	return encoded
+}
+
+// wired is a sensor's defaults as the wire carries them.
+func wired(defaults map[string]sensor.Default) map[string]api.Default {
+	out := make(map[string]api.Default, len(defaults))
+	for metric, d := range defaults {
+		out[metric] = api.Default{Direction: string(d.Direction), Warning: d.Warning, Critical: d.Critical}
+	}
+	return out
 }
 
 // apply replaces the configuration wholesale; one it cannot parse leaves the working one

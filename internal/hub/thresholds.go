@@ -13,7 +13,6 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/pravbeseda/monitor/internal/evaluate"
 	"github.com/pravbeseda/monitor/internal/history"
 	"github.com/pravbeseda/monitor/internal/i18n"
 	"github.com/pravbeseda/monitor/internal/names"
@@ -35,9 +34,9 @@ type ThresholdStore interface {
 	// Configure stores what the form states in one step: the threshold, nil to clear it,
 	// and whether the series is excluded from anomalies.
 	Configure(ctx context.Context, ref storage.SeriesRef, th *storage.Threshold, exclude bool) error
-	// ConfigureEvery stores th — nil to clear it — for every series of metric, and the
-	// switch for own alone.
-	ConfigureEvery(ctx context.Context, metric string, th *storage.Threshold, own storage.SeriesRef, exclude bool) error
+	// ConfigureEvery stores th — nil to clear it — for every series of own's metric, and
+	// the switch for own alone.
+	ConfigureEvery(ctx context.Context, own storage.SeriesRef, th *storage.Threshold, exclude bool) error
 }
 
 // thresholdView is the form as the template sees it: every string translated, every value
@@ -80,7 +79,6 @@ type thresholdView struct {
 
 // everyView is one series a confirmation will change: its name and what it is judged by now.
 type everyView struct {
-	node    string
 	Series  string
 	Current string
 }
@@ -152,7 +150,7 @@ func showForm(ctx context.Context, w http.ResponseWriter, store ThresholdStore,
 		return
 	case !watched:
 		view.Unwatched = printer.T("threshold.unwatched")
-	case !evaluate.Readable(th):
+	case !th.Readable():
 		// Something is stored that nothing judges by, so the form says so and offers
 		// blank fields rather than a configuration the hub is not honouring.
 		view.Unreadable = printer.T("threshold.unreadable")
@@ -200,7 +198,7 @@ func save(w http.ResponseWriter, r *http.Request, store ThresholdStore,
 		refuseForm(w, printer, name, ref, lang, r, "threshold.bad_critical")
 		return
 	}
-	if !evaluate.Ordered(direction, warning, critical) {
+	if !storage.Ordered(direction, warning, critical) {
 		refuseForm(w, printer, name, ref, lang, r, "threshold.unordered")
 		return
 	}
@@ -209,14 +207,14 @@ func save(w http.ResponseWriter, r *http.Request, store ThresholdStore,
 	// event and no recovery (docs/specs/evaluation.md#configuration-changes).
 	var th *storage.Threshold
 	if warning != nil || critical != nil {
-		th = &storage.Threshold{Series: ref, Direction: direction, Warning: warning, Critical: critical}
+		th = &storage.Threshold{Direction: direction, Warning: warning, Critical: critical}
 	}
 	switch r.PostForm.Get("apply") {
 	case "every":
 		askEvery(w, r, store, printer, name, ref, lang, th == nil)
 		return
 	case "confirm":
-		err = store.ConfigureEvery(r.Context(), ref.Metric, th, ref, exclude)
+		err = store.ConfigureEvery(r.Context(), ref, th, exclude)
 	default:
 		err = store.Configure(r.Context(), ref, th, exclude)
 	}
@@ -240,6 +238,10 @@ func askEvery(w http.ResponseWriter, r *http.Request, store ThresholdStore,
 		http.Error(w, printer.T("error.storage"), http.StatusInternalServerError)
 		return
 	}
+	heading := func(s storage.SeriesNewest) string { return notify.Heading(printer, name, s.Metric, s.Labels) }
+	slices.SortStableFunc(all, func(a, b storage.SeriesNewest) int {
+		return cmp.Or(strings.Compare(a.Node, b.Node), strings.Compare(heading(a), heading(b)))
+	})
 	view := typedForm(printer, name, ref, lang, r)
 	for _, s := range all {
 		th, watched, err := store.ThresholdOf(r.Context(), s.SeriesRef)
@@ -249,14 +251,10 @@ func askEvery(w http.ResponseWriter, r *http.Request, store ThresholdStore,
 			return
 		}
 		view.Every = append(view.Every, everyView{
-			node:    s.Node,
-			Series:  s.Node + " · " + notify.Heading(printer, name, s.Metric, s.Labels),
+			Series:  s.Node + " · " + heading(s),
 			Current: currentOf(printer, th, watched),
 		})
 	}
-	slices.SortStableFunc(view.Every, func(a, b everyView) int {
-		return cmp.Or(strings.Compare(a.node, b.node), strings.Compare(a.Series, b.Series))
-	})
 	view.EveryNote = printer.T("threshold.every_replace")
 	if removing {
 		view.EveryNote = printer.T("threshold.every_remove")
@@ -269,8 +267,8 @@ func askEvery(w http.ResponseWriter, r *http.Request, store ThresholdStore,
 func currentOf(printer *i18n.Printer, th storage.Threshold, watched bool) string {
 	switch {
 	case !watched:
-		return printer.T("threshold.none")
-	case !evaluate.Readable(th):
+		return printer.T("threshold.every_none")
+	case !th.Readable():
 		return printer.T("threshold.every_unreadable")
 	}
 	parts := []string{printer.T("threshold." + string(th.Direction))}

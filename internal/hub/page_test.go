@@ -80,7 +80,7 @@ func (s stored) Configure(context.Context, storage.SeriesRef, *storage.Threshold
 	return s.err
 }
 
-func (s stored) ConfigureEvery(context.Context, string, *storage.Threshold, storage.SeriesRef, bool) error {
+func (s stored) ConfigureEvery(context.Context, storage.SeriesRef, *storage.Threshold, bool) error {
 	return s.err
 }
 

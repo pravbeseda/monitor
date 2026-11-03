@@ -3,25 +3,20 @@ package ingest_test
 import (
 	"encoding/json"
 	"fmt"
-	"net/http"
 	"slices"
 	"strings"
 	"testing"
 	"time"
 
+	"github.com/pravbeseda/monitor/internal/api"
 	"github.com/pravbeseda/monitor/internal/sensor/backup"
 )
 
 // defaultsOf posts body and returns the defaults ingest handed storage, one line each.
 func defaultsOf(t *testing.T, body string) []string {
 	t.Helper()
-	h, store, _ := newHandler(t)
-	rec := post(t, h, bearer(), body)
-	if rec.Code != http.StatusOK {
-		t.Fatalf("status = %d, want 200; body %q", rec.Code, rec.Body.String())
-	}
 	var got []string
-	for metric, th := range store.saved[0].Defaults {
+	for metric, th := range savedOf(t, body).Defaults {
 		line := metric + " " + string(th.Direction)
 		if th.Warning != nil {
 			line += fmt.Sprintf(" warning %g", *th.Warning)
@@ -37,10 +32,7 @@ func defaultsOf(t *testing.T, body string) []string {
 
 func expectDefaults(t *testing.T, got []string, want ...string) {
 	t.Helper()
-	slices.Sort(want)
-	if !slices.Equal(got, want) {
-		t.Errorf("defaults = %q, want %q", got, want)
-	}
+	expectSorted(t, "defaults", got, want...)
 }
 
 // spec: thresholds.md#defaults — a default of a metric the request carries a measurement of
@@ -68,10 +60,12 @@ func TestAcceptsAManifestWithoutDefaults(t *testing.T) {
 // spec: thresholds.md#defaults — thresholds that are not an object of objects drop every
 // default of the entry, never its names or the request.
 func TestIgnoresMalformedDefaults(t *testing.T) {
-	body := declaring(`"names": {"disk.free_bytes": {"en": "Free"}},
-		"thresholds": {"disk.free_bytes": {"direction": "below", "warning": 1}, "x": 5}`)
-	expectDefaults(t, defaultsOf(t, body))
-	expect(t, namesOf(t, body), "metric disk.free_bytes en Free")
+	for _, odd := range []string{"5", "null"} {
+		body := declaring(`"names": {"disk.free_bytes": {"en": "Free"}},
+			"thresholds": {"disk.free_bytes": {"direction": "below", "warning": 1}, "x": ` + odd + `}`)
+		expectDefaults(t, defaultsOf(t, body))
+		expect(t, namesOf(t, body), "metric disk.free_bytes en Free")
+	}
 }
 
 // spec: thresholds.md#defaults — a default with critical only, or a value null, is kept with
@@ -92,7 +86,8 @@ func TestIgnoresADefaultTheStoreWouldNotHold(t *testing.T) {
 		`{"direction": "below", "warning": null, "critical": null}`,
 		`{"direction": "below", "warning": 1, "critical": 1}`,
 		`{"direction": "above", "warning": 2, "critical": 1}`,
-		`{"direction": "below", "warn": 1}`,
+		`{"direction": "below", "warning": 1, "warn": 2}`,
+		`{"Direction": "below", "warning": 1}`,
 	} {
 		t.Run(bad, func(t *testing.T) {
 			expectDefaults(t, defaultsOf(t, declaring(`"thresholds": {"disk.free_bytes": `+bad+`}`)))
@@ -108,7 +103,11 @@ func TestIgnoresADefaultTheStoreWouldNotHold(t *testing.T) {
 // spec: backup-sensor.md#applicability — the backup sensor's defaults, as the hub reads
 // them, are both accepted.
 func TestTheBackupSensorsDefaultsAreAccepted(t *testing.T) {
-	declared, err := json.Marshal(backup.New(t.TempDir(), time.Now).Defaults())
+	wire := map[string]api.Default{}
+	for metric, d := range backup.New(t.TempDir(), time.Now).Defaults() {
+		wire[metric] = api.Default{Direction: string(d.Direction), Warning: d.Warning, Critical: d.Critical}
+	}
+	declared, err := json.Marshal(wire)
 	if err != nil {
 		t.Fatalf("encode the defaults: %v", err)
 	}

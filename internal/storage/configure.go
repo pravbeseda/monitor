@@ -28,7 +28,7 @@ func (s *SQLite) Excluded(ctx context.Context, ref SeriesRef) (bool, error) {
 // Configure stores everything the form says about one series in one transaction: what it
 // is judged by — nil clears it — and whether it is excluded from anomalies. A form states
 // the whole configuration, so neither half is ever stored without the other
-// (docs/specs/thresholds.md#saving).
+// (docs/specs/thresholds.md#saving). The Series of th is not read.
 func (s *SQLite) Configure(ctx context.Context, ref SeriesRef, th *Threshold, exclude bool) error {
 	return s.inTransaction(ctx, "a save of "+ref.Metric+" on "+ref.Node, func(tx *sql.Tx) error {
 		changed, err := replaceThreshold(ctx, tx, ref, th)
@@ -46,20 +46,20 @@ func (s *SQLite) Configure(ctx context.Context, ref SeriesRef, th *Threshold, ex
 	})
 }
 
-// ConfigureEvery replaces the threshold of every series of metric the hub holds — nil
+// ConfigureEvery replaces the threshold of every series of own's metric the hub holds — nil
 // removes it — and stores the switch of own alone, in one transaction
-// (docs/specs/thresholds.md#all).
-func (s *SQLite) ConfigureEvery(ctx context.Context, metric string, th *Threshold, own SeriesRef, exclude bool) error {
-	return s.inTransaction(ctx, "applying to every "+metric, func(tx *sql.Tx) error {
-		refs, err := seriesOfMetric(ctx, tx, metric)
+// (docs/specs/thresholds.md#all). The Series of th is not read.
+func (s *SQLite) ConfigureEvery(ctx context.Context, own SeriesRef, th *Threshold, exclude bool) error {
+	return s.inTransaction(ctx, "applying to every "+own.Metric, func(tx *sql.Tx) error {
+		all, err := readSeries(ctx, tx, Selection{Metric: own.Metric})
 		if err != nil {
 			return err
 		}
-		for _, ref := range refs {
-			if _, err := replaceThreshold(ctx, tx, ref, th); err != nil {
+		for _, one := range all {
+			if _, err := replaceThreshold(ctx, tx, one.SeriesRef, th); err != nil {
 				return err
 			}
-			if _, err := markSeeded(ctx, tx, ref); err != nil {
+			if _, err := markSeeded(ctx, tx, one.SeriesRef); err != nil {
 				return err
 			}
 		}
@@ -76,50 +76,6 @@ func replaceThreshold(ctx context.Context, tx *sql.Tx, ref SeriesRef, th *Thresh
 	own := *th
 	own.Series = ref
 	return true, saveThreshold(ctx, tx, own)
-}
-
-func seriesOfMetric(ctx context.Context, tx *sql.Tx, metric string) ([]SeriesRef, error) {
-	rows, err := tx.QueryContext(ctx, `SELECT node, labels FROM series WHERE metric = ?`, metric)
-	if err != nil {
-		return nil, fmt.Errorf("read the series of %s: %w", metric, err)
-	}
-	defer func() { _ = rows.Close() }()
-	var out []SeriesRef
-	for rows.Next() {
-		var node, labels string
-		if err := rows.Scan(&node, &labels); err != nil {
-			return nil, fmt.Errorf("read the series of %s: %w", metric, err)
-		}
-		ref, err := seriesRef(node, metric, labels)
-		if err != nil {
-			return nil, err
-		}
-		out = append(out, ref)
-	}
-	if err := rows.Err(); err != nil {
-		return nil, fmt.Errorf("read the series of %s: %w", metric, err)
-	}
-	return out, nil
-}
-
-// inTransaction runs write in one transaction, committed only when it succeeds.
-func (s *SQLite) inTransaction(ctx context.Context, what string, write func(*sql.Tx) error) (err error) {
-	tx, err := s.db.BeginTx(ctx, nil)
-	if err != nil {
-		return fmt.Errorf("begin %s: %w", what, err)
-	}
-	defer func() {
-		if err != nil {
-			_ = tx.Rollback()
-		}
-	}()
-	if err = write(tx); err != nil {
-		return err
-	}
-	if err = tx.Commit(); err != nil {
-		return fmt.Errorf("commit %s: %w", what, err)
-	}
-	return nil
 }
 
 func saveExclusion(ctx context.Context, to execer, ref SeriesRef, exclude bool) error {

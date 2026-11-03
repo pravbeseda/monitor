@@ -113,7 +113,7 @@ var catalogue = map[string]map[Locale]string{
 	"threshold.save":             {English: "Save", Russian: "Сохранить"},
 	"threshold.every":            {English: "Apply to every series of this metric", Russian: "Применить ко всем сериям этой метрики"},
 	"threshold.confirm":          {English: "Confirm", Russian: "Подтвердить"},
-	"threshold.none":             {English: "none", Russian: "нет"},
+	"threshold.every_none":       {English: "none", Russian: "нет"},
 	"threshold.every_unreadable": {English: "cannot be read", Russian: "не читается"},
 	"threshold.every_replace": {
 		English: "The thresholds of these series will be replaced by the values above; the switch is this series' only.",

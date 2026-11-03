@@ -49,7 +49,7 @@ func usualOf(printer *i18n.Printer, s state.Subject) string {
 // a chart draws across its line.
 func levelsOf(ctx context.Context, store ThresholdReader, s state.Subject) (storage.Threshold, bool, []threshold, error) {
 	th, stored, err := store.ThresholdOf(ctx, storage.SeriesRef{Node: s.Node, Metric: s.Metric, Labels: s.Labels})
-	if err != nil || !stored || !evaluate.Readable(th) {
+	if err != nil || !stored || !th.Readable() {
 		return th, false, nil, err
 	}
 	var levels []threshold

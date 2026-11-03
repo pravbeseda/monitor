@@ -12,9 +12,9 @@ import (
 	"github.com/pravbeseda/monitor/internal/storage"
 )
 
-func (j judged) ConfigureEvery(_ context.Context, metric string, th *storage.Threshold, own storage.SeriesRef, exclude bool) error {
+func (j judged) ConfigureEvery(_ context.Context, own storage.SeriesRef, th *storage.Threshold, exclude bool) error {
 	for _, one := range j.series {
-		if one.Metric != metric {
+		if one.Metric != own.Metric {
 			continue
 		}
 		if th == nil {
@@ -63,10 +63,6 @@ func listed(body string) []string {
 	return out
 }
 
-func heldBy(store judged) map[string]storage.Threshold {
-	return maps.Clone(store.held)
-}
-
 // spec: thresholds.md#all — the form offers to apply its values to every series.
 func TestThresholdFormOffersEverySeries(t *testing.T) {
 	_, body := openForm(t, holding(flags...), flagAddress)
@@ -79,7 +75,7 @@ func TestApplyingToEverySeriesAsksFirst(t *testing.T) {
 	store := holding(append(flags, dataSeries)...)
 	two := 2.0
 	store.held[key(flags[0])] = storage.Threshold{Series: flags[0], Direction: storage.Above, Critical: &two}
-	before := heldBy(store)
+	before := maps.Clone(store.held)
 
 	rec := saveForm(t, store, flagAddress, applying(form("above", "0", ""), "every"), "")
 	body := rec.Body.String()

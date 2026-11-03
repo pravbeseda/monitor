@@ -5,6 +5,8 @@ import (
 	"slices"
 	"strings"
 	"testing"
+
+	"github.com/pravbeseda/monitor/internal/storage"
 )
 
 // declaring is a request whose disk sensor declares the given manifest fields, beside one
@@ -17,16 +19,22 @@ func declaring(fields string) string {
 }`
 }
 
-// namesOf posts body and returns the names ingest handed storage, sorted for comparison.
-func namesOf(t *testing.T, body string) []string {
+// savedOf posts body and returns what ingest handed storage.
+func savedOf(t *testing.T, body string) storage.Ingest {
 	t.Helper()
 	h, store, _ := newHandler(t)
 	rec := post(t, h, bearer(), body)
 	if rec.Code != http.StatusOK {
 		t.Fatalf("status = %d, want 200; body %q", rec.Code, rec.Body.String())
 	}
+	return store.saved[0]
+}
+
+// namesOf posts body and returns the names ingest handed storage, sorted for comparison.
+func namesOf(t *testing.T, body string) []string {
+	t.Helper()
 	var got []string
-	for _, name := range store.saved[0].Names {
+	for _, name := range savedOf(t, body).Names {
 		got = append(got, string(name.Kind)+" "+name.Key+" "+string(name.Locale)+" "+name.Text)
 	}
 	slices.Sort(got)
@@ -35,9 +43,14 @@ func namesOf(t *testing.T, body string) []string {
 
 func expect(t *testing.T, got []string, want ...string) {
 	t.Helper()
+	expectSorted(t, "names", got, want...)
+}
+
+func expectSorted(t *testing.T, what string, got []string, want ...string) {
+	t.Helper()
 	slices.Sort(want)
 	if !slices.Equal(got, want) {
-		t.Errorf("names = %q, want %q", got, want)
+		t.Errorf("%s = %q, want %q", what, got, want)
 	}
 }
 

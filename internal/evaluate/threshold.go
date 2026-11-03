@@ -20,41 +20,6 @@ func margin(threshold float64) float64 { return math.Abs(threshold) / 5 }
 
 func tolerance(threshold float64) float64 { return 1e-9 * math.Abs(threshold) }
 
-// Readable reports whether a stored threshold is one this build can judge by: a direction
-// it knows, and values that are finite. Anything else is skipped rather than guessed at —
-// an unknown direction read as its opposite would alert upside down, and a NaN is never
-// entered and never left, so it would latch a subject at its level for good
-// (docs/specs/evaluation.md#configuration-changes).
-func Readable(th storage.Threshold) bool {
-	if th.Direction != storage.Below && th.Direction != storage.Above {
-		return false
-	}
-	for _, value := range []*float64{th.Warning, th.Critical} {
-		if value != nil && (math.IsNaN(*value) || math.IsInf(*value, 0)) {
-			return false
-		}
-	}
-	return true
-}
-
-// Ordered reports whether critical is strictly beyond warning in the direction. Equal values
-// would leave one of the two levels unreachable.
-func Ordered(direction storage.Direction, warning, critical *float64) bool {
-	if warning == nil || critical == nil {
-		return true
-	}
-	if direction == storage.Above {
-		return *critical > *warning
-	}
-	return *critical < *warning
-}
-
-// Storable reports whether the store may hold th as a threshold: readable, with a value,
-// and its critical strictly beyond its warning (docs/specs/thresholds.md#invariants).
-func Storable(th storage.Threshold) bool {
-	return Readable(th) && (th.Warning != nil || th.Critical != nil) && Ordered(th.Direction, th.Warning, th.Critical)
-}
-
 // entered reports whether a value falls into a level at all.
 func entered(threshold float64, direction storage.Direction, value float64) bool {
 	if direction == storage.Above {

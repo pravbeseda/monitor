@@ -475,3 +475,25 @@ func TestDirectoryOfEachSystem(t *testing.T) {
 		}
 	}
 }
+
+// spec: backup-sensor.md#applicability — the defaults are a warning on a failed run, and a
+// warning after 30 hours and critical after two days without success; no other metric has
+// one.
+func TestTheDefaults(t *testing.T) {
+	got := backup.New(t.TempDir(), time.Now).Defaults()
+	want := map[string]sensor.Default{
+		"backup.failed":              {Direction: sensor.Above, Warning: new(0.0)},
+		"backup.success_age_seconds": {Direction: sensor.Above, Warning: new(108000.0), Critical: new(172800.0)},
+	}
+	if len(got) != len(want) {
+		t.Fatalf("defaults = %v, want %v", got, want)
+	}
+	for metric, w := range want {
+		g, ok := got[metric]
+		if !ok || g.Direction != w.Direction || !same(g.Warning, w.Warning) || !same(g.Critical, w.Critical) {
+			t.Errorf("%s = %+v, want %+v", metric, g, w)
+		}
+	}
+}
+
+func same(a, b *float64) bool { return (a == nil) == (b == nil) && (a == nil || *a == *b) }

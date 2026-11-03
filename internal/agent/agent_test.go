@@ -712,9 +712,9 @@ func (n *named) Names() names.Book {
 	}
 }
 
-func (named) Defaults() map[string]api.Default {
+func (named) Defaults() map[string]sensor.Default {
 	warning := 5.0
-	return map[string]api.Default{"disk.free_pct": {Direction: "below", Warning: &warning}}
+	return map[string]sensor.Default{"disk.free_pct": {Direction: sensor.Below, Warning: &warning}}
 }
 
 // spec: metric-names.md#ingest, metric-names.md#groups — a sensor's names and group labels

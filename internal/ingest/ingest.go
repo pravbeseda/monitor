@@ -18,7 +18,6 @@ import (
 
 	"github.com/pravbeseda/monitor/internal/api"
 	"github.com/pravbeseda/monitor/internal/config"
-	"github.com/pravbeseda/monitor/internal/evaluate"
 	"github.com/pravbeseda/monitor/internal/i18n"
 	"github.com/pravbeseda/monitor/internal/names"
 	"github.com/pravbeseda/monitor/internal/storage"
@@ -283,7 +282,7 @@ func declaredDefaults(manifest []api.SensorStatus, measurements []storage.Measur
 	out := map[string]storage.Threshold{}
 	for _, status := range manifest {
 		var declared map[string]map[string]json.RawMessage
-		if len(status.Thresholds) == 0 || json.Unmarshal(status.Thresholds, &declared) != nil {
+		if len(status.Thresholds) == 0 || json.Unmarshal(status.Thresholds, &declared) != nil || hasNull(declared) {
 			continue
 		}
 		for metric, fields := range declared {
@@ -295,8 +294,20 @@ func declaredDefaults(manifest []api.SensorStatus, measurements []storage.Measur
 	return out
 }
 
+// hasNull reports whether a default was declared as null, which an object of objects does
+// not hold: JSON decodes it as no fields rather than as an error.
+func hasNull(declared map[string]map[string]json.RawMessage) bool {
+	for _, fields := range declared {
+		if fields == nil {
+			return true
+		}
+	}
+	return false
+}
+
 // defaultOf reads one declared default: a direction and the values a threshold has, and
-// nothing else.
+// nothing else. The keys are matched by hand: encoding/json would take `Warning` for
+// `warning`, and a key the spec does not list drops the default.
 func defaultOf(fields map[string]json.RawMessage) (storage.Threshold, bool) {
 	var th storage.Threshold
 	targets := map[string]any{"direction": &th.Direction, "warning": &th.Warning, "critical": &th.Critical}
@@ -306,7 +317,7 @@ func defaultOf(fields map[string]json.RawMessage) (storage.Threshold, bool) {
 			return storage.Threshold{}, false
 		}
 	}
-	return th, evaluate.Storable(th)
+	return th, th.Storable()
 }
 
 func validateMeasurement(m api.Measurement, sent time.Time) (storage.Measurement, error) {
