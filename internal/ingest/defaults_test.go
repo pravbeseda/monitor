@@ -1,15 +1,10 @@
 package ingest_test
 
 import (
-	"encoding/json"
 	"fmt"
 	"slices"
 	"strings"
 	"testing"
-	"time"
-
-	"github.com/pravbeseda/monitor/internal/api"
-	"github.com/pravbeseda/monitor/internal/sensor/backup"
 )
 
 // defaultsOf posts body and returns the defaults ingest handed storage, one line each.
@@ -100,20 +95,13 @@ func TestIgnoresADefaultTheStoreWouldNotHold(t *testing.T) {
 	})
 }
 
-// spec: backup-sensor.md#applicability — the backup sensor's defaults, as the hub reads
-// them, are both accepted.
+// spec: backup-sensor.md#applicability — the backup sensor's defaults, as the agent sends
+// them (agent_test.go pins the entry) and the hub reads them, are both accepted.
 func TestTheBackupSensorsDefaultsAreAccepted(t *testing.T) {
-	wire := map[string]api.Default{}
-	for metric, d := range backup.New(t.TempDir(), time.Now).Defaults() {
-		wire[metric] = api.Default{Direction: string(d.Direction), Warning: d.Warning, Critical: d.Critical}
-	}
-	declared, err := json.Marshal(wire)
-	if err != nil {
-		t.Fatalf("encode the defaults: %v", err)
-	}
 	body := `{
   "node": "laptop-a", "agent_version": "0.1.0", "config_version": "", "ts": "2026-08-28T10:00:00Z",
-  "manifest": [{"sensor": "backup", "applicable": true, "thresholds": ` + string(declared) + `}],
+  "manifest": [{"sensor": "backup", "applicable": true, "thresholds": ` +
+		`{"backup.failed":{"direction":"above","warning":0},"backup.success_age_seconds":{"direction":"above","warning":108000,"critical":172800}}}],
   "measurements": [
     {"metric": "backup.failed", "labels": {"backup": "web", "job": "copy"}, "value": 0},
     {"metric": "backup.success_age_seconds", "labels": {"backup": "web", "job": "copy"}, "value": 60},

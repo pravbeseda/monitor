@@ -7,6 +7,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"log/slog"
+	"math"
 	"time"
 
 	"github.com/pravbeseda/monitor/internal/api"
@@ -229,9 +230,8 @@ func (a *Agent) manifest() []api.SensorStatus {
 	return manifest
 }
 
-// declared is one map of a sensor's declarations as the wire carries it. A map of strings
-// always encodes; one of defaults does not when a value is not finite, and the entry then
-// declares none, which is what the hub would make of it anyway.
+// declared is one map of a sensor's declarations as the wire carries it; a map of strings,
+// or of finite defaults, always encodes, so the error is impossible.
 func declared[V any](byID map[string]V) json.RawMessage {
 	if len(byID) == 0 {
 		return nil
@@ -240,13 +240,20 @@ func declared[V any](byID map[string]V) json.RawMessage {
 	return encoded
 }
 
-// wired is a sensor's defaults as the wire carries them.
+// wired is a sensor's defaults as the wire carries them. One with a value JSON cannot hold
+// is left out alone, as the hub would drop it (docs/specs/thresholds.md#defaults).
 func wired(defaults map[string]sensor.Default) map[string]api.Default {
 	out := make(map[string]api.Default, len(defaults))
 	for metric, d := range defaults {
-		out[metric] = api.Default{Direction: string(d.Direction), Warning: d.Warning, Critical: d.Critical}
+		if finite(d.Warning) && finite(d.Critical) {
+			out[metric] = api.Default{Direction: string(d.Direction), Warning: d.Warning, Critical: d.Critical}
+		}
 	}
 	return out
+}
+
+func finite(value *float64) bool {
+	return value == nil || !math.IsNaN(*value) && !math.IsInf(*value, 0)
 }
 
 // apply replaces the configuration wholesale; one it cannot parse leaves the working one

@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"errors"
 	"log/slog"
+	"math"
 	"net/http"
 	"strings"
 	"testing"
@@ -16,6 +17,7 @@ import (
 	"github.com/pravbeseda/monitor/internal/i18n"
 	"github.com/pravbeseda/monitor/internal/names"
 	"github.com/pravbeseda/monitor/internal/sensor"
+	"github.com/pravbeseda/monitor/internal/sensor/backup"
 )
 
 var start = time.Date(2026, 8, 28, 10, 0, 0, 0, time.UTC)
@@ -754,5 +756,34 @@ func TestTheManifestCarriesASensorsDefaults(t *testing.T) {
 	}
 	if got := string(h.last().Manifest[0].Thresholds); got != `{"disk.free_pct":{"direction":"below","warning":5}}` {
 		t.Errorf("thresholds = %s, want the declared default", got)
+	}
+}
+
+// spec: thresholds.md#defaults, backup-sensor.md#applicability — the backup sensor's
+// defaults go out with both values, and one the wire cannot hold is left out alone.
+func TestTheManifestCarriesTheBackupDefaults(t *testing.T) {
+	h, c := &hub{}, &clock{at: start}
+	a := newAgent(t, h, c, backup.New(t.TempDir(), c.now), &unwired{stub{name: "odd"}})
+	if err := a.Tick(context.Background()); err != nil {
+		t.Fatalf("Tick: %v", err)
+	}
+	manifest := h.last().Manifest
+	if got := string(manifest[0].Thresholds); got != backupDefaults {
+		t.Errorf("thresholds = %s, want %s", got, backupDefaults)
+	}
+	if got := string(manifest[1].Thresholds); got != `{"x.ok":{"direction":"above","critical":1}}` {
+		t.Errorf("thresholds = %s, want the finite default alone", got)
+	}
+}
+
+// backupDefaults is the backup sensor's manifest entry's thresholds, as the wire carries them.
+const backupDefaults = `{"backup.failed":{"direction":"above","warning":0},"backup.success_age_seconds":{"direction":"above","warning":108000,"critical":172800}}`
+
+type unwired struct{ stub }
+
+func (unwired) Defaults() map[string]sensor.Default {
+	return map[string]sensor.Default{
+		"x.ok":  {Direction: sensor.Above, Critical: new(1.0)},
+		"x.bad": {Direction: sensor.Above, Warning: new(math.Inf(1))},
 	}
 }
