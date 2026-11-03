@@ -11,34 +11,40 @@ import (
 	"github.com/pravbeseda/monitor/internal/state"
 )
 
-// panelView is one group of an item's family as its page shows it: a panel of the family's
-// own fills Lines, the generic one Columns and Rows (docs/specs/overview.md#panels).
+// panelView is one group of an item's family as its page shows it: a table, laid out by a
+// panel of the family's own or by the generic one (docs/specs/overview.md#panels).
 type panelView struct {
 	Title   string
 	Class   string
 	Word    string
-	Lines   []panelLine
-	Columns []string
+	Columns []columnView
 	Rows    []panelRow
 }
 
-type panelLine struct {
-	Name    string
-	Figures []figureView
-}
-
 type panelRow struct {
-	Name string
+	// Name links to a series and takes its mark when the row stands for one.
+	Name figureView
 	// Cells follow Columns; a nil cell is a metric the row has no series of.
 	Cells []*figureView
 }
 
-// figureView is one series of a panel: its newest value, the mark a card's row gives it, and
-// the link to its chart.
+// figureView is one series of a panel: its newest value, the link to its chart, and the
+// class and words of the mark a card's row gives it — the words said on hover and to a
+// screen reader, not shown. Without a link it is plain text.
 type figureView struct {
 	Text    string
 	History string
-	Mark    *levelView
+	Class   string
+	Hint    string
+}
+
+// figureOf is a series of a panel shown as text, marked as a card's row would be.
+func figureOf(printer *i18n.Printer, s state.Subject, text string, link func(state.Subject) string) figureView {
+	figure := figureView{Text: text, History: link(s)}
+	if mark := markOf(printer, s); mark != nil {
+		figure.Class, figure.Hint = mark.Class, mark.Word
+	}
+	return figure
 }
 
 // panelSeries is a series of a panel with the labels the panel names it by.
@@ -47,10 +53,13 @@ type panelSeries struct {
 	named map[string]string
 }
 
+// layout lays a group's series out as a panel's columns and rows.
+type layout func(printer *i18n.Printer, book names.Book, series []panelSeries, link func(state.Subject) string) ([]columnView, []panelRow)
+
 // ownPanels are the families the overview skin draws a panel of its own for; any other
 // grouped family gets the generic one (ADR 0051).
-var ownPanels = map[string]func(printer *i18n.Printer, book names.Book, series []panelSeries, link func(state.Subject) string) []panelLine{
-	"backup": backupLines,
+var ownPanels = map[string]layout{
+	"backup": backupTable,
 }
 
 // groupOf is the value of the label a series' family is grouped by, when it is grouped and
@@ -90,11 +99,11 @@ func panelsOf(printer *i18n.Printer, it overviewItem, series []state.Subject, wi
 			delete(labels, label)
 			named = append(named, panelSeries{Subject: s, named: labels})
 		}
-		if own, found := ownPanels[family]; found {
-			panel.Lines = own(printer, it.names, named, link)
-		} else {
-			panel.Columns, panel.Rows = genericOf(printer, it.names, named, link)
+		lay, own := ownPanels[family]
+		if !own {
+			lay = genericOf
 		}
+		panel.Columns, panel.Rows = lay(printer, it.names, named, link)
 		out = append(out, panel)
 	}
 	return out
@@ -115,24 +124,58 @@ func labelSets(series []panelSeries) [][]panelSeries {
 	return out
 }
 
-// genericOf lays a group out as a table: a row per label set, a column per metric.
-func genericOf(printer *i18n.Printer, book names.Book, series []panelSeries, link func(state.Subject) string) ([]string, []panelRow) {
+// column is one metric of a panel's table and how a value of it reads.
+type column struct {
+	metric string
+	say    func(printer *i18n.Printer, value float64) string
+}
+
+// columnsOf are a column per metric of the series that skip leaves out, in metric id order,
+// formatted as /debug formats them.
+func columnsOf(series []panelSeries, skip func(metric string) bool) []column {
 	metrics := map[string]bool{}
 	for _, s := range series {
-		metrics[s.Metric] = true
+		if !skip(s.Metric) {
+			metrics[s.Metric] = true
+		}
 	}
-	ids := slices.Sorted(maps.Keys(metrics))
-	columns := make([]string, 0, len(ids))
-	for _, metric := range ids {
-		columns = append(columns, columnLabel(printer, book, metric))
+	out := make([]column, 0, len(metrics))
+	for _, metric := range slices.Sorted(maps.Keys(metrics)) {
+		out = append(out, column{metric: metric, say: formatting(metric)})
 	}
-	var rows []panelRow
-	for _, set := range labelSets(series) {
-		row := panelRow{Name: notify.Describe(printer, set[0].named), Cells: make([]*figureView, len(ids))}
+	return out
+}
+
+// formatting reads a value of metric as /debug formats it.
+func formatting(metric string) func(*i18n.Printer, float64) string {
+	return func(printer *i18n.Printer, value float64) string { return format(printer, metric, value) }
+}
+
+// tableOf lays label sets out as rows under columns, each row named by name and each column
+// headed as a /debug matrix's column.
+func tableOf(printer *i18n.Printer, book names.Book, sets [][]panelSeries, columns []column, name func([]panelSeries) figureView, link func(state.Subject) string) ([]columnView, []panelRow) {
+	heads := make([]columnView, 0, len(columns))
+	for _, c := range columns {
+		heads = append(heads, columnView{Metric: c.metric, Label: columnLabel(printer, book, c.metric)})
+	}
+	rows := make([]panelRow, 0, len(sets))
+	for _, set := range sets {
+		row := panelRow{Name: name(set), Cells: make([]*figureView, len(columns))}
 		for _, s := range set {
-			row.Cells[slices.Index(ids, s.Metric)] = &figureView{Text: format(printer, s.Metric, *s.Value), History: link(s.Subject), Mark: markOf(printer, s.Subject)}
+			if at := slices.IndexFunc(columns, func(c column) bool { return c.metric == s.Metric }); at >= 0 {
+				cell := figureOf(printer, s.Subject, columns[at].say(printer, *s.Value), link)
+				row.Cells[at] = &cell
+			}
 		}
 		rows = append(rows, row)
 	}
-	return columns, rows
+	return heads, rows
+}
+
+// genericOf lays a group out as a table: a row per label set, a column per metric.
+func genericOf(printer *i18n.Printer, book names.Book, series []panelSeries, link func(state.Subject) string) ([]columnView, []panelRow) {
+	columns := columnsOf(series, func(string) bool { return false })
+	return tableOf(printer, book, labelSets(series), columns, func(set []panelSeries) figureView {
+		return figureView{Text: notify.Describe(printer, set[0].named)}
+	}, link)
 }

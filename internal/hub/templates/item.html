@@ -49,12 +49,19 @@
     .group-head { display: flex; justify-content: space-between; gap: 0.6rem; align-items: baseline; margin-bottom: 0.4rem; }
     .group-title { font-weight: 600; overflow-wrap: anywhere; }
     .group-head .item-state { font-size: 0.8rem; }
-    ul.group-lines { list-style: none; padding: 0; margin: 0; display: flex; flex-direction: column; gap: 0.3rem; font-size: 0.85rem; }
-    .line-name { font-weight: 600; }
-    a.figure { color: inherit; font-variant-numeric: tabular-nums; }
-    table.group-table { border-collapse: collapse; font-size: 0.85rem; font-variant-numeric: tabular-nums; }
-    table.group-table th, table.group-table td { text-align: left; padding: 0.15rem 0.8rem 0.15rem 0; white-space: nowrap; }
-    table.group-table thead th { color: var(--muted); font-weight: 600; font-size: 0.75rem; }
+    a.figure { color: inherit; font-variant-numeric: tabular-nums; text-decoration: none; }
+    a.figure:hover { color: var(--link); text-decoration: underline; }
+    a.figure.level-warning { color: var(--warn); }
+    a.figure.level-critical { color: var(--bad); }
+    a.figure.level-unusual { color: var(--unusual); }
+    a.figure.level-stale { color: var(--muted); }
+    .row-mark-word { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
+    table.group-table { border-collapse: collapse; width: 100%; font-size: 0.85rem; font-variant-numeric: tabular-nums; }
+    table.group-table th, table.group-table td { text-align: right; padding: 0.25rem 0 0.25rem 0.8rem; white-space: nowrap; }
+    table.group-table th:first-child { text-align: left; padding-left: 0; }
+    table.group-table thead th { color: var(--muted); font-weight: 500; font-size: 0.72rem; border-bottom: 1px solid var(--rule); }
+    table.group-table tbody th { font-weight: 600; }
+    table.group-table tbody tr + tr > * { border-top: 1px solid var(--rule); }
     section.panel { background: var(--grid); border: 1px solid var(--rule); border-radius: 10px; padding: 1rem; }
     section.panel h2 { font-size: 0.8rem; text-transform: uppercase; letter-spacing: 0.06em; color: var(--muted); font-weight: 600; margin: 0 0 0.8rem; }
   </style>
@@ -123,21 +130,13 @@
 {{ define "group" }}
 <article class="group state-{{ .Class }}" data-group="{{ .Title }}">
   <header class="group-head"><span class="group-title">{{ .Title }}</span><span class="item-state state-{{ .Class }}">{{ .Word }}</span></header>
-  {{ with .Lines }}
-    <ul class="group-lines">
-      {{ range . }}{{ $named := .Name }}<li class="group-line">{{ with .Name }}<span class="line-name">{{ . }}</span>{{ end }}{{ range $i, $f := .Figures }}{{ if or $i $named }} · {{ end }}{{ template "figure" $f }}{{ end }}</li>
+  <table class="group-table">
+    {{ with .Columns }}<thead><tr><th></th>{{ range . }}<th class="group-column" scope="col" title="{{ .Metric }}">{{ .Label }}</th>{{ end }}</tr></thead>{{ end }}
+    <tbody>
+      {{ range .Rows }}<tr class="group-row"><th scope="row">{{ if .Name.History }}{{ template "figure" .Name }}{{ else }}{{ .Name.Text }}{{ end }}</th>{{ range .Cells }}<td>{{ with . }}{{ template "figure" . }}{{ else }}—{{ end }}</td>{{ end }}</tr>
       {{ end }}
-    </ul>
-  {{ end }}
-  {{ with .Columns }}
-    <table class="group-table">
-      <thead><tr><th></th>{{ range . }}<th class="group-column" scope="col">{{ . }}</th>{{ end }}</tr></thead>
-      <tbody>
-        {{ range $.Rows }}<tr class="group-row"><th scope="row">{{ .Name }}</th>{{ range .Cells }}<td>{{ with . }}{{ template "figure" . }}{{ else }}—{{ end }}</td>{{ end }}</tr>
-        {{ end }}
-      </tbody>
-    </table>
-  {{ end }}
+    </tbody>
+  </table>
 </article>
 {{ end }}
-{{ define "figure" }}<a class="figure" href="{{ .History }}">{{ .Text }}</a>{{ with .Mark }} <span class="row-mark {{ .Class }}">{{ .Word }}</span>{{ end }}{{ end }}
+{{ define "figure" }}<a class="figure{{ with .Class }} {{ . }}{{ end }}" href="{{ .History }}"{{ with .Hint }} title="{{ . }}"{{ end }}>{{ .Text }}{{ with .Hint }}<span class="row-mark-word"> {{ . }}</span>{{ end }}</a>{{ end }}

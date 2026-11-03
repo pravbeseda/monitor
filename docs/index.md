@@ -141,6 +141,7 @@ Reasoning from working sessions, including options that were rejected.
 | [2026-10-25](log/2026-10-25-metric-names.md) | Readable metric names: catalogue, sensor or interface, and the card style chosen from three |
 | [2026-10-28](log/2026-10-28-backup-sensor.md) | Backups a job reports: where the figures come from, who reports them, and why the path is the spec's |
 | [2026-11-03](log/2026-11-03-family-panels.md) | Family panels: why the sensor declares the grouping, the skin owns the look, and every series stays on its panel |
+| [2026-11-03](log/2026-11-03-backup-panel-table.md) | The backup panel becomes a table: the job's name stands for the failure flag, marks become colour, headings are the declared names |
 
 ## Not written yet
 
