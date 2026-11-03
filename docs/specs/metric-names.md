@@ -86,6 +86,11 @@ them as one panel ([overview](overview.md#panels),
 
 Of the built-in sensors, `backup` groups its family by `backup`; no other declares one.
 
+A fourth map, `thresholds`, declares the default thresholds of the entry's metrics. Unlike
+a name, the hub does not keep it: what it holds and what the hub does with it is
+[thresholds](thresholds.md#model)'s
+([0052](../decisions/0052-a-sensor-declares-default-thresholds-seeded-once.md)).
+
 Two metrics of one quantity in two units share a name: every place that shows a name
 shows a value in its unit beside it, or asks for one in that unit, and that tells them
 apart. The history page's list of several series shows none, but lists the series of one

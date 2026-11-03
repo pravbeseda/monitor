@@ -1,6 +1,7 @@
 # 0032. Thresholds are set in the interface and stored with the data
 
-- **Status:** accepted
+- **Status:** accepted; amended by [0052](0052-a-sensor-declares-default-thresholds-seeded-once.md)
+  — a sensor may declare a default, seeded into each series once
 - **Date:** 2026-09-20
 - **Source:** [0012](0012-threshold-model.md) (the layering half),
   [0033](0033-a-subject-is-a-series.md), [concept](../concept.md) principle 2

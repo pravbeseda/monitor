@@ -31,13 +31,15 @@ Each principle below is recorded in full, with its alternatives, in the linked A
    never judge values themselves. → [ADR 0001](decisions/0001-semantic-core-and-skins.md)
 2. **A metric costs no code.** A measurement declares itself: its id carries its unit, its
    labels make it a series, and what that series is judged by — a direction and up to two
-   values — is set on its own page and stored with the data, never compiled in and never a
-   file to edit. What the agent collects and how often stays configuration; health scoring
+   values — is set on its own page and stored with the data, never a file to edit; a sensor
+   may declare a default whose meaning is the same everywhere, which seeds each series once.
+   What the agent collects and how often stays configuration; health scoring
    and *silence* detection follow from the series and its thresholds, anomaly detection
    from the series alone.
    → [ADR 0032](decisions/0032-thresholds-are-set-in-the-interface.md),
    [ADR 0033](decisions/0033-a-subject-is-a-series.md),
-   [ADR 0010](decisions/0010-agent-configuration.md)
+   [ADR 0010](decisions/0010-agent-configuration.md),
+   [ADR 0052](decisions/0052-a-sensor-declares-default-thresholds-seeded-once.md)
 3. **Skins are interchangeable consumers of one State API.** Adding a skin touches no core
    code. → [ADR 0001](decisions/0001-semantic-core-and-skins.md)
 4. **Cross-cutting services live outside skins**: drill-down (`openMetric(id)`), time
@@ -47,8 +49,8 @@ Each principle below is recorded in full, with its alternatives, in the linked A
    critical; everything else accumulates into a daily digest, and thresholds have
    hysteresis. → [ADR 0006](decisions/0006-alerting-rules.md),
    [ADR 0016](decisions/0016-leaving-critical-is-instant.md)
-6. **Nothing personal enters the repository.** Code is public; schemas, thresholds, node
-   names, secrets and measurements are not. → [ADR 0007](decisions/0007-public-repository.md)
+6. **Nothing personal enters the repository.** Code is public; schemas, an installation's
+   thresholds, node names, secrets and measurements are not. → [ADR 0007](decisions/0007-public-repository.md)
 
 ## Planned skins
 

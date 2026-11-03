@@ -1,10 +1,11 @@
 # Spec: Thresholds
 
 - **Status:** approved
-- **Owns:** the page that sets what a series is judged by — `GET /thresholds` and the save
-  it accepts — what may be stored as a threshold, and whether the series may be shown as
-  unusual. What a stored threshold *means*, and when it produces a level, an event or a
-  message, stays with [evaluation.md](evaluation.md); what an anomaly is stays with
+- **Owns:** the page that sets what a series is judged by — `GET /thresholds` and the
+  posts it accepts: a save, a request to apply to every series, a confirmation — what may
+  be stored as a threshold, whether the series may be shown as unusual, and the defaults a
+  sensor declares and how they are seeded. What a stored threshold *means*, and when it
+  produces a level, an event or a message, stays with [evaluation.md](evaluation.md); what an anomaly is stays with
   [anomaly.md](anomaly.md); the shell every page shares, its zone and its refresh stay
   with [web.md](web.md); the series a page can be opened for come from
   [history.md](history.md).
@@ -14,12 +15,15 @@
   [0032](../decisions/0032-thresholds-are-set-in-the-interface.md),
   [0033](../decisions/0033-a-subject-is-a-series.md),
   [0036](../decisions/0036-an-anomaly-is-a-value-outside-its-weeks-band.md),
-  [0042](../decisions/0042-an-anomalys-start-and-end-are-recorded.md)
+  [0042](../decisions/0042-an-anomalys-start-and-end-are-recorded.md),
+  [0052](../decisions/0052-a-sensor-declares-default-thresholds-seeded-once.md)
 
 ## Purpose
 
 Nothing alerts until someone says what "bad" means for one particular series
-([0032](../decisions/0032-thresholds-are-set-in-the-interface.md)). This is where they say
+([0032](../decisions/0032-thresholds-are-set-in-the-interface.md)), or its sensor has said
+it once for every installation
+([0052](../decisions/0052-a-sensor-declares-default-thresholds-seeded-once.md)). This is where they say
 it: one page per series, two numbers and a direction, saved into the hub's own store and
 applied by the next evaluation tick without a restart.
 
@@ -28,8 +32,10 @@ nature — a laptop's uptime after a weekend asleep ([anomaly](anomaly.md#edge-c
 told once not to be ranked.
 
 The page is deliberately the whole configuration surface for alerting. There is no file to
-edit, no default to inherit and no layer above it: what the form shows is what the hub
-judges by.
+edit and no layer above it: what the form shows is what the hub judges by. A sensor may
+declare a default for a metric whose meaning is the same everywhere — a failed run — and
+the hub writes it into each series once; from then on it is the page's to change
+([0052](../decisions/0052-a-sensor-declares-default-thresholds-seeded-once.md)).
 
 ## Model
 
@@ -62,6 +68,36 @@ unit or a duration unit is read regardless of case and of a space before it, and
 in the Latin letters listed here in both languages — not as pages render a duration, `90 min`
 or `36 ч`. A value takes one unit, never a sum of them, and what is stored is
 always the number in the series' own unit.
+
+**A default** is a direction and up to two values that a sensor declares for a metric it
+produces, in the manifest beside the metric's name
+([metric names](metric-names.md#declaration)), under `thresholds`: an id, then an object
+of `direction`, `warning` and `critical`, the values plain numbers in the series' own unit
+— `{"backup.success_age_seconds": {"direction": "above", "warning": 108000, "critical": 172800}}`.
+A default is held to the rules the store holds a threshold to ([invariants](#invariants)).
+It belongs to the metric, whichever entry of the manifest declares it.
+
+**A series is seeded once.** When a request stores a measurement of a series and its
+manifest declares a default for the series' metric, the default becomes the series'
+threshold — unless something is stored already — unless the series was seeded before, or
+had its threshold changed by a save of this build or a later one. The hub does not
+remember a declaration between requests, as it remembers a name: a series is seeded only
+by a request that carries both. From then on the threshold is the page's like any other.
+
+A save changes a series' threshold when it stores one or removes one that was stored; a
+save that only turns the switch, on a series with no threshold, changes nothing and leaves
+the series to be seeded. A confirmation (below) changes the threshold of every series it
+reaches, whatever was stored. A threshold removed before this build left no record, so such a
+series is seeded once like one never configured.
+
+**One threshold can be applied to every series of a metric** — on every node, whatever its
+labels, the nodes the file no longer names included — from the form of any of them. The
+button redraws the form with what was typed and lists the series it will change, each
+with its current threshold; "Confirm" then replaces each series' threshold with the
+form's, or removes it when both values are blank. The series whose form it is takes the
+switch as well; the others keep theirs. "Confirm" reaches every series of the metric the
+hub holds when it is pressed, and leaves no rule behind: a series that appears later is
+seeded, if its sensor declares a default, like any other.
 
 **A save is refused unless the browser says it came from this page.** The hub has no
 session and no login of its own ([0023](../decisions/0023-proxy-holds-the-web-perimeter.md)),
@@ -127,9 +163,70 @@ One row = one test. Anchors: `spec: thresholds.md#<heading>`.
 | a save reloaded by the browser afterwards | nothing is saved twice: the answer to a save is a redirect, not a page |
 | a save while the proxy no longer accepts the reader's credentials | the proxy refuses it and nothing reaches the hub ([0023](../decisions/0023-proxy-holds-the-web-perimeter.md)) |
 
+### Defaults {#defaults}
+
+`server-b` below reports `backup.failed` and `backup.success_age_seconds` for `web` / `copy`
+and `vpn` / `copy`; its backup sensor declares `backup.failed` above, warning 0, and
+`backup.success_age_seconds` above, warning 108 000, critical 172 800.
+
+| Request or state | Result |
+|---|---|
+| the first measurements of `backup.failed` of `web` / `copy` and `vpn` / `copy`, in a request declaring the default | both judged by above, warning 0 from the next tick; their forms show those values |
+| `backup.success_age_seconds` seeded | its form shows `30h` and `2d` |
+| a series stored before this build with no threshold | seeded at its next measurement in a request declaring the default |
+| a series whose threshold was removed before this build | seeded the same way: the removal left no record |
+| a series with a threshold stored before this build | its threshold unchanged by its next measurement; if the reader then clears it, later measurements leave its form empty |
+| a series whose threshold the reader removes on the form, then a measurement with the default | its form stays empty |
+| a series the reader saves with a threshold before its agent declares a default, then a request declaring it | its form stays as saved |
+| a seeded series whose threshold the reader edits | the edit stays through later measurements |
+| a series with no threshold whose switch the reader turns off, then a measurement with the default | seeded, and still excluded: a default sets a threshold, never the switch |
+| a series whose stored threshold this build cannot read | left as stored |
+| a seeded series, then a release declaring another default | the series keeps what was seeded; a series not yet seeded takes the new one |
+| a release declaring a default for a metric that had none | its series with no threshold, none changed by a save, seeded at their next measurement |
+| a default for a metric the request holds no measurement of | nothing seeded; the request is accepted |
+| a default declared by one manifest entry for a metric whose measurements name another sensor | seeded: a default belongs to the metric |
+| two entries of one request declaring a default for one metric | the later entry wins |
+| a manifest entry with no `thresholds` (an older agent) | nothing seeded; a later request declaring the default seeds the series |
+| `thresholds` that is not an object of objects — `{"backup.failed": {…}, "x": 5}` among them | every default of that entry ignored, its names kept; the request is accepted |
+| a default with `critical` only | seeded with a critical and no warning |
+| a default with `null` for a value | that value absent |
+| a default whose direction is missing or neither `below` nor `above`; a value that is not a number — `"30h"` among them — or not finite; both values absent; `critical` not strictly beyond `warning`; or a key other than `direction`, `warning` and `critical` | that default ignored, the entry's others kept; the request is accepted |
+| `server-b`'s request carrying the sites node's measurement of a site it hosts, declaring a default for its metric | the sites node's series seeded |
+| a sensor the hub runs itself declares a default | seeded the same way as an agent's |
+| a series seeded | no event, no message and no anomaly change by the seeding itself; the next tick judges it as one whose threshold was just set ([effects](#effects)) |
+
+### Applying to every series {#all}
+
+`backup.failed` below has four series: `web` / `copy` and `vpn` / `copy` on `server-b`,
+`web` / `copy` and `web` / `verify` on `server-c`. Every request is a post to the form's
+own address.
+
+| Request | Result |
+|---|---|
+| the form of any series | beside "Save", a button "Apply to every series of this metric" |
+| that button, with consistent values | the form again, with the values typed, and above "Confirm" the four series by node, then by name (`node · ` the series' name, [metric names](metric-names.md#naming)), each with its current threshold or "none", and a line saying their thresholds will be replaced and the switch is this series' only; nothing stored |
+| that button, both values blank | the same, saying their thresholds will be removed |
+| that button, a value refused by a save | the form, refused as a save is; nothing stored |
+| a metric with one series | the button, and that one series listed |
+| a series of a node the file no longer names | listed and changed like the others |
+| "Confirm" | all four judged by the form's values from the next tick; the reader is sent back to the form |
+| "Confirm" with both values blank | all four thresholds removed, without an event or a recovery message ([evaluation.md](evaluation.md#configuration-changes)); later measurements with a default leave them empty |
+| "Confirm" covering a series whose stored threshold cannot be read | replaced like the others |
+| "Confirm" from `server-b`'s `web` / `copy` with the switch off | that series excluded; the other three keep their switches |
+| "Confirm" with a value changed after the list was drawn | the values in the form when it is pressed are applied, held to the rules a save is |
+| "Confirm" with a value a save refuses | the form, refused as a save is; nothing stored |
+| a fifth series stored between the list and "Confirm" | changed too |
+| a series appearing after "Confirm" | not changed: seeded by its sensor's default, if it declares one |
+| either post from another site, or with no `Origin` | refused as a save is, before anything is read |
+| either post for a series the hub has never stored | `404`; nothing stored |
+| the list reloaded — the browser sends the post again | the list again; nothing stored |
+| the page after "Confirm" reloaded | nothing stored twice: the answer is a redirect |
+| the page with the list, left open | never refreshed under the reader ([web.md](web.md#live)) |
+| the page in Russian | every word from the Russian catalogue |
+
 ### What changes elsewhere {#effects}
 
-| After a save | Result |
+| After a save, a confirmation, or a seeding | Result |
 |---|---|
 | a threshold set on a series that is already past it | the next tick transitions it, and a critical is announced at once ([evaluation.md](evaluation.md#notifications)) |
 | a threshold set or cleared | no agent is affected and no `config_version` changes ([hub-config.md](hub-config.md#configuration-version)) |
@@ -142,11 +239,16 @@ One row = one test. Anchors: `spec: thresholds.md#<heading>`.
 - The store never holds what the form would refuse: a direction outside `below`/`above`, a
   value that is not finite, or a `critical` that is not strictly beyond its `warning`.
 - A configuration belongs to exactly one series, and a series has at most one; so does an
-  exclusion.
+  exclusion. Applying to every series writes one configuration per series, and leaves no
+  rule behind it.
 - Saving changes what the hub judges by and nothing else: no measurement, no level and no
-  event is written by a save.
+  event is written by a save, by a confirmation, or by seeding.
+- A threshold is written by the form, by a confirmation, or by seeding, and by nothing
+  else; seeding never replaces a stored threshold, and never touches a series seeded
+  before or whose threshold a save of this build changed.
 - A page never shows a threshold it did not read from the store, so two readers see the
-  same numbers.
+  same numbers — the values a reader typed, redrawn with a refusal or above "Confirm",
+  apart.
 - Nothing on this page reaches an agent.
 
 ## Edge cases
@@ -174,15 +276,18 @@ One row = one test. Anchors: `spec: thresholds.md#<heading>`.
 - Listing series and linking to this page → [history.md](history.md#page).
 - Who may open the page at all → [0023](../decisions/0023-proxy-holds-the-web-perimeter.md)
   and [nginx-requirements.md](../nginx-requirements.md).
-- Applying one number to many series at once, and copying a configuration between nodes →
-  a convenience for later, not the model ([0032](../decisions/0032-thresholds-are-set-in-the-interface.md)).
+- Copying one configuration to a chosen few series, or between metrics → later; applying
+  to every series of one metric is [above](#all).
+- Saying on the form that a threshold came from a default → later: once seeded it is the
+  reader's like any other.
 - Saying *why* a series has no threshold — a third state between watched and forgotten →
   later. Until then the counts on `/debug` and in the digest ([state.md](state.md#page),
   [evaluation.md](evaluation.md#digest)) are what keeps a forgotten volume visible.
 - Exporting the stored thresholds to a file, or restoring them from one → the database is
   the record, and backing it up is [hub-backup-requirements.md](../hub-backup-requirements.md).
 - Editing thresholds from a skin other than this page → the store is the contract
-  ([0001](../decisions/0001-semantic-core-and-skins.md)); only this page writes it today.
+  ([0001](../decisions/0001-semantic-core-and-skins.md)); only this page and seeding write
+  it today.
 
 ## Open questions
 

@@ -75,7 +75,8 @@ Node classes are declared in the hub's YAML configuration, never hard-coded in t
 evaluation logic; product defaults apply where that file says nothing
 ([0007](decisions/0007-public-repository.md)). **Thresholds are not in that file**: since
 [0032](decisions/0032-thresholds-are-set-in-the-interface.md) they are entered per series on
-the hub's own page and stored with the measurements, and nothing alerts until they are. The
+the hub's own page and stored with the measurements, and nothing alerts until they are or
+a sensor's default seeds them ([0052](decisions/0052-a-sensor-declares-default-thresholds-seeded-once.md)). The
 deployment file itself lives on the server and is not part of this repository, which ships
 only `config.example.yaml`. The full key set lives in [hub-config](specs/hub-config.md) and
 [evaluation](specs/evaluation.md):

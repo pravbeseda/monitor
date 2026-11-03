@@ -30,7 +30,7 @@ One decision per file, each stating what was rejected and why. New records start
 | [0004](decisions/0004-two-binaries-monorepo.md) | Two artifacts — agent and monolithic hub — in one repository | accepted |
 | [0005](decisions/0005-poc-stack.md) | POC stack: Go, SQLite, server-side HTML | accepted, amended by [0035](decisions/0035-mission-control-is-rendered-by-the-hub.md) |
 | [0006](decisions/0006-alerting-rules.md) | Alert on transitions; only critical is instant | accepted, amended by [0032](decisions/0032-thresholds-are-set-in-the-interface.md) |
-| [0007](decisions/0007-public-repository.md) | Public repository from the first commit; nothing personal in it | accepted, amended by [0032](decisions/0032-thresholds-are-set-in-the-interface.md) |
+| [0007](decisions/0007-public-repository.md) | Public repository from the first commit; nothing personal in it | accepted, amended by [0032](decisions/0032-thresholds-are-set-in-the-interface.md) and [0052](decisions/0052-a-sensor-declares-default-thresholds-seeded-once.md) |
 | [0008](decisions/0008-english-repo-bilingual-ui.md) | The repository is English; the interface is bilingual | accepted, amended by [0048](decisions/0048-a-sensor-names-its-metrics.md) |
 | [0009](decisions/0009-development-process.md) | Specs for behaviour, plans for work, ADRs for decisions | accepted |
 | [0010](decisions/0010-agent-configuration.md) | The agent's configuration lives on the hub and arrives in the ingest response | accepted, amended by [0032](decisions/0032-thresholds-are-set-in-the-interface.md) and [0033](decisions/0033-a-subject-is-a-series.md) |
@@ -55,7 +55,7 @@ One decision per file, each stating what was rejected and why. New records start
 | [0029](decisions/0029-pages-refresh-by-fetching-their-own-address.md) | Pages refresh themselves by fetching their own address | accepted |
 | [0030](decisions/0030-the-state-api-reports-the-stored-verdict.md) | The State API reports the verdict evaluation stored | accepted, amended by [0033](decisions/0033-a-subject-is-a-series.md) and [0036](decisions/0036-an-anomaly-is-a-value-outside-its-weeks-band.md) |
 | [0031](decisions/0031-a-table-of-series.md) | A table of series beside the measurements | accepted, amended by [0033](decisions/0033-a-subject-is-a-series.md) |
-| [0032](decisions/0032-thresholds-are-set-in-the-interface.md) | Thresholds are set in the interface and stored with the data | accepted |
+| [0032](decisions/0032-thresholds-are-set-in-the-interface.md) | Thresholds are set in the interface and stored with the data | accepted, amended by [0052](decisions/0052-a-sensor-declares-default-thresholds-seeded-once.md) |
 | [0033](decisions/0033-a-subject-is-a-series.md) | A subject is a series, and a threshold is one comparison per level | accepted, amended by [0034](decisions/0034-a-series-without-a-sensor-still-ages.md) |
 | [0034](decisions/0034-a-series-without-a-sensor-still-ages.md) | A series that names no sensor ages by its node's longest interval | accepted |
 | [0035](decisions/0035-mission-control-is-rendered-by-the-hub.md) | Mission control is rendered by the hub; TypeScript waits for a skin that needs a client | accepted, amended by [0037](decisions/0037-skins-are-tabs-and-the-root-opens-the-last-one.md) and [0041](decisions/0041-mission-control-folds-into-the-timeline.md) |
@@ -75,6 +75,7 @@ One decision per file, each stating what was rejected and why. New records start
 | [0049](decisions/0049-a-backup-job-reports-through-a-status-file.md) | A backup job reports through a status file the agent reads | accepted |
 | [0050](decisions/0050-macos-means-apple-silicon.md) | A macOS node is an Apple Silicon Mac; Intel Macs are not supported | accepted |
 | [0051](decisions/0051-a-sensor-groups-its-family-by-a-label.md) | A sensor groups its family by a label; the skin draws each group as a panel | accepted |
+| [0052](decisions/0052-a-sensor-declares-default-thresholds-seeded-once.md) | A sensor declares default thresholds, and the hub seeds each series with them once; the form applies one threshold to every series of a metric | accepted |
 
 ## Behaviour specs
 
@@ -103,7 +104,7 @@ can see ([ADR 0017](decisions/0017-one-spec-and-decision-gates.md)). New specs s
 | [timeline.md](specs/timeline.md) | `/timeline`: what needs attention now, each node's last 24 hours, and the levels and anomalies that changed | approved |
 | [overview.md](specs/overview.md) | `/overview` and `/item`: a card per server, site and service with its telling numbers, and a page per item with every series charted or gathered in its group's panel beside its changes | approved |
 | [metric-names.md](specs/metric-names.md) | What a sensor declares its metrics and their families are called and the label each family is grouped by, and how every page and message names a series by it | approved |
-| [thresholds.md](specs/thresholds.md) | The page that sets what a series is judged by — what may be stored as a threshold, and whether it may be shown as unusual | approved |
+| [thresholds.md](specs/thresholds.md) | The page that sets what a series is judged by — what may be stored as a threshold, whether it may be shown as unusual, the defaults a sensor declares and how they are seeded, and applying one threshold to every series of a metric | approved |
 | [release.md](specs/release.md) | How a merge tags itself, what a tag publishes, how a release is signed, and how an artifact is checked | approved |
 | [installer.md](specs/installer.md) | One command that installs or upgrades a hub or an agent from a signed release, the hub following the version its host names, and an agent following the one the hub names | approved |
 | [deployment.md](specs/deployment.md) | The install layout, the units — the hub's and the agents' update timers among them — and what `install-agent.sh` does to a node | approved |
@@ -141,6 +142,7 @@ Reasoning from working sessions, including options that were rejected.
 | [2026-10-25](log/2026-10-25-metric-names.md) | Readable metric names: catalogue, sensor or interface, and the card style chosen from three |
 | [2026-10-28](log/2026-10-28-backup-sensor.md) | Backups a job reports: where the figures come from, who reports them, and why the path is the spec's |
 | [2026-11-03](log/2026-11-03-family-panels.md) | Family panels: why the sensor declares the grouping, the skin owns the look, and every series stays on its panel |
+| [2026-11-03](log/2026-11-03-default-thresholds.md) | Default thresholds: written once by the sensor's declaration, never layered; applying one threshold to every series of a metric |
 
 ## Not written yet
 

@@ -63,8 +63,10 @@ Authorization: Bearer <per-node token>
   this machine ([0010](../decisions/0010-agent-configuration.md)). Sent on every request;
   it is a kilobyte or two and statelessness beats saving them. An entry may carry the
   names of the sensor's metrics and their families and the label each family is grouped
-  by, which the hub keeps ([metric-names.md](metric-names.md#ingest)); a name or a group
-  label the hub cannot use is dropped on its own, never the request.
+  by, which the hub keeps ([metric-names.md](metric-names.md#ingest)), and default
+  thresholds for its metrics, which seed a series once and are not kept
+  ([thresholds.md](thresholds.md#defaults)); a name, a group label or a default the hub
+  cannot use is dropped on its own, never the request.
 - `measurements` — may be empty: the base tick is a valid request even when no sensor
   had anything new. A measurement's optional `ts` is its collection time, for sensors
   that collect above the base tick; absent, the request `ts` applies.
@@ -110,9 +112,9 @@ Authorization: Bearer <per-node token>
   [site-traffic.md](site-traffic.md#the-file)).
 - The config carries only what the agent acts on: tick, sensor selection, intervals and
   parameters, filesystem allow-list, and the mount prefixes to skip. Thresholds are not in it — they
-  are stored on the hub, entered on its page
-  ([0032](../decisions/0032-thresholds-are-set-in-the-interface.md)), and the agent has no
-  use for them.
+  are stored on the hub, entered on its page or seeded from the defaults the manifest
+  declares ([0032](../decisions/0032-thresholds-are-set-in-the-interface.md),
+  [0052](../decisions/0052-a-sensor-declares-default-thresholds-seeded-once.md)), and the agent acts on none of them.
 - Errors: `{ "error": "<english message>" }` with the status codes below.
 
 ## Behaviour
@@ -150,7 +152,7 @@ One row = one test. Anchors: `spec: ingest.md#<heading>`.
 | valid request | 200 | all measurements stored, but the sites node's for a site the node does not host ([site-traffic.md](site-traffic.md#ingest)); node's last-seen set to hub receipt time; node's agent version replaced by the request's |
 | valid request, `measurements` empty | 200 | no measurements stored; the node updated as for any valid request |
 | a service node's report in process, `measurements` empty | — | no measurements stored and last-seen left alone, unless the hub has no record of the node yet: then it is recorded as an empty request would be; its agent version, configuration version and manifest are updated either way ([services.md](services.md#the-file-and-the-environment)) |
-| measurement with a metric id the hub has never seen | 200 | stored; it is listed and charted like any other series, and has no level until a threshold is set for it ([evaluation](evaluation.md#model)) |
+| measurement with a metric id the hub has never seen | 200 | stored; it is listed and charted like any other series, and has no level until a threshold is set for it or seeded from its sensor's default ([thresholds](thresholds.md#defaults)) |
 | measurement carrying `sensor` | 200 | stored, and its series keeps that sensor name, which is what staleness is measured against ([evaluation](evaluation.md#freezing)) |
 | a series reported again with a different `sensor` | 200 | stored; the series keeps the newest value's sensor |
 | measurement with no `sensor` | 200 | stored and charted as any other; its series is aged by the longest interval among the sensors its node runs ([evaluation](evaluation.md#freezing)) |

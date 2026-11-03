@@ -191,8 +191,8 @@ Each line is an index into the ADR that owns it.
 - **A metric costs no code**: a measurement declares itself, its id carries its unit, its
   sensor names it in both languages (shown wherever a person reads it), and what a series
   is judged by — a direction and up to two values — is set on its page and
-  stored with the data. What an agent collects and how often stays configuration.
-  → 0032, 0033, 0048
+  stored with the data; a sensor may declare a default that seeds each series once. What
+  an agent collects and how often stays configuration. → 0032, 0033, 0048, 0052
 - **A sensor may group its family by a label**, and the item page draws each group as a
   panel: generic, or one of the skin's own for a family it knows. → 0051
 - **The semantic core is the single source of truth**; the State API carries semantics only,
@@ -219,7 +219,8 @@ Each line is an index into the ADR that owns it.
   blocks the merge; the pre-commit hook runs the fast pair (`gofmt`, `go vet`). → 0011, 0021
 - **A subject is a series and a threshold is one comparison per level**: a direction
   (`below`/`above`) and up to two values, set per series in the interface and stored with
-  the data; nothing has a level until someone sets one. → 0032, 0033
+  the data; nothing has a level until someone sets one or its sensor's default seeds it
+  once. → 0032, 0033, 0052
 - **Skins are rendered by the hub** — the timeline at `/timeline`, the primary view, the
   overview of items at `/overview` with a page per item at `/item`, and the debug table at
   `/debug` — until a skin needs a client; TypeScript arrives with that one. They sit side by
