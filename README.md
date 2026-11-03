@@ -20,7 +20,7 @@ off, history behind every value, and silence until something needs you.
   them: requests, error shares, response time and page views, grouped under one `sites`
   node whichever server serves each site.
 - **Thresholds** are set per series on the hub's `/thresholds` page; no series alerts until
-  its threshold is set.
+  its threshold is set, or a sensor's default seeds it, as the backup sensor's do.
 - **A silent node** is noticed without any threshold: each node class says how long it may
   stay quiet.
 - **Alerts** fire on transitions with hysteresis: entering or leaving critical is sent at

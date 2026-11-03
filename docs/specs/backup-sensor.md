@@ -2,11 +2,13 @@
 
 - **Status:** approved
 - **Owns:** `internal/sensor/backup` (agent): the directory backup jobs write their status
-  to, the file's format, and the metrics, labels and names the sensor reports from it
+  to, the file's format, the metrics, labels and names the sensor reports from it, and the
+  default thresholds it declares
 - **Decisions:** [0049](../decisions/0049-a-backup-job-reports-through-a-status-file.md),
   [0003](../decisions/0003-sensors-are-modules.md),
   [0033](../decisions/0033-a-subject-is-a-series.md),
-  [0048](../decisions/0048-a-sensor-names-its-metrics.md)
+  [0048](../decisions/0048-a-sensor-names-its-metrics.md),
+  [0052](../decisions/0052-a-sensor-declares-default-thresholds-seeded-once.md)
 
 ## Purpose
 
@@ -14,8 +16,8 @@ A backup job knows what it did; the monitor does not. Each job writes one small 
 every run — whether it failed, when it last succeeded, the repository's figures — and this
 sensor turns the files into series, so a threshold such as `above 2d` on an age catches a
 job that stopped and `above 0` on the failure flag one that ran and failed. Like every
-sensor it decides nothing: the series have no level until someone sets one on their page
-([thresholds.md](thresholds.md)).
+sensor it decides nothing: the series have no level until one is set on their page or
+seeded from the two defaults below ([thresholds.md](thresholds.md)).
 
 It takes no parameter: the directory is this spec's, and the files name their backups. It
 runs in the compiled-in `server` and `laptop` profiles every 15m
@@ -102,6 +104,18 @@ panel per backup ([metric names](metric-names.md#groups)). For a job that makes 
 the same; they part for one that copies or checks a repository, whose run can succeed while
 the newest archive it found is old.
 
+The sensor declares two default thresholds, seeded into each series once
+([thresholds](thresholds.md#defaults)): a failed run is a warning — one network reset that
+the next run recovers from goes to the digest, not to the phone — and a job that has not
+succeeded is a warning after 30 hours and critical after two days, which catches a job that
+stopped running at all, whatever its schedule up to daily. Sizes and counts get none: what
+is normal for them is the installation's.
+
+| Metric | Direction | Warning | Critical |
+|---|---|---|---|
+| `backup.failed` | above | 0 | — |
+| `backup.success_age_seconds` | above | 108 000 (30 h) | 172 800 (2 d) |
+
 ## Behaviour
 
 One row = one test. Anchors: `spec: backup-sensor.md#<heading>`.
@@ -179,6 +193,8 @@ the case gives either the error the agent logs naming the file, or the file's ow
 |---|---|
 | Linux | `backup`, applicable |
 | macOS | `backup`, applicable |
+| Linux and macOS | `thresholds`: `backup.failed` {direction above, warning 0, no critical}; `backup.success_age_seconds` {above, warning 108 000, critical 172 800}; no other metric |
+| the entry as the hub reads it | both defaults accepted, neither ignored by the rules a threshold is held to |
 
 ## Invariants
 
@@ -202,8 +218,10 @@ the case gives either the error the agent logs naming the file, or the file's ow
   on `/debug`, marked as holding no fresh data, and whatever level they held is frozen
   ([evaluation.md](evaluation.md#freezing)). A series with a threshold stays in the list of
   what needs attention as holding no fresh data ([attention.md](attention.md#model)) until
-  its threshold is cleared. **A renamed backup or job** leaves the same rows behind, and the
-  new name starts new series.
+  its threshold is cleared — and with the defaults seeded, every job's flag has one, and its
+  success age too once it has succeeded, so a retired job stays there until those are
+  cleared. **A renamed backup or job** leaves the same rows behind, and the new name starts
+  new series.
 - **A file written by hand** is read like any other: the sensor cannot tell a job from a
   person, and the directory's permissions decide who may write.
 - **A machine that sleeps** reports nothing until it wakes, and its first reading carries the

@@ -65,6 +65,16 @@ func (s *Sensor) Names() names.Book {
 	return book
 }
 
+// Defaults are the thresholds every installation judges a backup by: a failed run is a
+// warning, and a job that has not succeeded for 30 hours a warning, for two days critical
+// (docs/specs/backup-sensor.md#measurements).
+func (s *Sensor) Defaults() map[string]sensor.Default {
+	return map[string]sensor.Default{
+		metricFailed:     {Direction: sensor.Above, Warning: new(0.0)},
+		metricSuccessAge: {Direction: sensor.Above, Warning: new(30 * 3600.0), Critical: new(2 * 24 * 3600.0)},
+	}
+}
+
 // Applicable is true on every system the agent is built for; a node without jobs simply
 // has no directory.
 func (s *Sensor) Applicable() bool { return true }

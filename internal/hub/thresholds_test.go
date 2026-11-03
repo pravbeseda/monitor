@@ -71,7 +71,9 @@ func (j judged) Configure(_ context.Context, ref storage.SeriesRef, th *storage.
 	if th == nil {
 		delete(j.held, key(ref))
 	} else {
-		j.held[key(ref)] = *th
+		applied := *th
+		applied.Series = ref
+		j.held[key(ref)] = applied
 	}
 	if exclude {
 		j.excluded[key(ref)] = true

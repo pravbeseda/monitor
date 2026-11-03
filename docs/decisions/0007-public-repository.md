@@ -1,13 +1,15 @@
 # 0007. Public repository from the first commit; everything personal stays out
 
-- **Status:** accepted; amended by [0032](0032-thresholds-are-set-in-the-interface.md)
+- **Status:** accepted; amended by [0032](0032-thresholds-are-set-in-the-interface.md) and
+  [0052](0052-a-sensor-declares-default-thresholds-seeded-once.md)
 - **Date:** 2026-08-28
 - **Source:** [concept](../concept.md)
 
 *Rule 1 below lists thresholds among the product defaults that may ship. Under
 [0032](0032-thresholds-are-set-in-the-interface.md) a threshold belongs to one series and is
-set by whoever runs the installation, so no threshold default ships; everything else here
-stands.*
+set by whoever runs the installation, so no threshold default ships — except one whose
+meaning is the same on every installation, declared by its sensor and seeded once
+([0052](0052-a-sensor-declares-default-thresholds-seeded-once.md)); everything else here stands.*
 
 ## Context
 

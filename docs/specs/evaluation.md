@@ -43,9 +43,10 @@ that either is about a disk.
 
 **A subject has a level only while a threshold is configured for it.** A series nobody has
 configured is stored, listed and charted, and has no level, no event and no notification.
-The thresholds come from the store, are entered in the interface
-([0032](../decisions/0032-thresholds-are-set-in-the-interface.md),
-[thresholds.md](thresholds.md#form)) and are read afresh by every tick.
+The thresholds come from the store, are entered in the interface or seeded once from a
+sensor's default ([0032](../decisions/0032-thresholds-are-set-in-the-interface.md),
+[0052](../decisions/0052-a-sensor-declares-default-thresholds-seeded-once.md), [thresholds.md](thresholds.md#form)) and are read afresh by
+every tick.
 
 **A configuration is a direction and up to two values.** The direction — `below` or
 `above` — belongs to the subject; `warning` and `critical` are independent values in the
@@ -430,9 +431,9 @@ rows about the file are about the first tick after a restart with a changed file
 ### Startup validation
 
 Rows the hub refuses to start on, in the manner of [hub-config.md](hub-config.md#startup).
-Threshold values are not among them: they are checked by the form that writes them
-([thresholds.md](thresholds.md#saving)), and the hub must survive whatever is already
-stored.
+Threshold values are not among them: they are checked by the form, the confirmation and
+the seeding that write them ([thresholds.md](thresholds.md#saving)), and the hub must survive
+whatever is already stored.
 
 | Configuration | Result |
 |---|---|
@@ -460,8 +461,9 @@ stored.
 - Recovery is the negated entry comparison with a margin on the threshold's magnitude, never
   a separate rule ([0013](../decisions/0013-relative-hysteresis.md)).
 - Nothing alerts that was not configured to: an unconfigured series has no level, and a
-  fresh installation is silent until someone sets a number
-  ([0032](../decisions/0032-thresholds-are-set-in-the-interface.md)).
+  fresh installation is silent until someone sets a number or a sensor's default is seeded
+  ([0032](../decisions/0032-thresholds-are-set-in-the-interface.md),
+  [0052](../decisions/0052-a-sensor-declares-default-thresholds-seeded-once.md)).
 - Every user-facing string is delivered in `notify.locale`; logs stay English
   ([0008](../decisions/0008-english-repo-bilingual-ui.md)).
 

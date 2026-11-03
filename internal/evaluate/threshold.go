@@ -20,23 +20,6 @@ func margin(threshold float64) float64 { return math.Abs(threshold) / 5 }
 
 func tolerance(threshold float64) float64 { return 1e-9 * math.Abs(threshold) }
 
-// Readable reports whether a stored threshold is one this build can judge by: a direction
-// it knows, and values that are finite. Anything else is skipped rather than guessed at —
-// an unknown direction read as its opposite would alert upside down, and a NaN is never
-// entered and never left, so it would latch a subject at its level for good
-// (docs/specs/evaluation.md#configuration-changes).
-func Readable(th storage.Threshold) bool {
-	if th.Direction != storage.Below && th.Direction != storage.Above {
-		return false
-	}
-	for _, value := range []*float64{th.Warning, th.Critical} {
-		if value != nil && (math.IsNaN(*value) || math.IsInf(*value, 0)) {
-			return false
-		}
-	}
-	return true
-}
-
 // entered reports whether a value falls into a level at all.
 func entered(threshold float64, direction storage.Direction, value float64) bool {
 	if direction == storage.Above {

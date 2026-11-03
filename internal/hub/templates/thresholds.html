@@ -34,7 +34,14 @@
       <label><input type="radio" name="anomalies" value="show" {{ if not .Excluded }}checked{{ end }}> {{ .ShowLabel }}</label>
       <label><input type="radio" name="anomalies" value="exclude" {{ if .Excluded }}checked{{ end }}> {{ .ExcludeLabel }}</label>
     </fieldset>
-    <div><button type="submit">{{ .SaveLabel }}</button> <a href="{{ .BackURL }}">{{ .BackLabel }}</a></div>
+    <div><button type="submit">{{ .SaveLabel }}</button> <button type="submit" name="apply" value="every">{{ .EveryLabel }}</button> <a href="{{ .BackURL }}">{{ .BackLabel }}</a></div>
+    {{ with .Every }}
+      <section class="every">
+        <p class="note">{{ $.EveryNote }}</p>
+        <ul>{{ range . }}<li class="every-series">{{ .Series }} — {{ .Current }}</li>{{ end }}</ul>
+        <button type="submit" name="apply" value="confirm">{{ $.ConfirmLabel }}</button>
+      </section>
+    {{ end }}
   </form>
 </body>
 </html>

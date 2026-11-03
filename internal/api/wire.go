@@ -34,8 +34,9 @@ type Request struct {
 	Measurements *[]Measurement `json:"measurements"`
 }
 
-// SensorStatus is one line of the manifest: a sensor the build contains, and what it says
-// its metrics and their families are called (docs/specs/metric-names.md).
+// SensorStatus is one line of the manifest: a sensor the build contains, what it says its
+// metrics and their families are called (docs/specs/metric-names.md), and the thresholds it
+// declares by default (docs/specs/thresholds.md#defaults).
 type SensorStatus struct {
 	Sensor     string `json:"sensor"`
 	Applicable bool   `json:"applicable"`
@@ -45,6 +46,16 @@ type SensorStatus struct {
 	Families json.RawMessage `json:"families,omitempty"`
 	// Groups maps a family to the label it is grouped by, raw for the same reason.
 	Groups json.RawMessage `json:"groups,omitempty"`
+	// Thresholds maps a metric to its default threshold, raw for the same reason.
+	Thresholds json.RawMessage `json:"thresholds,omitempty"`
+}
+
+// Default is a threshold a sensor declares for a metric it produces: a direction, below or
+// above, and up to two values in the series' own unit (docs/specs/thresholds.md#model).
+type Default struct {
+	Direction string   `json:"direction"`
+	Warning   *float64 `json:"warning,omitempty"`
+	Critical  *float64 `json:"critical,omitempty"`
 }
 
 // Declared is what Names and Families hold: an id, then its name by locale.

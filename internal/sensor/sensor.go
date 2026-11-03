@@ -37,6 +37,30 @@ type Named interface {
 	Names() names.Book
 }
 
+// Defaulted is a sensor that declares a default threshold for a metric whose meaning is the
+// same on every installation; the hub seeds each series with it once
+// (docs/specs/thresholds.md#defaults).
+type Defaulted interface {
+	Defaults() map[string]Default
+}
+
+// Default is a threshold declared for a metric: a direction and up to two values in the
+// series' own unit.
+type Default struct {
+	Direction Direction
+	Warning   *float64
+	Critical  *float64
+}
+
+// Direction is which side of a default is bad.
+type Direction string
+
+// The two directions a default can be read in.
+const (
+	Below Direction = "below"
+	Above Direction = "above"
+)
+
 // Catalogued names metrics, and the families they belong to, from the interface's
 // catalogue under `metric.<id>` and `family.<family>`, as a built-in sensor does (ADR 0008).
 func Catalogued(metrics ...string) names.Book {

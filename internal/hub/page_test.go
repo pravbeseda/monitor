@@ -80,6 +80,10 @@ func (s stored) Configure(context.Context, storage.SeriesRef, *storage.Threshold
 	return s.err
 }
 
+func (s stored) ConfigureEvery(context.Context, storage.SeriesRef, *storage.Threshold, bool) error {
+	return s.err
+}
+
 func (s stored) Excluded(context.Context, storage.SeriesRef) (bool, error) { return false, s.err }
 
 var laptop = storage.NodeState{
