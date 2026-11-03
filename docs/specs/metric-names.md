@@ -1,11 +1,13 @@
 # Spec: Metric names
 
 - **Status:** approved
-- **Owns:** what a sensor declares about the names of its metrics, how the hub keeps the
-  newest declaration, and how a series is named wherever a person reads it
+- **Owns:** what a sensor declares about the names of its metrics and the group label of
+  its families, how the hub keeps the newest declaration, and how a series is named
+  wherever a person reads it
 - **Decisions:** [0048](../decisions/0048-a-sensor-names-its-metrics.md),
   [0008](../decisions/0008-english-repo-bilingual-ui.md),
-  [0003](../decisions/0003-sensors-are-modules.md)
+  [0003](../decisions/0003-sensors-are-modules.md),
+  [0051](../decisions/0051-a-sensor-groups-its-family-by-a-label.md)
 
 ## Purpose
 
@@ -70,6 +72,20 @@ and its family:
 | `site.response_p95_seconds` | Response time, p95 | Время ответа, p95 |
 | `site.pageviews_24h` | Page views, 24 h | Просмотры за сутки |
 
+**A group label** is declared in a third map, `groups`, keyed by family, whose value is a
+label key in the form a name refers to one — one or more lower-case letters, digits or
+underscores. It says which label tells the family's subjects apart, and pages draw each of
+them as one panel ([overview](overview.md#panels),
+[0051](../decisions/0051-a-sensor-groups-its-family-by-a-label.md)):
+
+```json
+{ "sensor": "backup", "applicable": true,
+  "families": { "backup": { "en": "Backups", "ru": "Бэкапы" } },
+  "groups":   { "backup": "backup" } }
+```
+
+Of the built-in sensors, `backup` groups its family by `backup`; no other declares one.
+
 Two metrics of one quantity in two units share a name: every place that shows a name
 shows a value in its unit beside it, or asks for one in that unit, and that tells them
 apart. The history page's list of several series shows none, but lists the series of one
@@ -101,6 +117,22 @@ One row = one test. Anchors: `spec: metric-names.md#<heading>`.
 | the hub restarts | the names declared before it stopped are still known |
 
 A name is never removed: a sensor that stops declaring one leaves the last one in place.
+
+### Group labels {#groups}
+
+| Request | Hub |
+|---|---|
+| a manifest grouping a family that a measurement of the same request belongs to by `backup` | that family's group label is `backup` |
+| a manifest grouping a family no measurement of the same request belongs to | that group label is ignored; the request is accepted |
+| a later request grouping the same family by another label, from any node | the later label replaces the earlier one on every page |
+| two manifest entries of one request grouping the same family | the later entry in the manifest wins |
+| a manifest entry with no `groups` (an older agent) | accepted; the group label declared earlier stays |
+| `groups` that is not a map of strings — `{"backup": "backup", "q": 5}` among them | every group label of that entry is ignored, its names kept; the request is accepted |
+| a group label `""`, `Backup`, `backup job` or `backup-job` | that group label is ignored; the request is accepted |
+| a sensor the hub runs itself declares a group label | kept the same way as an agent's |
+| the hub restarts | the group labels declared before it stopped are still known |
+
+A group label is never removed, as a name is not.
 
 ### Naming a series {#naming}
 
@@ -156,6 +188,9 @@ page or message is written in:
 | a `/debug` matrix's corner | the family's name |
 | a `/debug` matrix's column | its metric's name with the labels it refers to left out; the metric id on hover |
 | a `/debug` matrix's column whose metric's name is only references to labels | headed as before names: its id less its family; the metric id on hover |
+| a generic panel's column | as a `/debug` matrix's column |
+| a generic panel's row, and a line of the backup panel that is not a job's | the labels it names, as a `/debug` matrix row names its own |
+| a figure of the backup panel of a metric the panel does not know | as a `/debug` matrix's column |
 | the thresholds form | `node · ` the series' name with filesystem and removable; the metric id on hover |
 | an item of the list of what needs attention | `node · ` the series' name |
 | a change on the timeline or the item page | the series' name |
@@ -177,7 +212,7 @@ the configuration: those are read by machines and in bug reports.
 - Two series of one metric on one node never read alike, except by `fs` and `removable` in a
   message, as today ([evaluation](evaluation.md#messages)).
 - A series' name depends on the newest declaration of its metric and the reader's locale
-  only, never on which node declared it.
+  only, never on which node declared it; so does a family's group label.
 
 ## Edge cases
 
@@ -189,7 +224,7 @@ the configuration: those are read by machines and in bug reports.
 - **Any node's token can rename a metric** that node reports, on every node — the sites
   node's too, when it hosts a site. A token already lets a node report any value; a name is
   no more than that, and ignoring names for metrics the request does not carry keeps a
-  token from naming what it never reports.
+  token from naming what it never reports. The same holds for a family's group label.
 - **A name that uses every label of its series** is followed by nothing in a message; a page
   still adds the filesystem and "removable".
 - **The sites node's series** are reported by the sites' hosts; their names come from the

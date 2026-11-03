@@ -3,7 +3,8 @@
 - **Status:** approved
 - **Owns:** the pages `GET /overview` and `GET /item` in `internal/hub` — the overview skin:
   a card per item with a few numbers and a line of its last day, and a page per item with
-  every series of it charted and the changes it went through. What a level, a staleness or a
+  every series of it charted or gathered in its group's panel, and the changes it went
+  through. What a level, a staleness or a
   silence *is* stays with [evaluation](evaluation.md) and [state](state.md), what an anomaly
   is with [anomaly](anomaly.md), and what needs attention with [attention](attention.md); the
   points, the windows and the chart's axes are [history](history.md)'s; a threshold is
@@ -20,14 +21,15 @@
   [0039](../decisions/0039-the-hub-collects-a-service-node.md),
   [0042](../decisions/0042-an-anomalys-start-and-end-are-recorded.md),
   [0045](../decisions/0045-sites-are-a-node-their-hosts-report-for.md),
-  [0046](../decisions/0046-an-overview-of-items-rendered-by-the-hub.md)
+  [0046](../decisions/0046-an-overview-of-items-rendered-by-the-hub.md),
+  [0051](../decisions/0051-a-sensor-groups-its-family-by-a-label.md)
 
 ## Purpose
 
 The overview answers "how do things stand, in numbers": every computer, site and service as
 a card with the few figures that say most about it and how they moved over the last day. A
-card opens the item's page, where every series of it is charted over a chosen window beside
-what changed. It judges nothing: a card's colour is a level evaluation stored, an anomaly, a
+card opens the item's page, where every series of it is charted over a chosen window, or
+gathered with its group in a panel, beside what changed. It judges nothing: a card's colour is a level evaluation stored, an anomaly, a
 silence or data that is or is not fresh, and every number is one the hub holds.
 
 ## Model
@@ -133,8 +135,10 @@ On a narrow screen the cards flow one to a line, each section's heading above it
 - window links 24h / 7d / 30d, as the history page offers them and marks the open one
   ([history](history.md#page));
 - every series of the item that `/debug` would show — a removable volume that is stale left
-  out ([history](history.md#page)) — as a small chart over the window, grouped under its
-  family's name, in the page order; "No series yet" when there is none;
+  out ([history](history.md#page)) — grouped under its family's name, in the page order:
+  in its group's panel, below, when its family has a group label and the series carries
+  it, otherwise as a small chart over the window; under one family its panels come first,
+  then its charts; "No series yet" when there is none;
 - the changes of the item: the newest 20 of its series' transitions and anomaly starts and
   ends, and the silence transitions of its node — for a site, of the `sites` node and of its
   host — written and grouped by day as the timeline writes them
@@ -150,6 +154,55 @@ highest of its values and those lines. An unusual series says its usual value �
 as "now" does. A stale series' value is marked as holding no fresh data. The chart links to
 the series' history page with the same window, and carries the link to the page that sets
 what the series is judged by ([thresholds](thresholds.md)).
+
+**A panel** is one group of the item: its series of one family whose group label is
+declared ([metric names](metric-names.md#groups)) that hold one value of that label
+([0051](../decisions/0051-a-sensor-groups-its-family-by-a-label.md)). A family's panels are
+ordered by that value, byte by byte. A panel shows:
+
+- the value as its title, quoted as a label value is quoted in a series' name
+  ([metric names](metric-names.md#naming)), and the group's state word marked in its colour — the first of
+  "no fresh data", "critical", "warning", "unusual", "ok" and "reporting, nothing watched"
+  that holds for its series by the rules of an item's state; a silence is a node's, so a
+  panel is never "silent";
+- every series of the group by its newest value, formatted in its unit, with the mark a
+  card's row gets, linking to the series' history page with the page's window and
+  language. A panel draws no line: the chart is one click away.
+
+The labels of a group's series that a panel names are those other than the group label —
+and, on a site's page, other than `site`, as everywhere on it. A group whose every series
+the page leaves out has no panel.
+
+**The generic panel** is a table of the group: a row per set of the labels it names —
+whatever their keys, so one panel holds what `/debug` splits across matrices — named by
+those labels as `/debug` names a matrix row by its own, nameless when there is none, in
+the page order; a column per metric, headed as a `/debug` matrix column is, in metric id
+order; a cell its series' value and mark, a dash where the row has no series of that
+metric, as on `/debug`.
+
+**A panel of its own** replaces the generic one for a family the skin knows. The one there
+is today is the backup panel, for the family `backup`: a line per `job`, in the order of
+its values, byte by byte, each the job's name followed by those of these figures it has,
+in this order, separated by a dot — an age and a size formatted in their unit as `/debug`
+formats them, the count of archives rounded to a whole number:
+
+| Series | en | ru |
+|---|---|---|
+| `backup.failed` 0 | last run ok | запуск ок |
+| `backup.failed` 1 | last run failed | сбой запуска |
+| `backup.success_age_seconds` | succeeded 4.0 h ago | успех 4,0 ч назад |
+| `backup.latest_archive_age_seconds` | newest archive 7.0 h ago | свежий архив 7,0 ч назад |
+| `backup.archives` | archives: 10 | архивов: 10 |
+| `backup.stored_bytes` | 5.1 GB stored | занято 5,1 ГБ |
+| `backup.latest_archive_original_bytes` | 2.3 GB of data | данных 2,3 ГБ |
+
+A `backup.failed` value other than 0 and 1 reads as `/debug` formats it, after "last run".
+Then each other series of the job, a metric the panel does not know, as its metric's name
+with the labels it refers to left out — headed as a `/debug` matrix column is when that
+leaves nothing — and its value, in metric id order. Series whose labels other than `backup`
+are not `job` alone get a line per label set after the job lines, in the page order, named
+by those labels as a generic row is, figures as above. The words describe a value; they mark no level: "last run
+failed" is coloured only when the series holds a level, as any value.
 
 ## Behaviour
 
@@ -316,6 +369,55 @@ filled. The rows after them follow in a run that wraps. A reason closes the card
 | a new value while the page is open | on the page within 30 seconds without a reload, the window kept |
 | the state, the stored points, the thresholds or the event log cannot be read | the same failure `/debug` answers with |
 | a `disk.free_pct` chart of `/srv` on `ext4` | named as the history page names it, `ext4` included |
+
+### Panels {#panels}
+
+`server-b` below reports backup series of `web` / `copy` and `web` / `maintain`, and the
+same for `vpn`, and its family `backup` is grouped by `backup`.
+
+| State | What the reader sees |
+|---|---|
+| the family `backup` grouped by `backup` | under "Backups", a panel `vpn`, then a panel `web`, and no chart of a backup series |
+| `server-b` declared that grouping; `server-c`, an older agent, reports backup series and no `groups` | panels on `server-c`'s page too: a group label belongs to the family |
+| a group `backup: ""` beside `web` | a panel titled `""`, first |
+| a group `backup: "my repo"` | a panel titled `"my repo"` |
+| a group `backup: <b>x</b>`, its job `<b>y</b>` | both shown as those characters |
+| `disk` grouped by `mount`, one group whose only series are of a stale removable volume | no panel for that group |
+| the same family, no group label declared | a chart of each series, as before |
+| `disk` with no group label beside the grouped `backup` | the disk's charts, as before |
+| a family `q` grouped by `queue`, two series carrying `queue` and one without it | the panels first, then the chart of the one without it |
+| a family grouped by a label none of its series carry | a chart of each series |
+| every series of `web` fresh, none watched | `web` "reporting, nothing watched" |
+| `web` / `copy`'s success age at `critical`, fresh | `web` "critical"; `vpn` as its own series say |
+| `web` / `copy`'s success age at `critical` but stale, the rest of `web` fresh at `ok` | `web` "ok": a stale level does not raise a panel, as it does not raise an item |
+| a series of `web` at `warning`, another unusual | `web` "warning" |
+| every series of `web` stale | `web` "no fresh data" |
+| the node silent past its `silence_after` | every panel "no fresh data", none "silent" |
+| the backup panel of `web` | a line `copy`, then a line `maintain` |
+| `copy` with `failed` 0, a success 4 hours ago, a newest archive 7 hours ago, 10 archives and 5.1 GB stored | `copy · last run ok · succeeded 4.0 h ago · newest archive 7.0 h ago · archives: 10 · 5.1 GB stored` |
+| the same, in Russian | `copy · запуск ок · успех 4,0 ч назад · свежий архив 7,0 ч назад · архивов: 10 · занято 5,1 ГБ` |
+| `maintain` with `failed` 0, a success and 8 archives only | `maintain · last run ok · succeeded 4.0 h ago · archives: 8` |
+| `copy` with every figure, including 2.3 GB of newest archive data | `… · 5.1 GB stored · 2.3 GB of data` |
+| 10.4 archives | `archives: 10` |
+| `failed` 2 | `last run 2.00` |
+| `failed` 1, no success age — a job that never succeeded | `last run failed` and no success figure |
+| `failed` 1, no threshold on it | the words, not marked |
+| the success age at `critical` | its figure marked critical |
+| a stale figure | marked as holding no fresh data |
+| an unusual figure | marked unusual |
+| a figure | a link to its series' history page with the page's window and the language |
+| `copy` reporting `backup.queue_depth`, a metric the panel does not know, named "Queue {backup} {job}" | `Queue` and its value at the end of the `copy` line |
+| the same metric named "{backup} {job}" | headed `queue_depth` |
+| a series of `web` with `backup` alone | a nameless line after the job lines |
+| a series `{backup: web, job: copy, host: h1}` beside `copy`'s | a line `host=h1 job=copy` after the job lines |
+| a family `q` grouped by `queue`, with `q.depth {queue: a, shard: 1}` and `q.depth {queue: a, shard: 2}`, `q.depth` named "Depth {queue}" | a generic panel `a`: rows `shard=1`, `shard=2`, one column headed `Depth` |
+| a generic panel whose series have no label besides the group label | one nameless row |
+| a generic panel with `q.depth {queue: a}` and `q.depth {queue: a, shard: 1}` | the nameless row first, then `shard=1` |
+| a generic panel with `q.depth` and `q.age` of `shard=1`, `q.depth` only of `shard=2` | a dash in `shard=2`'s `q.age` cell |
+| a family of `sites` grouped by `site` | on `blog-a`'s page, one panel titled `blog-a` |
+| a generic panel on a site's page, its series labelled `site` and `path` | rows named by `path` alone |
+| `/item?…&window=7d` | each figure's link carrying `window=7d` |
+| a figure's new value, or a panel's state changing, while the page is open | on the page within 30 seconds without a reload |
 
 ### The item's changes {#changes}
 

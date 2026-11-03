@@ -1,6 +1,7 @@
 # 0046. An overview of items, rendered by the hub, opens a page per item
 
-- **Status:** accepted
+- **Status:** accepted; amended by [0051](0051-a-sensor-groups-its-family-by-a-label.md) —
+  a grouped family's series are gathered in panels on the item's page, not charted
 - **Date:** 2026-10-25
 - **Source:** [overview spec](../specs/overview.md),
   [design notes](../log/2026-10-25-overview.md)
