@@ -195,8 +195,8 @@ page or message is written in:
 | a `/debug` matrix's column | its metric's name with the labels it refers to left out; the metric id on hover |
 | a `/debug` matrix's column whose metric's name is only references to labels | headed as before names: its id less its family; the metric id on hover |
 | a generic panel's column | as a `/debug` matrix's column |
-| a generic panel's row, and a line of the backup panel that is not a job's | the labels it names, as a `/debug` matrix row names its own |
-| a figure of the backup panel of a metric the panel does not know | as a `/debug` matrix's column |
+| a generic panel's row, and a row of the backup panel that is not a job's | the labels it names, as a `/debug` matrix row names its own |
+| a column of the backup panel | as a `/debug` matrix's column |
 | the thresholds form | `node · ` the series' name with filesystem and removable; the metric id on hover |
 | an item of the list of what needs attention | `node · ` the series' name |
 | a change on the timeline or the item page | the series' name |

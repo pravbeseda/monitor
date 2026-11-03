@@ -165,9 +165,11 @@ ordered by that value, byte by byte. A panel shows:
   "no fresh data", "critical", "warning", "unusual", "ok" and "reporting, nothing watched"
   that holds for its series by the rules of an item's state; a silence is a node's, so a
   panel is never "silent";
-- every series of the group by its newest value, formatted in its unit, with the mark a
-  card's row gets, linking to the series' history page with the page's window and
-  language. A panel draws no line: the chart is one click away.
+- every series of the group by its newest value, formatted in its unit, linking to the
+  series' history page with the page's window and language, except where a panel of its
+  own says otherwise below. The mark a card's row gets is the value's colour and a dotted
+  underline, not a word beside it: the word stays for a screen reader and on hover. A
+  panel draws no line: the chart is one click away.
 
 The labels of a group's series that a panel names are those other than the group label —
 and, on a site's page, other than `site`, as everywhere on it. A group whose every series
@@ -176,33 +178,39 @@ the page leaves out has no panel.
 **The generic panel** is a table of the group: a row per set of the labels it names —
 whatever their keys, so one panel holds what `/debug` splits across matrices — named by
 those labels as `/debug` names a matrix row by its own, nameless when there is none, in
-the page order; a column per metric, headed as a `/debug` matrix column is, in metric id
-order; a cell its series' value and mark, a dash where the row has no series of that
-metric, as on `/debug`.
+the page order; a column per metric, headed as a `/debug` matrix column is, the metric id
+on hover, in metric id order; a cell its series' value and mark, a dash where the row has
+no series of that metric, as on `/debug`.
 
 **A panel of its own** replaces the generic one for a family the skin knows. The one there
-is today is the backup panel, for the family `backup`: a line per `job`, in the order of
-its values, byte by byte, each the job's name followed by those of these figures it has,
-in this order, separated by a dot — an age and a size formatted in their unit as `/debug`
-formats them, the count of archives rounded to a whole number:
+is today is the backup panel, for the family `backup`. It is a table like the generic one,
+with these differences:
 
-| Series | en | ru |
+- a row per job — a set of the labels it names that is `job` alone — in the order of the
+  job's values, byte by byte, named by the job quoted as a panel's title is; then a row
+  per other set of those labels, in the page order, named as a generic row is;
+- a row's `backup.failed` series has no column: the row's name stands for it. The name
+  links to that series' history page and takes its mark as a figure does, the word kept
+  for a screen reader and on hover. The value is said on hover and to a screen reader
+  too: "last run ok" for 0, "last run failed" for 1, otherwise "last run" and the
+  value as `/debug` formats it. A nameless row's name is those words, shown. A row
+  without that series has a plain name: no link, no colour, nothing on hover;
+- the columns are those of the metrics below that any row has, in this order, then a
+  column per other metric but `backup.failed`, in metric id order; every column is
+  headed as a generic column is;
+- the two ages below read as "ago", the count of archives as a whole number, rounded
+  half away from zero and not grouped, anything else as `/debug` formats it.
+
+| Series | Cell en | Cell ru |
 |---|---|---|
-| `backup.failed` 0 | last run ok | запуск ок |
-| `backup.failed` 1 | last run failed | сбой запуска |
-| `backup.success_age_seconds` | succeeded 4.0 h ago | успех 4,0 ч назад |
-| `backup.latest_archive_age_seconds` | newest archive 7.0 h ago | свежий архив 7,0 ч назад |
-| `backup.archives` | archives: 10 | архивов: 10 |
-| `backup.stored_bytes` | 5.1 GB stored | занято 5,1 ГБ |
-| `backup.latest_archive_original_bytes` | 2.3 GB of data | данных 2,3 ГБ |
+| `backup.success_age_seconds` | 4.0 h ago | 4,0 ч назад |
+| `backup.latest_archive_age_seconds` | 7.0 h ago | 7,0 ч назад |
+| `backup.archives` | 10 | 10 |
+| `backup.stored_bytes` | 5.1 GB | 5,1 ГБ |
+| `backup.latest_archive_original_bytes` | 2.3 GB | 2,3 ГБ |
 
-A `backup.failed` value other than 0 and 1 reads as `/debug` formats it, after "last run".
-Then each other series of the job, a metric the panel does not know, as its metric's name
-with the labels it refers to left out — headed as a `/debug` matrix column is when that
-leaves nothing — and its value, in metric id order. Series whose labels other than `backup`
-are not `job` alone get a line per label set after the job lines, in the page order, named
-by those labels as a generic row is, figures as above. The words describe a value; they mark no level: "last run
-failed" is coloured only when the series holds a level, as any value.
+The name is coloured only when the flag carries a mark: unwatched, fresh and usual, it is
+plain whatever its value ([0033](../decisions/0033-a-subject-is-a-series.md)).
 
 ## Behaviour
 
@@ -393,27 +401,39 @@ same for `vpn`, and its family `backup` is grouped by `backup`.
 | a series of `web` at `warning`, another unusual | `web` "warning" |
 | every series of `web` stale | `web` "no fresh data" |
 | the node silent past its `silence_after` | every panel "no fresh data", none "silent" |
-| the backup panel of `web` | a line `copy`, then a line `maintain` |
-| `copy` with `failed` 0, a success 4 hours ago, a newest archive 7 hours ago, 10 archives and 5.1 GB stored | `copy · last run ok · succeeded 4.0 h ago · newest archive 7.0 h ago · archives: 10 · 5.1 GB stored` |
-| the same, in Russian | `copy · запуск ок · успех 4,0 ч назад · свежий архив 7,0 ч назад · архивов: 10 · занято 5,1 ГБ` |
-| `maintain` with `failed` 0, a success and 8 archives only | `maintain · last run ok · succeeded 4.0 h ago · archives: 8` |
-| `copy` with every figure, including 2.3 GB of newest archive data | `… · 5.1 GB stored · 2.3 GB of data` |
-| 10.4 archives | `archives: 10` |
-| `failed` 2 | `last run 2.00` |
-| `failed` 1, no success age — a job that never succeeded | `last run failed` and no success figure |
-| `failed` 1, no threshold on it | the words, not marked |
-| the success age at `critical` | its figure marked critical |
-| a stale figure | marked as holding no fresh data |
-| an unusual figure | marked unusual |
+| the backup panel of `web` | rows `copy`, then `maintain` |
+| `copy` with `failed` 0, a success 4 hours ago, a newest archive 7 hours ago, 10 archives and 5.1 GB stored | columns `Since success`, `Newest archive`, `Archives`, `Stored`; `copy`'s cells `4.0 h ago`, `7.0 h ago`, `10`, `5.1 GB` |
+| the same, in Russian | columns `С успеха`, `Свежий архив`, `Архивов`, `Занято`; cells `4,0 ч назад`, `7,0 ч назад`, `10`, `5,1 ГБ` |
+| `maintain` beside it with `failed` 0, a success and 8 archives only | `maintain`'s cells `4.0 h ago`, a dash, `8`, a dash |
+| `copy` with every known figure and `backup.queue_depth` named "Queue {backup} {job}" | columns `Since success`, `Newest archive`, `Archives`, `Stored`, `Newest archive data`, `Queue` |
+| no job with newest archive data | no column `Newest archive data` |
+| a column | its metric id on hover |
+| 10.4 archives; 10.5; 1500 | `10`; `11`; `1500` |
+| `copy` with `failed` alone | a row `copy` and no column |
+| `failed` 0, no threshold on it | `copy` not coloured; "last run ok" on hover |
+| `failed` 1, no threshold on it | `copy` not coloured; "last run failed" on hover |
+| `failed` 2 | "last run 2.00" on hover |
+| `failed` 1 at `critical` | `copy` coloured critical; "last run failed" and "critical" on hover and for a screen reader, neither shown |
+| `failed` 0 at `critical`, stale | `copy` coloured as holding no fresh data |
+| `copy`'s name | a link to its `backup.failed` history page with the page's window and the language |
+| a row with no `backup.failed` series and its other series at `critical` | its name neither a link nor coloured, nothing on hover |
+| a job `"my repo"`; a job `""` | rows `"my repo"` and `""` |
+| the success age at `critical` | its value coloured critical, the word "critical" not shown but kept for a screen reader and on hover |
+| a stale figure | coloured as holding no fresh data |
+| an unusual figure | coloured unusual |
 | a figure | a link to its series' history page with the page's window and the language |
-| `copy` reporting `backup.queue_depth`, a metric the panel does not know, named "Queue {backup} {job}" | `Queue` and its value at the end of the `copy` line |
+| `copy` reporting `backup.queue_depth`, a metric the panel does not know, named "Queue {backup} {job}" | a column `Queue` after the known ones, its cell `2.00` |
 | the same metric named "{backup} {job}" | headed `queue_depth` |
-| a series of `web` with `backup` alone | a nameless line after the job lines |
-| a series `{backup: web, job: copy, host: h1}` beside `copy`'s | a line `host=h1 job=copy` after the job lines |
+| `backup.b_depth` named "Alpha {backup} {job}" and `backup.a_depth` named "Zeta {backup} {job}" | columns `Zeta`, then `Alpha` |
+| `backup.verify_age_seconds` 3600, a metric the panel does not know | its cell `1.0 h` |
+| a series of `web` with `backup` alone | a nameless row after the job rows |
+| a series of `web` with `backup` alone, its `failed` 1 | a row named "last run failed", a link to that series |
+| a series `{backup: web, job: copy, host: h1}` beside `copy`'s and the nameless one | `copy`, then the nameless row, then `host=h1 job=copy` |
 | a family `q` grouped by `queue`, with `q.depth {queue: a, shard: 1}` and `q.depth {queue: a, shard: 2}`, `q.depth` named "Depth {queue}" | a generic panel `a`: rows `shard=1`, `shard=2`, one column headed `Depth` |
 | a generic panel whose series have no label besides the group label | one nameless row |
 | a generic panel with `q.depth {queue: a}` and `q.depth {queue: a, shard: 1}` | the nameless row first, then `shard=1` |
 | a generic panel with `q.depth` and `q.age_seconds` of `shard=1`, `q.depth` only of `shard=2` | a dash in `shard=2`'s `q.age_seconds` cell |
+| a generic panel's cell at `critical` | its value coloured critical, the word not shown but kept for a screen reader and on hover |
 | a family of `sites` grouped by `site` | on `blog-a`'s page, one panel titled `blog-a` |
 | a family of `sites` grouped by `page`, on a site's page, its series labelled `site`, `page` and `path` | rows named by `path` alone |
 | `/item?…&window=7d` | each figure's link carrying `window=7d` |
