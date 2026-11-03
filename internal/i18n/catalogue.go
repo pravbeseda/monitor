@@ -42,7 +42,7 @@ var catalogue = map[string]map[Locale]string{
 	"overview.no_series":       {English: "No series yet", Russian: "Серий ещё нет"},
 
 	// The backup panel's words (docs/specs/overview.md#panels): a job's last run, said on
-	// hover, and an age's cell; %s is the value.
+	// hover or shown as a nameless row's name, and an age's cell; %s is the value.
 	"panel.backup.ok":          {English: "last run ok", Russian: "запуск ок"},
 	"panel.backup.failed":      {English: "last run failed", Russian: "сбой запуска"},
 	"panel.backup.run":         {English: "last run %s", Russian: "запуск %s"},

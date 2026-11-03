@@ -190,9 +190,9 @@ with these differences:
   job's values, byte by byte, named by the job quoted as a panel's title is; then a row
   per other set of those labels, in the page order, named as a generic row is;
 - a row's `backup.failed` series has no column: the row's name stands for it. The name
-  links to that series' history page and takes its mark as its colour, the word kept for
-  a screen reader and on hover as a figure's. The value is said on hover and to a screen
-  reader too: "last run ok" for 0, "last run failed" for 1, otherwise "last run" and the
+  links to that series' history page and takes its mark as a figure does, the word kept
+  for a screen reader and on hover. The value is said on hover and to a screen reader
+  too: "last run ok" for 0, "last run failed" for 1, otherwise "last run" and the
   value as `/debug` formats it. A nameless row's name is those words, shown. A row
   without that series has a plain name: no link, no colour, nothing on hover;
 - the columns are those of the metrics below that any row has, in this order, then a

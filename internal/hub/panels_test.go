@@ -335,7 +335,7 @@ func TestBackupPanel(t *testing.T) {
 	t.Run("the flag unwatched", func(t *testing.T) {
 		for value, word := range map[float64]string{0: "last run ok", 1: "last run failed", 2: "last run 2.00"} {
 			name := flag(t, failed(value)).name
-			containsAll(t, word, name, `title="`+word+`"`, `<span class="row-mark-word"> `+word+`</span>`)
+			containsAll(t, word, name, `<th scope="row" title="`+word+`">`, `<span class="row-mark-word"> `+word+`</span>`)
 			if strings.Contains(name, "level-") {
 				t.Errorf("an unwatched flag colours its row: %s", name)
 			}
@@ -344,7 +344,7 @@ func TestBackupPanel(t *testing.T) {
 
 	t.Run("the flag watched", func(t *testing.T) {
 		name := flag(t, judgedAt(failed(1), evaluate.Critical)).name
-		containsAll(t, "critical", name, `level-critical`, `title="last run failed · critical"`, `<span class="row-mark-word"> last run failed · critical</span>`)
+		containsAll(t, "critical", name, `level-critical`, `<th scope="row" title="last run failed · critical">`, `<span class="row-mark-word"> last run failed · critical</span>`)
 		if got := visible(name); got != "copy" {
 			t.Errorf("shown %q, want copy", got)
 		}
@@ -379,7 +379,7 @@ func TestBackupPanel(t *testing.T) {
 		for i, want := range []struct{ class, word string }{
 			{"level-critical", "critical"}, {"level-stale", "no fresh data"}, {"level-unusual", "unusual"},
 		} {
-			containsAll(t, want.word, tableRows(g)[i].cells[0], want.class, `title="`+want.word+`"`, `<span class="row-mark-word"> `+want.word+`</span>`)
+			containsAll(t, want.word, tableRows(g)[i].cells[0], want.class, `<td title="`+want.word+`">`, `<span class="row-mark-word"> `+want.word+`</span>`)
 		}
 	})
 
@@ -455,7 +455,7 @@ func TestGenericPanel(t *testing.T) {
 	t.Run("a cell at critical", func(t *testing.T) {
 		g := page(t, judgedAt(queue("q.depth", map[string]string{"queue": "a"}), evaluate.Critical))
 		equal(t, "rows", panelRows(g), []string{"1.00"})
-		containsAll(t, "cell", tableRows(g)[0].cells[0], `level-critical`, `title="critical"`, `<span class="row-mark-word"> critical</span>`)
+		containsAll(t, "cell", tableRows(g)[0].cells[0], `level-critical`, `<td title="critical">`, `<span class="row-mark-word"> critical</span>`)
 	})
 	t.Run("on a site's page", func(t *testing.T) {
 		current := grouped(stateOf(reading("sites", "site.hits", map[string]string{"site": "blog-a", "path": "/x", "page": "p1"}, 1)),
