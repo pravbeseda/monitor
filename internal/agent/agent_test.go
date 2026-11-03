@@ -712,6 +712,11 @@ func (n *named) Names() names.Book {
 	}
 }
 
+func (named) Defaults() map[string]api.Default {
+	warning := 5.0
+	return map[string]api.Default{"disk.free_pct": {Direction: "below", Warning: &warning}}
+}
+
 // spec: metric-names.md#ingest, metric-names.md#groups — a sensor's names and group labels
 // travel in its manifest entry; one that names nothing sends the entry it always did.
 func TestTheManifestCarriesWhatASensorNames(t *testing.T) {
@@ -735,7 +740,19 @@ func TestTheManifestCarriesWhatASensorNames(t *testing.T) {
 	if string(manifest[0].Groups) != `{"disk":"mount"}` {
 		t.Errorf("groups = %s, want the declared group label", manifest[0].Groups)
 	}
-	if manifest[1].Names != nil || manifest[1].Families != nil || manifest[1].Groups != nil {
-		t.Errorf("a sensor that names nothing sent %s %s %s", manifest[1].Names, manifest[1].Families, manifest[1].Groups)
+	if manifest[1].Names != nil || manifest[1].Families != nil || manifest[1].Groups != nil || manifest[1].Thresholds != nil {
+		t.Errorf("a sensor that names nothing sent %s %s %s %s", manifest[1].Names, manifest[1].Families, manifest[1].Groups, manifest[1].Thresholds)
+	}
+}
+
+// spec: thresholds.md#defaults — a sensor's default thresholds travel in its manifest entry.
+func TestTheManifestCarriesASensorsDefaults(t *testing.T) {
+	h, c := &hub{}, &clock{at: start}
+	a := newAgent(t, h, c, &named{stub{name: "disk"}})
+	if err := a.Tick(context.Background()); err != nil {
+		t.Fatalf("Tick: %v", err)
+	}
+	if got := string(h.last().Manifest[0].Thresholds); got != `{"disk.free_pct":{"direction":"below","warning":5}}` {
+		t.Errorf("thresholds = %s, want the declared default", got)
 	}
 }

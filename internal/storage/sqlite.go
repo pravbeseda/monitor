@@ -218,6 +218,15 @@ var migrations = []string{
 		name   TEXT NOT NULL,
 		PRIMARY KEY (kind, key, locale)
 	) WITHOUT ROWID;`,
+
+	// The series a sensor's default was seeded into, or whose threshold a save changed: a
+	// default is written into a series once (docs/specs/thresholds.md#defaults).
+	`CREATE TABLE IF NOT EXISTS seeded (
+		metric TEXT NOT NULL,
+		node   TEXT NOT NULL,
+		labels TEXT NOT NULL,
+		PRIMARY KEY (metric, node, labels)
+	) WITHOUT ROWID;`,
 }
 
 // querier is what a database handle and a transaction both offer, so one read runs either
@@ -386,6 +395,12 @@ func (s *SQLite) SaveIngest(ctx context.Context, in Ingest) (err error) {
 			m.Metric, owner, labels, formatTime(m.TS), m.Sensor)
 		if err != nil {
 			return fmt.Errorf("save series %s of %s: %w", m.Metric, owner, err)
+		}
+		if th, declared := in.Defaults[m.Metric]; declared {
+			th.Series = SeriesRef{Node: owner, Metric: m.Metric, Labels: m.Labels}
+			if err = seed(ctx, tx, th); err != nil {
+				return err
+			}
 		}
 	}
 

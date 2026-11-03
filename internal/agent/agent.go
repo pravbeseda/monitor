@@ -221,13 +221,16 @@ func (a *Agent) manifest() []api.SensorStatus {
 			book := named.Names()
 			status.Names, status.Families, status.Groups = declared(book.Metrics), declared(book.Families), declared(book.Groups)
 		}
+		if defaulted, ok := s.(sensor.Defaulted); ok {
+			status.Thresholds = declared(defaulted.Defaults())
+		}
 		manifest = append(manifest, status)
 	}
 	return manifest
 }
 
-// declared is one map of a sensor's declarations as the wire carries it; a map of strings
-// always encodes, so the error is impossible.
+// declared is one map of a sensor's declarations as the wire carries it; a map of strings or
+// of defaults always encodes, so the error is impossible.
 func declared[V any](byID map[string]V) json.RawMessage {
 	if len(byID) == 0 {
 		return nil

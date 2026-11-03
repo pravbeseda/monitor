@@ -37,6 +37,24 @@ func Readable(th storage.Threshold) bool {
 	return true
 }
 
+// Ordered reports whether critical is strictly beyond warning in the direction. Equal values
+// would leave one of the two levels unreachable.
+func Ordered(direction storage.Direction, warning, critical *float64) bool {
+	if warning == nil || critical == nil {
+		return true
+	}
+	if direction == storage.Above {
+		return *critical > *warning
+	}
+	return *critical < *warning
+}
+
+// Storable reports whether the store may hold th as a threshold: readable, with a value,
+// and its critical strictly beyond its warning (docs/specs/thresholds.md#invariants).
+func Storable(th storage.Threshold) bool {
+	return Readable(th) && (th.Warning != nil || th.Critical != nil) && Ordered(th.Direction, th.Warning, th.Critical)
+}
+
 // entered reports whether a value falls into a level at all.
 func entered(threshold float64, direction storage.Direction, value float64) bool {
 	if direction == storage.Above {

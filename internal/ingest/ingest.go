@@ -18,6 +18,7 @@ import (
 
 	"github.com/pravbeseda/monitor/internal/api"
 	"github.com/pravbeseda/monitor/internal/config"
+	"github.com/pravbeseda/monitor/internal/evaluate"
 	"github.com/pravbeseda/monitor/internal/i18n"
 	"github.com/pravbeseda/monitor/internal/names"
 	"github.com/pravbeseda/monitor/internal/storage"
@@ -89,6 +90,7 @@ func (h *Handler) Accept(ctx context.Context, node config.Node, req api.Request)
 		return api.Response{}, err
 	}
 	in.Names = declaredNames(req.Manifest, in.Measurements)
+	in.Defaults = declaredDefaults(req.Manifest, in.Measurements)
 	// A service node cannot sleep, so only a stored measurement is a sign of life; an empty
 	// report merely makes it known, so that it can fall silent before it ever stores one.
 	save := h.store.SaveIngest
@@ -266,6 +268,45 @@ func declaredNames(manifest []api.SensorStatus, measurements []storage.Measureme
 		out = append(out, name)
 	}
 	return out
+}
+
+// declaredDefaults keeps the default thresholds the manifest declares for metrics the
+// request carries, each held to the rules the store holds a threshold to. A default belongs
+// to its metric, whichever entry declares it, and the later entry wins; one the hub cannot
+// use is dropped alone, and an entry whose thresholds are not an object of objects loses
+// them all (docs/specs/thresholds.md#defaults).
+func declaredDefaults(manifest []api.SensorStatus, measurements []storage.Measurement) map[string]storage.Threshold {
+	carried := map[string]bool{}
+	for _, m := range measurements {
+		carried[m.Metric] = true
+	}
+	out := map[string]storage.Threshold{}
+	for _, status := range manifest {
+		var declared map[string]map[string]json.RawMessage
+		if len(status.Thresholds) == 0 || json.Unmarshal(status.Thresholds, &declared) != nil {
+			continue
+		}
+		for metric, fields := range declared {
+			if th, ok := defaultOf(fields); ok && carried[metric] {
+				out[metric] = th
+			}
+		}
+	}
+	return out
+}
+
+// defaultOf reads one declared default: a direction and the values a threshold has, and
+// nothing else.
+func defaultOf(fields map[string]json.RawMessage) (storage.Threshold, bool) {
+	var th storage.Threshold
+	targets := map[string]any{"direction": &th.Direction, "warning": &th.Warning, "critical": &th.Critical}
+	for key, raw := range fields {
+		target, known := targets[key]
+		if !known || json.Unmarshal(raw, target) != nil {
+			return storage.Threshold{}, false
+		}
+	}
+	return th, evaluate.Storable(th)
 }
 
 func validateMeasurement(m api.Measurement, sent time.Time) (storage.Measurement, error) {

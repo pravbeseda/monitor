@@ -43,6 +43,10 @@ type Ingest struct {
 	// Names are what the request's sensors declared their metrics and families are called,
 	// already checked by ingest (docs/specs/metric-names.md#ingest).
 	Names []Name
+	// Defaults are the thresholds the request's sensors declare for its metrics, by metric
+	// id and already checked by ingest; each seeds a series once
+	// (docs/specs/thresholds.md#defaults). Their Series is unset.
+	Defaults map[string]Threshold
 }
 
 // NameKind says what a declaration is: a metric's name, a family's, or the label a family

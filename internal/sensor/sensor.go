@@ -8,6 +8,7 @@ import (
 	"math"
 	"time"
 
+	"github.com/pravbeseda/monitor/internal/api"
 	"github.com/pravbeseda/monitor/internal/i18n"
 	"github.com/pravbeseda/monitor/internal/names"
 )
@@ -35,6 +36,13 @@ type Sensor interface {
 // does not is shown by its ids (docs/specs/metric-names.md).
 type Named interface {
 	Names() names.Book
+}
+
+// Defaulted is a sensor that declares a default threshold for a metric whose meaning is the
+// same on every installation; the hub seeds each series with it once
+// (docs/specs/thresholds.md#defaults).
+type Defaulted interface {
+	Defaults() map[string]api.Default
 }
 
 // Catalogued names metrics, and the families they belong to, from the interface's

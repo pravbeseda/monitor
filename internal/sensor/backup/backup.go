@@ -15,6 +15,7 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/pravbeseda/monitor/internal/api"
 	"github.com/pravbeseda/monitor/internal/names"
 	"github.com/pravbeseda/monitor/internal/sensor"
 )
@@ -64,6 +65,18 @@ func (s *Sensor) Names() names.Book {
 	book.Groups = map[string]string{"backup": "backup"}
 	return book
 }
+
+// Defaults are the thresholds every installation judges a backup by: a failed run is a
+// warning, and a job that has not succeeded for 30 hours a warning, for two days critical
+// (docs/specs/backup-sensor.md#purpose).
+func (s *Sensor) Defaults() map[string]api.Default {
+	return map[string]api.Default{
+		metricFailed:     {Direction: "above", Warning: ptr(0)},
+		metricSuccessAge: {Direction: "above", Warning: ptr(30 * 3600), Critical: ptr(2 * 24 * 3600)},
+	}
+}
+
+func ptr(v float64) *float64 { return &v }
 
 // Applicable is true on every system the agent is built for; a node without jobs simply
 // has no directory.

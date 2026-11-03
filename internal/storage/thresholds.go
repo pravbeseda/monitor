@@ -83,20 +83,26 @@ func readThresholds(ctx context.Context, from querier) ([]Threshold, error) {
 	return out, nil
 }
 
+const insertThreshold = `
+	INSERT INTO thresholds (metric, node, labels, direction, warning, critical)
+	VALUES (?, ?, ?, ?, ?, ?)`
+
 // saveThreshold stores what a series is judged by, replacing whatever was there: a save
 // states the whole configuration (docs/specs/thresholds.md#saving).
 func saveThreshold(ctx context.Context, to execer, th Threshold) error {
+	return writeThreshold(ctx, to, th, `
+		ON CONFLICT (metric, node, labels) DO UPDATE SET
+			direction = excluded.direction,
+			warning   = excluded.warning,
+			critical  = excluded.critical`)
+}
+
+func writeThreshold(ctx context.Context, to execer, th Threshold, onConflict string) error {
 	labels, err := encodeLabels(th.Series.Labels)
 	if err != nil {
 		return fmt.Errorf("threshold of %s: %w", th.Series.Metric, err)
 	}
-	_, err = to.ExecContext(ctx, `
-		INSERT INTO thresholds (metric, node, labels, direction, warning, critical)
-		VALUES (?, ?, ?, ?, ?, ?)
-		ON CONFLICT (metric, node, labels) DO UPDATE SET
-			direction = excluded.direction,
-			warning   = excluded.warning,
-			critical  = excluded.critical`,
+	_, err = to.ExecContext(ctx, insertThreshold+onConflict,
 		th.Series.Metric, th.Series.Node, labels, string(th.Direction),
 		optional(th.Warning), optional(th.Critical))
 	if err != nil {
@@ -105,20 +111,50 @@ func saveThreshold(ctx context.Context, to execer, th Threshold) error {
 	return nil
 }
 
-// deleteThreshold stops a series being judged. Removing what is not there is not an error:
-// the form clears a configuration by saving it empty, whatever was stored before.
-func deleteThreshold(ctx context.Context, to execer, ref SeriesRef) error {
+// seed writes a sensor's default into its series once: never over a stored threshold, and
+// never into a series seeded before or whose threshold a save changed
+// (docs/specs/thresholds.md#defaults).
+func seed(ctx context.Context, to execer, th Threshold) error {
+	first, err := markSeeded(ctx, to, th.Series)
+	if err != nil || !first {
+		return err
+	}
+	return writeThreshold(ctx, to, th, ` ON CONFLICT DO NOTHING`)
+}
+
+// markSeeded records that a series is not to be seeded again, and whether it was the first
+// to say so.
+func markSeeded(ctx context.Context, to execer, ref SeriesRef) (bool, error) {
 	labels, err := encodeLabels(ref.Labels)
 	if err != nil {
-		return fmt.Errorf("threshold of %s: %w", ref.Metric, err)
+		return false, fmt.Errorf("seeding of %s: %w", ref.Metric, err)
 	}
-	_, err = to.ExecContext(ctx, `
+	result, err := to.ExecContext(ctx, `
+		INSERT INTO seeded (metric, node, labels) VALUES (?, ?, ?) ON CONFLICT DO NOTHING`,
+		ref.Metric, ref.Node, labels)
+	if err != nil {
+		return false, fmt.Errorf("mark %s on %s seeded: %w", ref.Metric, ref.Node, err)
+	}
+	marked, err := result.RowsAffected()
+	return marked == 1, err
+}
+
+// deleteThreshold stops a series being judged, and says whether anything was stored.
+// Removing what is not there is not an error: the form clears a configuration by saving it
+// empty, whatever was stored before.
+func deleteThreshold(ctx context.Context, to execer, ref SeriesRef) (bool, error) {
+	labels, err := encodeLabels(ref.Labels)
+	if err != nil {
+		return false, fmt.Errorf("threshold of %s: %w", ref.Metric, err)
+	}
+	result, err := to.ExecContext(ctx, `
 		DELETE FROM thresholds WHERE metric = ? AND node = ? AND labels = ?`,
 		ref.Metric, ref.Node, labels)
 	if err != nil {
-		return fmt.Errorf("delete threshold of %s on %s: %w", ref.Metric, ref.Node, err)
+		return false, fmt.Errorf("delete threshold of %s on %s: %w", ref.Metric, ref.Node, err)
 	}
-	return nil
+	deleted, err := result.RowsAffected()
+	return deleted > 0, err
 }
 
 func nullable(v sql.NullFloat64) *float64 {

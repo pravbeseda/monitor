@@ -88,6 +88,11 @@ func (named) Names() names.Book {
 	}
 }
 
+func (named) Defaults() map[string]api.Default {
+	warning := 5.0
+	return map[string]api.Default{"gdrive.free_pct": {Direction: "below", Warning: &warning}}
+}
+
 // spec: metric-names.md#ingest, metric-names.md#groups — a sensor the hub runs itself
 // declares its names and group labels in the report it hands ingest, as an agent's would.
 func TestASensorTheHubRunsDeclaresItsNames(t *testing.T) {
@@ -103,5 +108,9 @@ func TestASensorTheHubRunsDeclaresItsNames(t *testing.T) {
 	}
 	if len(manifest) == 1 && string(manifest[0].Groups) != `{"gdrive":"account"}` {
 		t.Errorf("groups = %s, want gdrive's group label", manifest[0].Groups)
+	}
+	// spec: thresholds.md#defaults — and its defaults, seeded as an agent's are.
+	if len(manifest) == 1 && string(manifest[0].Thresholds) != `{"gdrive.free_pct":{"direction":"below","warning":5}}` {
+		t.Errorf("thresholds = %s, want gdrive's default", manifest[0].Thresholds)
 	}
 }
