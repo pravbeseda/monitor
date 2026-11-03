@@ -56,7 +56,8 @@ const (
 	GroupLabel NameKind = "group"
 )
 
-// Name is one declared name in one locale.
+// Name is one declared name in one locale, or a family's group label: then Text is the
+// label key and Locale is empty.
 type Name struct {
 	Kind   NameKind
 	Key    string

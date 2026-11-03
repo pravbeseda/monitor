@@ -82,11 +82,14 @@ func TestRunCollectsEachServiceNodeAtStart(t *testing.T) {
 type named struct{ drive }
 
 func (named) Names() names.Book {
-	return names.Book{Metrics: map[string]names.Text{"gdrive.free_bytes": {i18n.English: "Free on Google Drive"}}}
+	return names.Book{
+		Metrics: map[string]names.Text{"gdrive.free_bytes": {i18n.English: "Free on Google Drive"}},
+		Groups:  map[string]string{"gdrive": "account"},
+	}
 }
 
-// spec: metric-names.md#ingest — a sensor the hub runs itself declares its names in the
-// report it hands ingest, as an agent's would.
+// spec: metric-names.md#ingest, metric-names.md#groups — a sensor the hub runs itself
+// declares its names and group labels in the report it hands ingest, as an agent's would.
 func TestASensorTheHubRunsDeclaresItsNames(t *testing.T) {
 	in := reports{got: make(chan api.Request, 4)}
 	ctx, cancel := context.WithCancel(context.Background())
@@ -97,5 +100,8 @@ func TestASensorTheHubRunsDeclaresItsNames(t *testing.T) {
 	var declared api.Declared
 	if len(manifest) != 1 || json.Unmarshal(manifest[0].Names, &declared) != nil || declared["gdrive.free_bytes"][i18n.English] != "Free on Google Drive" {
 		t.Errorf("manifest = %+v, want gdrive's name", manifest)
+	}
+	if len(manifest) == 1 && string(manifest[0].Groups) != `{"gdrive":"account"}` {
+		t.Errorf("groups = %s, want gdrive's group label", manifest[0].Groups)
 	}
 }

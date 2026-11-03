@@ -92,10 +92,10 @@ func Fill(template string, labels map[string]string, quote func(string) string) 
 	return strings.TrimSpace(out.String()), used
 }
 
-// ValidKey reports whether key is a label key a name can refer to.
+// ValidKey reports whether key is a label key a name can refer to, no longer than a name.
 func ValidKey(key string) bool {
 	_, length := reference("{" + key + "}")
-	return length == len(key)+2
+	return length == len(key)+2 && len(key) <= MaxLength
 }
 
 // reference reads `{key}` at the start of text and returns the key and the reference's

@@ -413,9 +413,9 @@ same for `vpn`, and its family `backup` is grouped by `backup`.
 | a family `q` grouped by `queue`, with `q.depth {queue: a, shard: 1}` and `q.depth {queue: a, shard: 2}`, `q.depth` named "Depth {queue}" | a generic panel `a`: rows `shard=1`, `shard=2`, one column headed `Depth` |
 | a generic panel whose series have no label besides the group label | one nameless row |
 | a generic panel with `q.depth {queue: a}` and `q.depth {queue: a, shard: 1}` | the nameless row first, then `shard=1` |
-| a generic panel with `q.depth` and `q.age` of `shard=1`, `q.depth` only of `shard=2` | a dash in `shard=2`'s `q.age` cell |
+| a generic panel with `q.depth` and `q.age_seconds` of `shard=1`, `q.depth` only of `shard=2` | a dash in `shard=2`'s `q.age_seconds` cell |
 | a family of `sites` grouped by `site` | on `blog-a`'s page, one panel titled `blog-a` |
-| a generic panel on a site's page, its series labelled `site` and `path` | rows named by `path` alone |
+| a family of `sites` grouped by `page`, on a site's page, its series labelled `site`, `page` and `path` | rows named by `path` alone |
 | `/item?…&window=7d` | each figure's link carrying `window=7d` |
 | a figure's new value, or a panel's state changing, while the page is open | on the page within 30 seconds without a reload |
 

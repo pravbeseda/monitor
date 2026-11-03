@@ -1,11 +1,8 @@
 package hub
 
 import (
-	"fmt"
 	"maps"
-	"math"
 	"slices"
-	"strconv"
 	"time"
 
 	"github.com/pravbeseda/monitor/internal/i18n"
@@ -52,7 +49,7 @@ type panelSeries struct {
 
 // ownPanels are the families the overview skin draws a panel of its own for; any other
 // grouped family gets the generic one (ADR 0051).
-var ownPanels = map[string]func(printer *i18n.Printer, it overviewItem, series []panelSeries, link func(state.Subject) string) []panelLine{
+var ownPanels = map[string]func(printer *i18n.Printer, book names.Book, series []panelSeries, link func(state.Subject) string) []panelLine{
 	"backup": backupLines,
 }
 
@@ -94,9 +91,9 @@ func panelsOf(printer *i18n.Printer, it overviewItem, series []state.Subject, wi
 			named = append(named, panelSeries{Subject: s, named: labels})
 		}
 		if own, found := ownPanels[family]; found {
-			panel.Lines = own(printer, it, named, link)
+			panel.Lines = own(printer, it.names, named, link)
 		} else {
-			panel.Columns, panel.Rows = genericOf(printer, it, named, link)
+			panel.Columns, panel.Rows = genericOf(printer, it.names, named, link)
 		}
 		out = append(out, panel)
 	}
@@ -119,7 +116,7 @@ func labelSets(series []panelSeries) [][]panelSeries {
 }
 
 // genericOf lays a group out as a table: a row per label set, a column per metric.
-func genericOf(printer *i18n.Printer, it overviewItem, series []panelSeries, link func(state.Subject) string) ([]string, []panelRow) {
+func genericOf(printer *i18n.Printer, book names.Book, series []panelSeries, link func(state.Subject) string) ([]string, []panelRow) {
 	metrics := map[string]bool{}
 	for _, s := range series {
 		metrics[s.Metric] = true
@@ -127,7 +124,7 @@ func genericOf(printer *i18n.Printer, it overviewItem, series []panelSeries, lin
 	ids := slices.Sorted(maps.Keys(metrics))
 	columns := make([]string, 0, len(ids))
 	for _, metric := range ids {
-		columns = append(columns, columnLabel(printer, it.names, metric))
+		columns = append(columns, columnLabel(printer, book, metric))
 	}
 	var rows []panelRow
 	for _, set := range labelSets(series) {
@@ -138,77 +135,4 @@ func genericOf(printer *i18n.Printer, it overviewItem, series []panelSeries, lin
 		rows = append(rows, row)
 	}
 	return columns, rows
-}
-
-// backupFigures are the backup panel's words for the metrics it knows, in the order a line
-// shows them; each takes the value as the panel formats it.
-var backupFigures = []struct {
-	metric string
-	key    string
-}{
-	{"backup.failed", "panel.backup.run"},
-	{"backup.success_age_seconds", "panel.backup.succeeded"},
-	{"backup.latest_archive_age_seconds", "panel.backup.newest"},
-	{"backup.archives", "panel.backup.archives"},
-	{"backup.stored_bytes", "panel.backup.stored"},
-	{"backup.latest_archive_original_bytes", "panel.backup.original"},
-}
-
-// backupLines are the backup panel: a line per job, by its name, then a line per other
-// label set in the page order (docs/specs/overview.md#panels).
-func backupLines(printer *i18n.Printer, it overviewItem, series []panelSeries, link func(state.Subject) string) []panelLine {
-	sets := labelSets(series)
-	isJob := func(set []panelSeries) bool {
-		_, has := set[0].named["job"]
-		return has && len(set[0].named) == 1
-	}
-	jobs := slices.DeleteFunc(slices.Clone(sets), func(set []panelSeries) bool { return !isJob(set) })
-	slices.SortStableFunc(jobs, func(a, b []panelSeries) int {
-		switch first, second := a[0].named["job"], b[0].named["job"]; {
-		case first < second:
-			return -1
-		case first > second:
-			return 1
-		}
-		return 0
-	})
-	others := slices.DeleteFunc(sets, isJob)
-
-	out := make([]panelLine, 0, len(sets))
-	for _, set := range append(jobs, others...) {
-		line := panelLine{Name: notify.Describe(printer, set[0].named)}
-		if isJob(set) {
-			line.Name = notify.Quoted(set[0].named["job"])
-		}
-		byMetric := map[string]state.Subject{}
-		for _, s := range set {
-			byMetric[s.Metric] = s.Subject
-		}
-		for _, known := range backupFigures {
-			if s, found := byMetric[known.metric]; found {
-				line.Figures = append(line.Figures, figureView{Text: backupFigure(printer, known.metric, known.key, *s.Value), History: link(s), Mark: markOf(printer, s)})
-				delete(byMetric, known.metric)
-			}
-		}
-		for _, metric := range slices.Sorted(maps.Keys(byMetric)) {
-			s := byMetric[metric]
-			text := columnLabel(printer, it.names, metric) + " " + format(printer, metric, *s.Value)
-			line.Figures = append(line.Figures, figureView{Text: text, History: link(s), Mark: markOf(printer, s)})
-		}
-		out = append(out, line)
-	}
-	return out
-}
-
-// backupFigure is one known figure in the backup panel's words.
-func backupFigure(printer *i18n.Printer, metric, key string, value float64) string {
-	switch {
-	case metric == "backup.failed" && value == 0:
-		return printer.T("panel.backup.ok")
-	case metric == "backup.failed" && value == 1:
-		return printer.T("panel.backup.failed")
-	case metric == "backup.archives":
-		return fmt.Sprintf(printer.T(key), strconv.FormatFloat(math.Round(value), 'f', 0, 64))
-	}
-	return fmt.Sprintf(printer.T(key), format(printer, metric, value))
 }

@@ -129,6 +129,7 @@ A name is never removed: a sensor that stops declaring one leaves the last one i
 | a manifest entry with no `groups` (an older agent) | accepted; the group label declared earlier stays |
 | `groups` that is not a map of strings — `{"backup": "backup", "q": 5}` among them | every group label of that entry is ignored, its names kept; the request is accepted |
 | a group label `""`, `Backup`, `backup job` or `backup-job` | that group label is ignored; the request is accepted |
+| a group label longer than 80 characters | that group label is ignored; the request is accepted |
 | a sensor the hub runs itself declares a group label | kept the same way as an agent's |
 | the hub restarts | the group labels declared before it stopped are still known |
 

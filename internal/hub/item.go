@@ -85,12 +85,10 @@ type itemPageView struct {
 }
 
 type familyView struct {
-	key  string
-	Name string
-	// grouped are the family's series its panels gather, in the page order.
-	grouped []state.Subject
-	Panels  []panelView
-	Charts  []chartView
+	key    string
+	Name   string
+	Panels []panelView
+	Charts []chartView
 }
 
 type chartView struct {
@@ -228,14 +226,17 @@ func itemPageOf(ctx context.Context, printer *i18n.Printer, reader history.Reade
 			out.Numbers = append(out.Numbers, cardRowView{Name: it.rowName(printer, s), Value: format(printer, s.Metric, *s.Value), Mark: markOf(printer, s)})
 		}
 	}
+	// The series each family's panels gather, in the page order, by the family's index.
+	var grouped [][]state.Subject
 	for _, s := range shown {
 		if n := len(out.Families); n == 0 || out.Families[n-1].key != familyKey(s.Metric) {
 			family, _ := familyOf(s.Metric)
 			out.Families = append(out.Families, familyView{key: familyKey(s.Metric), Name: it.names.Family(printer.Locale(), family)})
+			grouped = append(grouped, nil)
 		}
 		last := &out.Families[len(out.Families)-1]
-		if _, grouped := it.groupOf(s); grouped {
-			last.grouped = append(last.grouped, s)
+		if _, inGroup := it.groupOf(s); inGroup {
+			grouped[len(grouped)-1] = append(grouped[len(grouped)-1], s)
 			continue
 		}
 		view, err := smallChartOf(ctx, printer, reader, store, it, s, window, lang)
@@ -245,7 +246,7 @@ func itemPageOf(ctx context.Context, printer *i18n.Printer, reader history.Reade
 		last.Charts = append(last.Charts, view)
 	}
 	for i := range out.Families {
-		out.Families[i].Panels = panelsOf(printer, it, out.Families[i].grouped, window, lang)
+		out.Families[i].Panels = panelsOf(printer, it, grouped[i], window, lang)
 	}
 
 	changes, anomalies, err := changesOf(ctx, store, it)

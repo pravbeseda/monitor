@@ -218,8 +218,9 @@ func validate(req api.Request, received time.Time) (storage.Ingest, error) {
 }
 
 // declaredNames keeps the names and group labels the manifest gives what the request
-// carries: a metric it holds a measurement of, or the family of one. Anything else, and any name a page could
-// not show, is dropped alone — a name never costs the request (docs/specs/metric-names.md#ingest).
+// carries: a metric it holds a measurement of, or the family of one. Anything else, and any
+// name a page could not show, is dropped alone — a name never costs the request
+// (docs/specs/metric-names.md#ingest).
 func declaredNames(manifest []api.SensorStatus, measurements []storage.Measurement) []storage.Name {
 	carried := map[storage.NameKind]map[string]bool{storage.MetricName: {}, storage.FamilyName: {}}
 	for _, m := range measurements {

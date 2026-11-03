@@ -13,7 +13,7 @@ import (
 )
 
 var (
-	groupPattern = regexp.MustCompile(`(?s)<article class="group state-([\w-]+)" data-group="([^"]*)">(.*?)</article>`)
+	panelPattern = regexp.MustCompile(`(?s)<article class="group state-([\w-]+)" data-group="([^"]*)">(.*?)</article>`)
 	linePattern  = regexp.MustCompile(`(?s)<li class="group-line">(.*?)</li>`)
 )
 
@@ -58,30 +58,30 @@ func mirror() []state.Subject {
 
 var byBackup = map[string]string{"backup": "backup"}
 
-type group struct{ class, title, body string }
+type panel struct{ class, title, body string }
 
-func groupsOf(body string) []group {
-	var out []group
-	for _, found := range groupPattern.FindAllStringSubmatch(body, -1) {
-		out = append(out, group{class: found[1], title: html.UnescapeString(found[2]), body: found[3]})
+func panelsOf(body string) []panel {
+	var out []panel
+	for _, found := range panelPattern.FindAllStringSubmatch(body, -1) {
+		out = append(out, panel{class: found[1], title: html.UnescapeString(found[2]), body: found[3]})
 	}
 	return out
 }
 
-func groupOf(t *testing.T, body, title string) group {
+func panelOf(t *testing.T, body, title string) panel {
 	t.Helper()
-	for _, g := range groupsOf(body) {
+	for _, g := range panelsOf(body) {
 		if g.title == title {
 			return g
 		}
 	}
 	t.Fatalf("no panel %q in %v", title, titles(body))
-	return group{}
+	return panel{}
 }
 
 func titles(body string) []string {
 	var out []string
-	for _, g := range groupsOf(body) {
+	for _, g := range panelsOf(body) {
 		out = append(out, g.title)
 	}
 	return out
@@ -92,7 +92,7 @@ func text(markup string) string {
 	return strings.Join(strings.Fields(html.UnescapeString(tagPattern.ReplaceAllString(markup, " "))), " ")
 }
 
-func lines(g group) []string {
+func lines(g panel) []string {
 	var out []string
 	for _, found := range linePattern.FindAllStringSubmatch(g.body, -1) {
 		out = append(out, text(found[1]))
@@ -150,6 +150,9 @@ func TestPanelsReplaceChartsOfAGroupedFamily(t *testing.T) {
 		if strings.Contains(body, "<b>x</b>") || strings.Contains(body, "<b>y</b>") {
 			t.Errorf("a label value was not escaped")
 		}
+		equal(t, "lines", lines(panelOf(t, body, "<b>x</b>")), []string{"<b>y</b> · last run ok"})
+		// spec: history.md#page — a figure of a series with an empty label still links to it.
+		containsAll(t, "link", panelOf(t, body, `""`).body, `href="/history?label.backup=&amp;label.job=copy&amp;metric=backup.failed&amp;node=server-b&amp;window=24h"`)
 	})
 
 	t.Run("a group the page leaves out", func(t *testing.T) {
@@ -170,7 +173,7 @@ func TestPanelsReplaceChartsOfAGroupedFamily(t *testing.T) {
 func TestPanelState(t *testing.T) {
 	word := func(t *testing.T, subjects []state.Subject, title string) string {
 		t.Helper()
-		return groupOf(t, serverB(t, grouped(stateOf(subjects...), byBackup), ""), title).class
+		return panelOf(t, serverB(t, grouped(stateOf(subjects...), byBackup), ""), title).class
 	}
 	with := func(changed ...state.Subject) []state.Subject {
 		out := mirror()
@@ -205,37 +208,43 @@ func TestPanelState(t *testing.T) {
 			t.Errorf("vpn = %s, want reporting", got)
 		}
 	})
-	t.Run("every series stale, the node silent", func(t *testing.T) {
-		var stale []state.Subject
-		for _, s := range mirror() {
-			stale = append(stale, staled(s))
+	var stale []state.Subject
+	for _, s := range mirror() {
+		stale = append(stale, staled(s))
+	}
+	t.Run("every series stale", func(t *testing.T) {
+		if got := word(t, stale, "web"); got != "no-data" {
+			t.Errorf("web = %s, want no fresh data", got)
 		}
+	})
+	t.Run("the node silent", func(t *testing.T) {
 		current := grouped(stateOf(stale...), byBackup)
 		current.Subjects = append(current.Subjects, judgedAt(plain("server-b", evaluate.SilenceMetric, 0), evaluate.Critical))
-		for _, g := range groupsOf(serverB(t, current, "")) {
+		for _, g := range panelsOf(serverB(t, current, "")) {
 			if g.class != "no-data" {
-				t.Errorf("%s = %s, want no fresh data", g.title, g.class)
+				t.Errorf("%s = %s, want no fresh data, never silent", g.title, g.class)
 			}
 		}
 	})
 }
 
-// spec: overview.md#panels
+// spec: overview.md#panels, metric-names.md#where — a figure of a metric the panel does not
+// know, and a line that is not a job's, are named as the matrix names its columns and rows.
 func TestBackupPanel(t *testing.T) {
 	body := serverB(t, grouped(stateOf(mirror()...), byBackup), "")
-	web := groupOf(t, body, "web")
+	web := panelOf(t, body, "web")
 	equal(t, "lines", lines(web), []string{
 		"copy · last run ok · succeeded 4.0 h ago · newest archive 7.0 h ago · archives: 10 · 5.1 GB stored",
 		"maintain · last run ok · succeeded 4.0 h ago · archives: 8",
 	})
 
 	t.Run("in Russian", func(t *testing.T) {
-		web := groupOf(t, serverB(t, grouped(stateOf(mirror()...), byBackup), "&lang=ru"), "web")
+		web := panelOf(t, serverB(t, grouped(stateOf(mirror()...), byBackup), "&lang=ru"), "web")
 		equal(t, "lines", lines(web)[:1], []string{"copy · запуск ок · успех 4,0 ч назад · свежий архив 7,0 ч назад · архивов: 10 · занято 5,1 ГБ"})
 	})
 
 	t.Run("every figure", func(t *testing.T) {
-		g := groupOf(t, serverB(t, grouped(stateOf(
+		g := panelOf(t, serverB(t, grouped(stateOf(
 			job("server-b", "web", "copy", "stored_bytes", 5.1e9),
 			job("server-b", "web", "copy", "latest_archive_original_bytes", 2.3e9),
 			job("server-b", "web", "copy", "archives", 10.4),
@@ -244,17 +253,17 @@ func TestBackupPanel(t *testing.T) {
 	})
 
 	t.Run("a failure", func(t *testing.T) {
-		g := groupOf(t, serverB(t, grouped(stateOf(job("server-b", "web", "copy", "failed", 1)), byBackup), ""), "web")
+		g := panelOf(t, serverB(t, grouped(stateOf(job("server-b", "web", "copy", "failed", 1)), byBackup), ""), "web")
 		equal(t, "lines", lines(g), []string{"copy · last run failed"})
 		if strings.Contains(g.body, "level-") {
 			t.Errorf("an unwatched failure is marked: %s", g.body)
 		}
-		g = groupOf(t, serverB(t, grouped(stateOf(job("server-b", "web", "copy", "failed", 2)), byBackup), ""), "web")
+		g = panelOf(t, serverB(t, grouped(stateOf(job("server-b", "web", "copy", "failed", 2)), byBackup), ""), "web")
 		equal(t, "lines", lines(g), []string{"copy · last run 2.00"})
 	})
 
 	t.Run("marks", func(t *testing.T) {
-		g := groupOf(t, serverB(t, grouped(stateOf(
+		g := panelOf(t, serverB(t, grouped(stateOf(
 			judgedAt(job("server-b", "web", "copy", "success_age_seconds", 3600), evaluate.Critical),
 			staled(job("server-b", "web", "maintain", "success_age_seconds", 3600)),
 			ranked(job("server-b", "web", "verify", "archives", 3), 1),
@@ -265,7 +274,7 @@ func TestBackupPanel(t *testing.T) {
 	})
 
 	t.Run("links", func(t *testing.T) {
-		g := groupOf(t, serverB(t, grouped(stateOf(job("server-b", "web", "copy", "archives", 3)), byBackup), "&window=7d&lang=ru"), "web")
+		g := panelOf(t, serverB(t, grouped(stateOf(job("server-b", "web", "copy", "archives", 3)), byBackup), "&window=7d&lang=ru"), "web")
 		containsAll(t, "link", g.body,
 			`href="/history?label.backup=web&amp;label.job=copy&amp;lang=ru&amp;metric=backup.archives&amp;node=server-b&amp;window=7d"`)
 	})
@@ -273,13 +282,13 @@ func TestBackupPanel(t *testing.T) {
 	t.Run("a metric the panel does not know", func(t *testing.T) {
 		current := grouped(stateOf(job("server-b", "web", "copy", "archives", 3), job("server-b", "web", "copy", "queue_depth", 2)), byBackup)
 		current.Names.Metrics["backup.queue_depth"] = names.Text{i18n.English: "Queue {backup} {job}"}
-		equal(t, "lines", lines(groupOf(t, serverB(t, current, ""), "web")), []string{"copy · archives: 3 · Queue 2.00"})
+		equal(t, "lines", lines(panelOf(t, serverB(t, current, ""), "web")), []string{"copy · archives: 3 · Queue 2.00"})
 		current.Names.Metrics["backup.queue_depth"] = names.Text{i18n.English: "{backup} {job}"}
-		equal(t, "lines", lines(groupOf(t, serverB(t, current, ""), "web")), []string{"copy · archives: 3 · queue_depth 2.00"})
+		equal(t, "lines", lines(panelOf(t, serverB(t, current, ""), "web")), []string{"copy · archives: 3 · queue_depth 2.00"})
 	})
 
 	t.Run("lines that are not a job's", func(t *testing.T) {
-		g := groupOf(t, serverB(t, grouped(stateOf(
+		g := panelOf(t, serverB(t, grouped(stateOf(
 			reading("server-b", "backup.archives", map[string]string{"backup": "web", "job": "copy", "host": "h1"}, 3),
 			reading("server-b", "backup.archives", map[string]string{"backup": "web"}, 4),
 			job("server-b", "web", "copy", "archives", 5),
@@ -289,29 +298,30 @@ func TestBackupPanel(t *testing.T) {
 }
 
 var (
-	columnPattern = regexp.MustCompile(`<th class="group-column"[^>]*>([^<]*)</th>`)
-	rowPattern2   = regexp.MustCompile(`(?s)<tr class="group-row">(.*?)</tr>`)
+	columnPattern   = regexp.MustCompile(`<th class="group-column"[^>]*>([^<]*)</th>`)
+	panelRowPattern = regexp.MustCompile(`(?s)<tr class="group-row">(.*?)</tr>`)
 )
 
-// spec: overview.md#panels
+// spec: overview.md#panels, metric-names.md#where — a generic panel names its columns and
+// rows as a /debug matrix does.
 func TestGenericPanel(t *testing.T) {
 	queue := func(metric string, labels map[string]string) state.Subject {
 		return reading("server-b", metric, labels, 1)
 	}
-	page := func(t *testing.T, subjects ...state.Subject) group {
+	page := func(t *testing.T, subjects ...state.Subject) panel {
 		t.Helper()
 		current := grouped(stateOf(subjects...), map[string]string{"q": "queue"})
 		current.Names.Metrics["q.depth"] = names.Text{i18n.English: "Depth {queue}"}
-		return groupOf(t, serverB(t, current, ""), "a")
+		return panelOf(t, serverB(t, current, ""), "a")
 	}
-	rows := func(g group) []string {
+	rows := func(g panel) []string {
 		var out []string
-		for _, found := range rowPattern2.FindAllStringSubmatch(g.body, -1) {
+		for _, found := range panelRowPattern.FindAllStringSubmatch(g.body, -1) {
 			out = append(out, text(found[1]))
 		}
 		return out
 	}
-	columns := func(g group) []string {
+	columns := func(g panel) []string {
 		var out []string
 		for _, found := range columnPattern.FindAllStringSubmatch(g.body, -1) {
 			out = append(out, found[1])
@@ -339,7 +349,7 @@ func TestGenericPanel(t *testing.T) {
 	t.Run("on a site's page", func(t *testing.T) {
 		current := grouped(stateOf(reading("sites", "site.hits", map[string]string{"site": "blog-a", "path": "/x", "page": "p1"}, 1)),
 			map[string]string{"site": "page"})
-		g := groupOf(t, itemPage(t, current, held{}, logbook{}, "/item?node=sites&label.site=blog-a"), "p1")
+		g := panelOf(t, itemPage(t, current, held{}, logbook{}, "/item?node=sites&label.site=blog-a"), "p1")
 		equal(t, "rows", rows(g), []string{"path=/x 1.00"})
 	})
 	t.Run("a family of sites grouped by site", func(t *testing.T) {

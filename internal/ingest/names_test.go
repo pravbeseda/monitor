@@ -124,9 +124,9 @@ func TestIgnoresGroupsThatAreNotAMapOfStrings(t *testing.T) {
 }
 
 // spec: metric-names.md#groups — a group label that is not a label key a name could refer
-// to is dropped alone.
+// to, or is longer than a name, is dropped alone.
 func TestIgnoresAGroupLabelThatIsNotAKey(t *testing.T) {
-	for _, label := range []string{``, `Mount`, `mount point`, `mount-point`} {
+	for _, label := range []string{``, `Mount`, `mount point`, `mount-point`, strings.Repeat("m", 81)} {
 		t.Run(label, func(t *testing.T) {
 			expect(t, namesOf(t, declaring(`"groups": {"disk": "`+label+`"}`)))
 		})
