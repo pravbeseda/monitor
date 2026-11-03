@@ -13,20 +13,23 @@ import (
 )
 
 var (
-	panelPattern = regexp.MustCompile(`(?s)<article class="group state-([\w-]+)" data-group="([^"]*)">(.*?)</article>`)
-	linePattern  = regexp.MustCompile(`(?s)<li class="group-line">(.*?)</li>`)
+	panelPattern     = regexp.MustCompile(`(?s)<article class="group state-([\w-]+)" data-group="([^"]*)">(.*?)</article>`)
+	columnPattern    = regexp.MustCompile(`<th class="group-column" scope="col" title="([^"]*)">([^<]*)</th>`)
+	panelRowPattern  = regexp.MustCompile(`(?s)<tr class="group-row">(.*?)</tr>`)
+	rowNamePattern   = regexp.MustCompile(`(?s)<th scope="row"[^>]*>.*?</th>`)
+	panelCellPattern = regexp.MustCompile(`(?s)<td[^>]*>.*?</td>`)
 )
 
 // grouped is current with the backup sensor's names and a group label per family.
 func grouped(current state.State, groups map[string]string) state.State {
 	current.Names = names.Book{
 		Metrics: map[string]names.Text{
-			"backup.failed":                        {i18n.English: "Failed {backup} {job}"},
-			"backup.success_age_seconds":           {i18n.English: "Since success {backup} {job}"},
-			"backup.archives":                      {i18n.English: "Archives {backup} {job}"},
-			"backup.latest_archive_age_seconds":    {i18n.English: "Newest archive {backup} {job}"},
-			"backup.stored_bytes":                  {i18n.English: "Stored {backup} {job}"},
-			"backup.latest_archive_original_bytes": {i18n.English: "Newest archive data {backup} {job}"},
+			"backup.failed":                        {i18n.English: "Failed {backup} {job}", i18n.Russian: "Сбой {backup} {job}"},
+			"backup.success_age_seconds":           {i18n.English: "Since success {backup} {job}", i18n.Russian: "С успеха {backup} {job}"},
+			"backup.archives":                      {i18n.English: "Archives {backup} {job}", i18n.Russian: "Архивов {backup} {job}"},
+			"backup.latest_archive_age_seconds":    {i18n.English: "Newest archive {backup} {job}", i18n.Russian: "Свежий архив {backup} {job}"},
+			"backup.stored_bytes":                  {i18n.English: "Stored {backup} {job}", i18n.Russian: "Занято {backup} {job}"},
+			"backup.latest_archive_original_bytes": {i18n.English: "Newest archive data {backup} {job}", i18n.Russian: "Данные архива {backup} {job}"},
 		},
 		Families: map[string]names.Text{"backup": {i18n.English: "Backups", i18n.Russian: "Бэкапы"}},
 		Groups:   groups,
@@ -92,12 +95,58 @@ func text(markup string) string {
 	return strings.Join(strings.Fields(html.UnescapeString(tagPattern.ReplaceAllString(markup, " "))), " ")
 }
 
-func lines(g panel) []string {
-	var out []string
-	for _, found := range linePattern.FindAllStringSubmatch(g.body, -1) {
-		out = append(out, text(found[1]))
+// visible is markup as a sighted reader sees it: a mark's word, kept for a screen reader,
+// left out.
+func visible(markup string) string {
+	return text(markPattern.ReplaceAllString(markup, ""))
+}
+
+// columns are a panel's column headings and the metric id each shows on hover.
+func columns(g panel) (labels, metrics []string) {
+	for _, found := range columnPattern.FindAllStringSubmatch(g.body, -1) {
+		labels, metrics = append(labels, html.UnescapeString(found[2])), append(metrics, found[1])
+	}
+	return labels, metrics
+}
+
+// columnHeads are a panel's column headings.
+func columnHeads(g panel) []string {
+	labels, _ := columns(g)
+	return labels
+}
+
+// tableRow is one row of a panel's table: its name's element and each cell's.
+type tableRow struct {
+	name  string
+	cells []string
+}
+
+func tableRows(g panel) []tableRow {
+	var out []tableRow
+	for _, found := range panelRowPattern.FindAllStringSubmatch(g.body, -1) {
+		row := tableRow{name: rowNamePattern.FindString(found[1]), cells: panelCellPattern.FindAllString(found[1], -1)}
+		out = append(out, row)
 	}
 	return out
+}
+
+// panelRows are a panel's rows as a sighted reader reads them: the name, then each cell.
+func panelRows(g panel) []string {
+	var out []string
+	for _, row := range tableRows(g) {
+		parts := []string{visible(row.name)}
+		for _, cell := range row.cells {
+			parts = append(parts, visible(cell))
+		}
+		out = append(out, strings.TrimSpace(strings.Join(parts, " ")))
+	}
+	return out
+}
+
+// webPanel is the panel web on server-b's page of these backup series.
+func webPanel(t *testing.T, subjects ...state.Subject) panel {
+	t.Helper()
+	return panelOf(t, serverB(t, grouped(stateOf(subjects...), byBackup), ""), "web")
 }
 
 func serverB(t *testing.T, current state.State, query string) string {
@@ -150,7 +199,7 @@ func TestPanelsReplaceChartsOfAGroupedFamily(t *testing.T) {
 		if strings.Contains(body, "<b>x</b>") || strings.Contains(body, "<b>y</b>") {
 			t.Errorf("a label value was not escaped")
 		}
-		equal(t, "lines", lines(panelOf(t, body, "<b>x</b>")), []string{"<b>y</b> · last run ok"})
+		equal(t, "rows", panelRows(panelOf(t, body, "<b>x</b>")), []string{"<b>y</b>"})
 		// spec: history.md#page — a figure of a series with an empty label still links to it.
 		containsAll(t, "link", panelOf(t, body, `""`).body, `href="/history?label.backup=&amp;label.job=copy&amp;metric=backup.failed&amp;node=server-b&amp;window=24h"`)
 	})
@@ -228,49 +277,110 @@ func TestPanelState(t *testing.T) {
 	})
 }
 
-// spec: overview.md#panels, metric-names.md#where — a figure of a metric the panel does not
-// know, and a line that is not a job's, are named as the matrix names its columns and rows.
+// spec: overview.md#panels, metric-names.md#where — a column of a metric the panel does not
+// know, and a row that is not a job's, are named as the matrix names its columns and rows.
 func TestBackupPanel(t *testing.T) {
 	body := serverB(t, grouped(stateOf(mirror()...), byBackup), "")
 	web := panelOf(t, body, "web")
-	equal(t, "lines", lines(web), []string{
-		"copy · last run ok · succeeded 4.0 h ago · newest archive 7.0 h ago · archives: 10 · 5.1 GB stored",
-		"maintain · last run ok · succeeded 4.0 h ago · archives: 8",
+	equal(t, "columns", columnHeads(web), []string{"Since success", "Newest archive", "Archives", "Stored"})
+	equal(t, "rows", panelRows(web), []string{
+		"copy 4.0 h ago 7.0 h ago 10 5.1 GB",
+		"maintain 4.0 h ago — 8 —",
+	})
+	_, metrics := columns(web)
+	equal(t, "column hover", metrics, []string{
+		"backup.success_age_seconds", "backup.latest_archive_age_seconds", "backup.archives", "backup.stored_bytes",
 	})
 
 	t.Run("in Russian", func(t *testing.T) {
 		web := panelOf(t, serverB(t, grouped(stateOf(mirror()...), byBackup), "&lang=ru"), "web")
-		equal(t, "lines", lines(web)[:1], []string{"copy · запуск ок · успех 4,0 ч назад · свежий архив 7,0 ч назад · архивов: 10 · занято 5,1 ГБ"})
+		equal(t, "columns", columnHeads(web), []string{"С успеха", "Свежий архив", "Архивов", "Занято"})
+		equal(t, "rows", panelRows(web)[:1], []string{"copy 4,0 ч назад 7,0 ч назад 10 5,1 ГБ"})
 	})
 
-	t.Run("every figure", func(t *testing.T) {
-		g := panelOf(t, serverB(t, grouped(stateOf(
-			job("server-b", "web", "copy", "stored_bytes", 5.1e9),
+	t.Run("every known figure", func(t *testing.T) {
+		current := grouped(stateOf(
+			job("server-b", "web", "copy", "queue_depth", 2),
 			job("server-b", "web", "copy", "latest_archive_original_bytes", 2.3e9),
-			job("server-b", "web", "copy", "archives", 10.4),
-		), byBackup), ""), "web")
-		equal(t, "lines", lines(g), []string{"copy · archives: 10 · 5.1 GB stored · 2.3 GB of data"})
+			job("server-b", "web", "copy", "stored_bytes", 5.1e9),
+			job("server-b", "web", "copy", "archives", 10),
+			job("server-b", "web", "copy", "latest_archive_age_seconds", 7*3600),
+			job("server-b", "web", "copy", "success_age_seconds", 4*3600),
+		), byBackup)
+		current.Names.Metrics["backup.queue_depth"] = names.Text{i18n.English: "Queue {backup} {job}"}
+		g := panelOf(t, serverB(t, current, ""), "web")
+		equal(t, "columns", columnHeads(g), []string{"Since success", "Newest archive", "Archives", "Stored", "Newest archive data", "Queue"})
+		equal(t, "rows", panelRows(g), []string{"copy 4.0 h ago 7.0 h ago 10 5.1 GB 2.3 GB 2.00"})
 	})
 
-	t.Run("a failure", func(t *testing.T) {
-		g := panelOf(t, serverB(t, grouped(stateOf(job("server-b", "web", "copy", "failed", 1)), byBackup), ""), "web")
-		equal(t, "lines", lines(g), []string{"copy · last run failed"})
-		if strings.Contains(g.body, "level-") {
-			t.Errorf("an unwatched failure is marked: %s", g.body)
+	t.Run("archives rounded, not grouped", func(t *testing.T) {
+		for value, want := range map[float64]string{10.4: "copy 10", 10.5: "copy 11", 1500: "copy 1500"} {
+			g := webPanel(t, job("server-b", "web", "copy", "archives", value))
+			equal(t, "rows", panelRows(g), []string{want})
 		}
-		g = panelOf(t, serverB(t, grouped(stateOf(job("server-b", "web", "copy", "failed", 2)), byBackup), ""), "web")
-		equal(t, "lines", lines(g), []string{"copy · last run 2.00"})
+	})
+
+	flag := func(t *testing.T, s state.Subject) tableRow {
+		t.Helper()
+		return tableRows(webPanel(t, s))[0]
+	}
+	failed := func(value float64) state.Subject { return job("server-b", "web", "copy", "failed", value) }
+
+	t.Run("the flag alone", func(t *testing.T) {
+		g := webPanel(t, failed(1))
+		equal(t, "columns", columnHeads(g), nil)
+		equal(t, "rows", panelRows(g), []string{"copy"})
+	})
+
+	t.Run("the flag unwatched", func(t *testing.T) {
+		for value, word := range map[float64]string{0: "last run ok", 1: "last run failed", 2: "last run 2.00"} {
+			name := flag(t, failed(value)).name
+			containsAll(t, word, name, `<th scope="row" title="`+word+`">`, `<span class="row-mark-word"> `+word+`</span>`)
+			if strings.Contains(name, "level-") {
+				t.Errorf("an unwatched flag colours its row: %s", name)
+			}
+		}
+	})
+
+	t.Run("the flag watched", func(t *testing.T) {
+		name := flag(t, judgedAt(failed(1), evaluate.Critical)).name
+		containsAll(t, "critical", name, `level-critical`, `<th scope="row" title="last run failed · critical">`, `<span class="row-mark-word"> last run failed · critical</span>`)
+		if got := visible(name); got != "copy" {
+			t.Errorf("shown %q, want copy", got)
+		}
+		containsAll(t, "stale", flag(t, staled(judgedAt(failed(0), evaluate.Critical))).name, `level-stale`)
+	})
+
+	t.Run("a row's name", func(t *testing.T) {
+		g := panelOf(t, serverB(t, grouped(stateOf(
+			failed(0),
+			judgedAt(job("server-b", "web", "maintain", "archives", 3), evaluate.Critical),
+		), byBackup), "&window=7d&lang=ru"), "web")
+		named := tableRows(g)
+		containsAll(t, "copy", named[0].name,
+			`href="/history?label.backup=web&amp;label.job=copy&amp;lang=ru&amp;metric=backup.failed&amp;node=server-b&amp;window=7d"`)
+		if name := named[1].name; name != `<th scope="row">maintain</th>` {
+			t.Errorf("a row without a failure flag is more than its name: %s", name)
+		}
+	})
+
+	t.Run("quoted job names", func(t *testing.T) {
+		g := webPanel(t, job("server-b", "web", "my repo", "archives", 1), job("server-b", "web", "", "archives", 1))
+		equal(t, "rows", panelRows(g), []string{`"" 1`, `"my repo" 1`})
 	})
 
 	t.Run("marks", func(t *testing.T) {
-		g := panelOf(t, serverB(t, grouped(stateOf(
+		g := webPanel(t,
 			judgedAt(job("server-b", "web", "copy", "success_age_seconds", 3600), evaluate.Critical),
 			staled(job("server-b", "web", "maintain", "success_age_seconds", 3600)),
-			ranked(job("server-b", "web", "verify", "archives", 3), 1),
-		), byBackup), ""), "web")
-		equal(t, "lines", lines(g), []string{
-			"copy · succeeded 1.0 h ago critical", "maintain · succeeded 1.0 h ago no fresh data", "verify · archives: 3 unusual",
-		})
+			ranked(job("server-b", "web", "verify", "success_age_seconds", 3600), 1),
+		)
+		equal(t, "rows", panelRows(g), []string{"copy 1.0 h ago", "maintain 1.0 h ago", "verify 1.0 h ago"})
+		for i, want := range []struct{ class, word string }{
+			{"level-critical", "critical"}, {"level-stale", "no fresh data"}, {"level-unusual", "unusual"},
+		} {
+			containsAll(t, want.word, tableRows(g)[i].cells[0], want.class, `<td title="`+want.word+`">`, `<span class="row-mark-word"> `+want.word+`</span>`)
+		}
 	})
 
 	t.Run("links", func(t *testing.T) {
@@ -279,28 +389,37 @@ func TestBackupPanel(t *testing.T) {
 			`href="/history?label.backup=web&amp;label.job=copy&amp;lang=ru&amp;metric=backup.archives&amp;node=server-b&amp;window=7d"`)
 	})
 
-	t.Run("a metric the panel does not know", func(t *testing.T) {
+	t.Run("metrics the panel does not know", func(t *testing.T) {
 		current := grouped(stateOf(job("server-b", "web", "copy", "archives", 3), job("server-b", "web", "copy", "queue_depth", 2)), byBackup)
 		current.Names.Metrics["backup.queue_depth"] = names.Text{i18n.English: "Queue {backup} {job}"}
-		equal(t, "lines", lines(panelOf(t, serverB(t, current, ""), "web")), []string{"copy · archives: 3 · Queue 2.00"})
+		g := panelOf(t, serverB(t, current, ""), "web")
+		equal(t, "columns", columnHeads(g), []string{"Archives", "Queue"})
+		equal(t, "rows", panelRows(g), []string{"copy 3 2.00"})
 		current.Names.Metrics["backup.queue_depth"] = names.Text{i18n.English: "{backup} {job}"}
-		equal(t, "lines", lines(panelOf(t, serverB(t, current, ""), "web")), []string{"copy · archives: 3 · queue_depth 2.00"})
+		equal(t, "columns", columnHeads(panelOf(t, serverB(t, current, ""), "web")), []string{"Archives", "queue_depth"})
+
+		current = grouped(stateOf(job("server-b", "web", "copy", "b_depth", 1), job("server-b", "web", "copy", "a_depth", 1),
+			job("server-b", "web", "copy", "verify_age_seconds", 3600)), byBackup)
+		current.Names.Metrics["backup.b_depth"] = names.Text{i18n.English: "Alpha {backup} {job}"}
+		current.Names.Metrics["backup.a_depth"] = names.Text{i18n.English: "Zeta {backup} {job}"}
+		g = panelOf(t, serverB(t, current, ""), "web")
+		equal(t, "columns", columnHeads(g), []string{"Zeta", "Alpha", "verify_age_seconds"})
+		equal(t, "rows", panelRows(g), []string{"copy 1.00 1.00 1.0 h"})
 	})
 
-	t.Run("lines that are not a job's", func(t *testing.T) {
-		g := panelOf(t, serverB(t, grouped(stateOf(
+	t.Run("rows that are not a job's", func(t *testing.T) {
+		g := webPanel(t,
 			reading("server-b", "backup.archives", map[string]string{"backup": "web", "job": "copy", "host": "h1"}, 3),
 			reading("server-b", "backup.archives", map[string]string{"backup": "web"}, 4),
 			job("server-b", "web", "copy", "archives", 5),
-		), byBackup), ""), "web")
-		equal(t, "lines", lines(g), []string{"copy · archives: 5", "archives: 4", "host=h1 job=copy · archives: 3"})
+		)
+		equal(t, "rows", panelRows(g), []string{"copy 5", "4", "host=h1 job=copy 3"})
+
+		g = webPanel(t, reading("server-b", "backup.failed", map[string]string{"backup": "web"}, 1))
+		equal(t, "rows", panelRows(g), []string{"last run failed"})
+		containsAll(t, "link", tableRows(g)[0].name, `metric=backup.failed`)
 	})
 }
-
-var (
-	columnPattern   = regexp.MustCompile(`<th class="group-column"[^>]*>([^<]*)</th>`)
-	panelRowPattern = regexp.MustCompile(`(?s)<tr class="group-row">(.*?)</tr>`)
-)
 
 // spec: overview.md#panels, metric-names.md#where — a generic panel names its columns and
 // rows as a /debug matrix does.
@@ -314,43 +433,35 @@ func TestGenericPanel(t *testing.T) {
 		current.Names.Metrics["q.depth"] = names.Text{i18n.English: "Depth {queue}"}
 		return panelOf(t, serverB(t, current, ""), "a")
 	}
-	rows := func(g panel) []string {
-		var out []string
-		for _, found := range panelRowPattern.FindAllStringSubmatch(g.body, -1) {
-			out = append(out, text(found[1]))
-		}
-		return out
-	}
-	columns := func(g panel) []string {
-		var out []string
-		for _, found := range columnPattern.FindAllStringSubmatch(g.body, -1) {
-			out = append(out, found[1])
-		}
-		return out
-	}
-
 	g := page(t, queue("q.depth", map[string]string{"queue": "a", "shard": "2"}), queue("q.depth", map[string]string{"queue": "a", "shard": "1"}))
-	equal(t, "columns", columns(g), []string{"Depth"})
-	equal(t, "rows", rows(g), []string{"shard=1 1.00", "shard=2 1.00"})
+	equal(t, "columns", columnHeads(g), []string{"Depth"})
+	equal(t, "rows", panelRows(g), []string{"shard=1 1.00", "shard=2 1.00"})
 
 	t.Run("no other label", func(t *testing.T) {
-		equal(t, "rows", rows(page(t, queue("q.depth", map[string]string{"queue": "a"}))), []string{"1.00"})
+		equal(t, "rows", panelRows(page(t, queue("q.depth", map[string]string{"queue": "a"}))), []string{"1.00"})
 	})
 	t.Run("mixed label sets", func(t *testing.T) {
 		g := page(t, queue("q.depth", map[string]string{"queue": "a", "shard": "1"}), queue("q.depth", map[string]string{"queue": "a"}))
-		equal(t, "rows", rows(g), []string{"1.00", "shard=1 1.00"})
+		equal(t, "rows", panelRows(g), []string{"1.00", "shard=1 1.00"})
 	})
 	t.Run("a missing cell", func(t *testing.T) {
 		g := page(t, queue("q.age_seconds", map[string]string{"queue": "a", "shard": "1"}),
 			queue("q.depth", map[string]string{"queue": "a", "shard": "1"}), queue("q.depth", map[string]string{"queue": "a", "shard": "2"}))
-		equal(t, "columns", columns(g), []string{"age_seconds", "Depth"})
-		equal(t, "rows", rows(g), []string{"shard=1 1.0 s 1.00", "shard=2 — 1.00"})
+		equal(t, "columns", columnHeads(g), []string{"age_seconds", "Depth"})
+		equal(t, "rows", panelRows(g), []string{"shard=1 1.0 s 1.00", "shard=2 — 1.00"})
+		_, metrics := columns(g)
+		equal(t, "column hover", metrics, []string{"q.age_seconds", "q.depth"})
+	})
+	t.Run("a cell at critical", func(t *testing.T) {
+		g := page(t, judgedAt(queue("q.depth", map[string]string{"queue": "a"}), evaluate.Critical))
+		equal(t, "rows", panelRows(g), []string{"1.00"})
+		containsAll(t, "cell", tableRows(g)[0].cells[0], `level-critical`, `<td title="critical">`, `<span class="row-mark-word"> critical</span>`)
 	})
 	t.Run("on a site's page", func(t *testing.T) {
 		current := grouped(stateOf(reading("sites", "site.hits", map[string]string{"site": "blog-a", "path": "/x", "page": "p1"}, 1)),
 			map[string]string{"site": "page"})
 		g := panelOf(t, itemPage(t, current, held{}, logbook{}, "/item?node=sites&label.site=blog-a"), "p1")
-		equal(t, "rows", rows(g), []string{"path=/x 1.00"})
+		equal(t, "rows", panelRows(g), []string{"path=/x 1.00"})
 	})
 	t.Run("a family of sites grouped by site", func(t *testing.T) {
 		current := grouped(stateOf(siteOf("blog-a", "site.requests_per_min", 4)), map[string]string{"site": "site"})

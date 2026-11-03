@@ -32,6 +32,7 @@
     .level-critical { color: var(--bad); font-weight: 600; }
     .level-unusual { color: var(--unusual); }
     .level-stale { color: var(--muted); }
+    .row-mark-word { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
   </style>
   {{ if .Live }}<meta name="monitor-live" content="{{ .StalledNotice }}" data-rendering="{{ .Rendering }}">{{ end }}
   <script>
