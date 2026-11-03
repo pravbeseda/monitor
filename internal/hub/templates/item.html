@@ -40,6 +40,21 @@
     text { font-size: 10px; fill: var(--muted); }
     text.level-warning { fill: var(--warn); }
     text.level-critical { fill: var(--bad); }
+    .groups { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(100%, 24rem), 1fr)); gap: 0.8rem; margin-bottom: 0.8rem; }
+    article.group { background: var(--grid); border: 1px solid var(--rule); border-left: 4px solid var(--faint); border-radius: 8px; padding: 0.6rem 0.8rem; }
+    article.group.state-ok { border-left-color: var(--accent); }
+    article.group.state-warning { border-left-color: var(--warn); }
+    article.group.state-critical { border-left-color: var(--bad); }
+    article.group.state-unusual { border-left-color: var(--unusual); }
+    .group-head { display: flex; justify-content: space-between; gap: 0.6rem; align-items: baseline; margin-bottom: 0.4rem; }
+    .group-title { font-weight: 600; overflow-wrap: anywhere; }
+    .group-head .item-state { font-size: 0.8rem; }
+    ul.group-lines { list-style: none; padding: 0; margin: 0; display: flex; flex-direction: column; gap: 0.3rem; font-size: 0.85rem; }
+    .line-name { font-weight: 600; }
+    a.figure { color: inherit; font-variant-numeric: tabular-nums; }
+    table.group-table { border-collapse: collapse; font-size: 0.85rem; font-variant-numeric: tabular-nums; }
+    table.group-table th, table.group-table td { text-align: left; padding: 0.15rem 0.8rem 0.15rem 0; white-space: nowrap; }
+    table.group-table thead th { color: var(--muted); font-weight: 600; font-size: 0.75rem; }
     section.panel { background: var(--grid); border: 1px solid var(--rule); border-radius: 10px; padding: 1rem; }
     section.panel h2 { font-size: 0.8rem; text-transform: uppercase; letter-spacing: 0.06em; color: var(--muted); font-weight: 600; margin: 0 0 0.8rem; }
   </style>
@@ -68,6 +83,12 @@
         {{ range .Families }}
           <section class="family">
             <h2 class="family-heading">{{ .Name }}</h2>
+            {{ with .Panels }}
+              <div class="groups">
+                {{ range . }}{{ template "group" . }}{{ end }}
+              </div>
+            {{ end }}
+            {{ if .Charts }}
             <div class="charts">
               {{ range .Charts }}
                 <figure class="chart" data-series="{{ .Name }}">
@@ -87,6 +108,7 @@
                 </figure>
               {{ end }}
             </div>
+            {{ end }}
           </section>
         {{ end }}
       </div>
@@ -98,3 +120,24 @@
   {{ end }}
 </body>
 </html>
+{{ define "group" }}
+<article class="group state-{{ .Class }}" data-group="{{ .Title }}">
+  <header class="group-head"><span class="group-title">{{ .Title }}</span><span class="item-state state-{{ .Class }}">{{ .Word }}</span></header>
+  {{ with .Lines }}
+    <ul class="group-lines">
+      {{ range . }}{{ $named := .Name }}<li class="group-line">{{ with .Name }}<span class="line-name">{{ . }}</span>{{ end }}{{ range $i, $f := .Figures }}{{ if or $i $named }} · {{ end }}{{ template "figure" $f }}{{ end }}</li>
+      {{ end }}
+    </ul>
+  {{ end }}
+  {{ with .Columns }}
+    <table class="group-table">
+      <thead><tr><th></th>{{ range . }}<th class="group-column" scope="col">{{ . }}</th>{{ end }}</tr></thead>
+      <tbody>
+        {{ range $.Rows }}<tr class="group-row"><th scope="row">{{ .Name }}</th>{{ range .Cells }}<td>{{ with . }}{{ template "figure" . }}{{ else }}—{{ end }}</td>{{ end }}</tr>
+        {{ end }}
+      </tbody>
+    </table>
+  {{ end }}
+</article>
+{{ end }}
+{{ define "figure" }}<a class="figure" href="{{ .History }}">{{ .Text }}</a>{{ with .Mark }} <span class="row-mark {{ .Class }}">{{ .Word }}</span>{{ end }}{{ end }}
