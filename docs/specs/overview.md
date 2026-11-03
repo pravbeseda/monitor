@@ -132,13 +132,15 @@ On a narrow screen the cards flow one to a line, each section's heading above it
 - the item's name, its section's singular ("Computer", "Site", "Service"), its state's word,
   and when it last reported, whatever its state;
 - the card's rows, as numbers, without lines;
-- window links 24h / 7d / 30d, as the history page offers them and marks the open one
-  ([history](history.md#page));
 - every series of the item that `/debug` would show — a removable volume that is stale left
-  out ([history](history.md#page)) — grouped under its family's name, in the page order:
-  in its group's panel, below, when its family has a group label and the series carries
-  it, otherwise as a small chart over the window; under one family its panels come first,
-  then its charts; "No series yet" when there is none;
+  out ([history](history.md#page)) — under its family's name: in its group's panel, below,
+  when its family has a group label and the series carries it, otherwise as a small chart
+  over the window; "No series yet" when there is none. The panels of every family come
+  first, then the window links 24h / 7d / 30d, as the history page offers them and marks
+  the open one ([history](history.md#page)), shown whatever the page holds, then the charts
+  of every family; the panels and the charts each in the page order. A panel shows the
+  newest values, so the window does not change them. A family with both is headed above
+  its panels and again above its charts;
 - the changes of the item: the newest 20 of its series' transitions and anomaly starts and
   ends, and the silence transitions of its node — for a site, of the `sites` node and of its
   host — written and grouped by day as the timeline writes them
@@ -198,13 +200,13 @@ with these differences:
 - the columns are those of the metrics below that any row has, in this order, then a
   column per other metric but `backup.failed`, in metric id order; every column is
   headed as a generic column is;
-- the two ages below read as "ago", the count of archives as a whole number, rounded
-  half away from zero and not grouped, anything else as `/debug` formats it.
+- the count of archives reads as a whole number, rounded half away from zero and not
+  grouped, anything else as `/debug` formats it: an age is a duration, with no "ago".
 
 | Series | Cell en | Cell ru |
 |---|---|---|
-| `backup.success_age_seconds` | 4.0 h ago | 4,0 ч назад |
-| `backup.latest_archive_age_seconds` | 7.0 h ago | 7,0 ч назад |
+| `backup.success_age_seconds` | 4.0 h | 4,0 ч |
+| `backup.latest_archive_age_seconds` | 7.0 h | 7,0 ч |
 | `backup.archives` | 10 | 10 |
 | `backup.stored_bytes` | 5.1 GB | 5,1 ГБ |
 | `backup.latest_archive_original_bytes` | 2.3 GB | 2,3 ГБ |
@@ -349,8 +351,11 @@ filled. The rows after them follow in a run that wraps. A reason closes the card
 |---|---|
 | `/item?node=server-b` | `server-b`'s page: its name, "Computer", its state's word and when it last reported |
 | `/item?node=sites&label.site=blog-a` | `blog-a`'s page: its name, "Site", and the time of its newest point |
-| `/item?node=gdrive-a`, a `service` node that has stored nothing | its page, "Service", "no fresh data", last reported at the time the hub recorded it, and "No series yet" |
-| any item's page | the card's rows as numbers, without lines, above the charts |
+| `/item?node=gdrive-a`, a `service` node that has stored nothing | its page, "Service", "no fresh data", last reported at the time the hub recorded it, "No series yet" and the window links |
+| any item's page | the card's rows as numbers, without lines, above the panels and the charts |
+| a family `q` grouped by `queue` with a panel `a`, beside `disk.free_pct /` | the panel `a`, then the window links, then the disk's chart: every panel comes before every chart, whatever the families' order |
+| a page with panels and no chart | the window links below the panels |
+| a page with charts and no panel | the window links above the charts |
 | any item's page | the tabs, none marked, as on `/history` |
 | no `window` | every chart over the 24 hours ending now, "24h" marked among the window links |
 | `&window=7d` | every chart over 7 days, "7d" marked |
@@ -393,7 +398,7 @@ same for `vpn`, and its family `backup` is grouped by `backup`.
 | `disk` grouped by `mount`, one group whose only series are of a stale removable volume | no panel for that group |
 | the same family, no group label declared | a chart of each series, as before |
 | `disk` with no group label beside the grouped `backup` | the disk's charts, as before |
-| a family `q` grouped by `queue`, two series carrying `queue` and one without it | the panels first, then the chart of the one without it |
+| a family `q` grouped by `queue`, two series carrying `queue` and one without it | the panels first, then the window links, then the chart of the one without it; `q` headed above the panels and above the chart |
 | a family grouped by a label none of its series carry | a chart of each series |
 | every series of `web` fresh, none watched | `web` "reporting, nothing watched" |
 | `web` / `copy`'s success age at `critical`, fresh | `web` "critical"; `vpn` as its own series say |
@@ -402,9 +407,9 @@ same for `vpn`, and its family `backup` is grouped by `backup`.
 | every series of `web` stale | `web` "no fresh data" |
 | the node silent past its `silence_after` | every panel "no fresh data", none "silent" |
 | the backup panel of `web` | rows `copy`, then `maintain` |
-| `copy` with `failed` 0, a success 4 hours ago, a newest archive 7 hours ago, 10 archives and 5.1 GB stored | columns `Since success`, `Newest archive`, `Archives`, `Stored`; `copy`'s cells `4.0 h ago`, `7.0 h ago`, `10`, `5.1 GB` |
-| the same, in Russian | columns `С успеха`, `Свежий архив`, `Архивов`, `Занято`; cells `4,0 ч назад`, `7,0 ч назад`, `10`, `5,1 ГБ` |
-| `maintain` beside it with `failed` 0, a success and 8 archives only | `maintain`'s cells `4.0 h ago`, a dash, `8`, a dash |
+| `copy` with `failed` 0, a success 4 hours ago, a newest archive 7 hours ago, 10 archives and 5.1 GB stored | columns `Since success`, `Newest archive`, `Archives`, `Stored`; `copy`'s cells `4.0 h`, `7.0 h`, `10`, `5.1 GB` |
+| the same, in Russian | columns `С успеха`, `Свежий архив`, `Архивов`, `Занято`; cells `4,0 ч`, `7,0 ч`, `10`, `5,1 ГБ` |
+| `maintain` beside it with `failed` 0, a success and 8 archives only | `maintain`'s cells `4.0 h`, a dash, `8`, a dash |
 | `copy` with every known figure and `backup.queue_depth` named "Queue {backup} {job}" | columns `Since success`, `Newest archive`, `Archives`, `Stored`, `Newest archive data`, `Queue` |
 | no job with newest archive data | no column `Newest archive data` |
 | a column | its metric id on hover |

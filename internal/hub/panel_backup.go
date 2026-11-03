@@ -18,8 +18,8 @@ const failedMetric = "backup.failed"
 
 // backupColumns are the backup panel's columns for the metrics it knows, in their order.
 var backupColumns = []column{
-	{"backup.success_age_seconds", ago("backup.success_age_seconds")},
-	{"backup.latest_archive_age_seconds", ago("backup.latest_archive_age_seconds")},
+	{"backup.success_age_seconds", formatting("backup.success_age_seconds")},
+	{"backup.latest_archive_age_seconds", formatting("backup.latest_archive_age_seconds")},
 	{"backup.archives", func(_ *i18n.Printer, value float64) string {
 		return strconv.FormatFloat(math.Round(value), 'f', 0, 64)
 	}},
@@ -36,13 +36,6 @@ func runWord(printer *i18n.Printer, value float64) string {
 		return printer.T("panel.backup.failed")
 	}
 	return fmt.Sprintf(printer.T("panel.backup.run"), format(printer, failedMetric, value))
-}
-
-// ago reads a value of metric, formatted in its unit, as a time ago.
-func ago(metric string) func(*i18n.Printer, float64) string {
-	return func(printer *i18n.Printer, value float64) string {
-		return fmt.Sprintf(printer.T("panel.backup.ago"), format(printer, metric, value))
-	}
 }
 
 // isJob is whether a label set is a job's: job is its only label besides the group's.

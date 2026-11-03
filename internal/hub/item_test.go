@@ -143,6 +143,8 @@ func TestItemPage(t *testing.T) {
 	if strings.Contains(body, `class="spark"`) {
 		t.Errorf("the numbers carry lines")
 	}
+	inOrder(t, itemPage(t, grouped(stateOf(append(mirror(), freePct("server-b", "/", 40))...), byBackup), held{}, logbook{}, "/item?node=server-b"),
+		`<ul class="numbers">`, `<article class="group`, `<figure class="chart"`)
 
 	t.Run("a site", func(t *testing.T) {
 		body := itemPage(t, stateOf(siteOf("blog-a", "site.requests_per_min", 4)), held{}, logbook{}, "/item?node=sites&label.site=blog-a")
@@ -153,7 +155,7 @@ func TestItemPage(t *testing.T) {
 	t.Run("a service that stored nothing", func(t *testing.T) {
 		current := neverReported(stateOf(freePct("server-b", "/", 40)), "gdrive-a")
 		body := itemPage(t, current, held{}, logbook{}, "/item?node=gdrive-a")
-		containsAll(t, "page", body, "Service", "no fresh data", "last report", "No series yet")
+		containsAll(t, "page", body, "Service", "no fresh data", "last report", "No series yet", `<nav class="windows">`)
 	})
 
 	t.Run("windows", func(t *testing.T) {

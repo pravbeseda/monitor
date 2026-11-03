@@ -160,6 +160,11 @@ func TestPanelsReplaceChartsOfAGroupedFamily(t *testing.T) {
 	equal(t, "panels", titles(body), []string{"vpn", "web"})
 	equal(t, "charts", charts(body), []string{"disk.free_pct / · ext4"})
 	equal(t, "families", families(body), []string{"Backups", "disk"})
+	// spec: overview.md#item-page — every panel, then the window links, then every chart.
+	inOrder(t, serverB(t, grouped(stateOf(reading("server-b", "q.depth", map[string]string{"queue": "a"}, 1), freePct("server-b", "/", 40)),
+		map[string]string{"q": "queue"}), ""), `data-group="a"`, `<nav class="windows">`, `<figure class="chart" data-series="disk.free_pct / · ext4"`)
+	inOrder(t, serverB(t, grouped(stateOf(mirror()...), byBackup), ""), `data-group="web"`, `<nav class="windows">`)
+	inOrder(t, serverB(t, stateOf(freePct("server-b", "/", 40)), ""), `<nav class="windows">`, `<figure class="chart"`)
 	// The page refreshes by fetching its own address, its panels with it (web.md#live).
 	containsAll(t, "page", body, `name="monitor-live"`)
 
@@ -177,7 +182,7 @@ func TestPanelsReplaceChartsOfAGroupedFamily(t *testing.T) {
 		}
 	})
 
-	t.Run("panels first, then the series without the label", func(t *testing.T) {
+	t.Run("panels first, then the window links, then the series without the label", func(t *testing.T) {
 		body := serverB(t, grouped(stateOf(
 			reading("server-b", "q.depth", map[string]string{"queue": "b"}, 1),
 			reading("server-b", "q.depth", map[string]string{"queue": "a"}, 1),
@@ -185,9 +190,8 @@ func TestPanelsReplaceChartsOfAGroupedFamily(t *testing.T) {
 		), map[string]string{"q": "queue"}), "")
 		equal(t, "panels", titles(body), []string{"a", "b"})
 		equal(t, "charts", charts(body), []string{"q.total"})
-		if panel, chart := strings.Index(body, `data-group="b"`), strings.Index(body, `<figure class="chart" data-series="q.total"`); panel > chart {
-			t.Errorf("the chart comes before the panels")
-		}
+		equal(t, "families", families(body), []string{"q", "q"})
+		inOrder(t, body, `data-group="b"`, `<nav class="windows">`, `<figure class="chart" data-series="q.total"`)
 	})
 
 	t.Run("titles", func(t *testing.T) {
@@ -284,8 +288,8 @@ func TestBackupPanel(t *testing.T) {
 	web := panelOf(t, body, "web")
 	equal(t, "columns", columnHeads(web), []string{"Since success", "Newest archive", "Archives", "Stored"})
 	equal(t, "rows", panelRows(web), []string{
-		"copy 4.0 h ago 7.0 h ago 10 5.1 GB",
-		"maintain 4.0 h ago — 8 —",
+		"copy 4.0 h 7.0 h 10 5.1 GB",
+		"maintain 4.0 h — 8 —",
 	})
 	_, metrics := columns(web)
 	equal(t, "column hover", metrics, []string{
@@ -295,7 +299,7 @@ func TestBackupPanel(t *testing.T) {
 	t.Run("in Russian", func(t *testing.T) {
 		web := panelOf(t, serverB(t, grouped(stateOf(mirror()...), byBackup), "&lang=ru"), "web")
 		equal(t, "columns", columnHeads(web), []string{"С успеха", "Свежий архив", "Архивов", "Занято"})
-		equal(t, "rows", panelRows(web)[:1], []string{"copy 4,0 ч назад 7,0 ч назад 10 5,1 ГБ"})
+		equal(t, "rows", panelRows(web)[:1], []string{"copy 4,0 ч 7,0 ч 10 5,1 ГБ"})
 	})
 
 	t.Run("every known figure", func(t *testing.T) {
@@ -310,7 +314,7 @@ func TestBackupPanel(t *testing.T) {
 		current.Names.Metrics["backup.queue_depth"] = names.Text{i18n.English: "Queue {backup} {job}"}
 		g := panelOf(t, serverB(t, current, ""), "web")
 		equal(t, "columns", columnHeads(g), []string{"Since success", "Newest archive", "Archives", "Stored", "Newest archive data", "Queue"})
-		equal(t, "rows", panelRows(g), []string{"copy 4.0 h ago 7.0 h ago 10 5.1 GB 2.3 GB 2.00"})
+		equal(t, "rows", panelRows(g), []string{"copy 4.0 h 7.0 h 10 5.1 GB 2.3 GB 2.00"})
 	})
 
 	t.Run("archives rounded, not grouped", func(t *testing.T) {
@@ -375,7 +379,7 @@ func TestBackupPanel(t *testing.T) {
 			staled(job("server-b", "web", "maintain", "success_age_seconds", 3600)),
 			ranked(job("server-b", "web", "verify", "success_age_seconds", 3600), 1),
 		)
-		equal(t, "rows", panelRows(g), []string{"copy 1.0 h ago", "maintain 1.0 h ago", "verify 1.0 h ago"})
+		equal(t, "rows", panelRows(g), []string{"copy 1.0 h", "maintain 1.0 h", "verify 1.0 h"})
 		for i, want := range []struct{ class, word string }{
 			{"level-critical", "critical"}, {"level-stale", "no fresh data"}, {"level-unusual", "unusual"},
 		} {
