@@ -417,12 +417,16 @@ func readNames(ctx context.Context, from querier) (names.Book, error) {
 	}
 	defer func() { _ = rows.Close() }()
 
-	book := names.Book{Metrics: map[string]names.Text{}, Families: map[string]names.Text{}}
+	book := names.Book{Metrics: map[string]names.Text{}, Families: map[string]names.Text{}, Groups: map[string]string{}}
 	for rows.Next() {
 		var kind NameKind
 		var key, locale, name string
 		if err := rows.Scan(&kind, &key, &locale, &name); err != nil {
 			return names.Book{}, fmt.Errorf("read names: %w", err)
+		}
+		if kind == GroupLabel {
+			book.Groups[key] = name
+			continue
 		}
 		into := book.Metrics
 		if kind == FamilyName {

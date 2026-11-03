@@ -102,3 +102,33 @@ func TestKeepsANameDeclaredByAnotherSensorsEntry(t *testing.T) {
 		`}],`, `}, {"sensor": "other", "applicable": false, "names": {"disk.free_bytes": {"en": "Free"}}}],`, 1)
 	expect(t, namesOf(t, body), "metric disk.free_bytes en Free")
 }
+
+// spec: metric-names.md#groups — a family the request carries keeps the label it is
+// grouped by; one it does not carry is not grouped by it.
+func TestKeepsTheGroupLabelOfACarriedFamily(t *testing.T) {
+	expect(t, namesOf(t, declaring(`"groups": {"disk": "mount", "load": "cpu"}`)), "group disk  mount")
+}
+
+// spec: metric-names.md#groups — of two entries grouping one family, the later one wins.
+func TestTheLaterManifestEntryGroups(t *testing.T) {
+	body := strings.Replace(declaring(`"groups": {"disk": "fs"}`),
+		`}],`, `}, {"sensor": "other", "applicable": true, "groups": {"disk": "mount"}}],`, 1)
+	expect(t, namesOf(t, body), "group disk  mount")
+}
+
+// spec: metric-names.md#groups — groups that are not a map of strings are dropped whole,
+// the entry's names kept.
+func TestIgnoresGroupsThatAreNotAMapOfStrings(t *testing.T) {
+	got := namesOf(t, declaring(`"families": {"disk": {"en": "Disk"}}, "groups": {"disk": "mount", "q": 5}`))
+	expect(t, got, "family disk en Disk")
+}
+
+// spec: metric-names.md#groups — a group label that is not a label key a name could refer
+// to is dropped alone.
+func TestIgnoresAGroupLabelThatIsNotAKey(t *testing.T) {
+	for _, label := range []string{``, `Mount`, `mount point`, `mount-point`} {
+		t.Run(label, func(t *testing.T) {
+			expect(t, namesOf(t, declaring(`"groups": {"disk": "`+label+`"}`)))
+		})
+	}
+}

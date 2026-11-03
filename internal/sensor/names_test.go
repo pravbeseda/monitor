@@ -1,6 +1,7 @@
 package sensor_test
 
 import (
+	"maps"
 	"testing"
 
 	"github.com/pravbeseda/monitor/internal/i18n"
@@ -17,7 +18,7 @@ import (
 )
 
 // spec: metric-names.md#declaration — every built-in sensor names each metric it produces
-// and its family, in both languages, as the table says.
+// and its family, in both languages, as the table says; only backup groups its family.
 func TestBuiltInSensorsNameTheirMetrics(t *testing.T) {
 	type name struct{ en, ru string }
 	cases := []struct {
@@ -58,6 +59,7 @@ func TestBuiltInSensorsNameTheirMetrics(t *testing.T) {
 			"site.response_p95_seconds": {"Response time, p95", "Время ответа, p95"},
 			"site.pageviews_24h":        {"Page views, 24 h", "Просмотры за сутки"}}},
 	}
+	groups := map[string]map[string]string{"backup": {"backup": "backup"}}
 	for _, c := range cases {
 		t.Run(c.sensor.Name(), func(t *testing.T) {
 			named, ok := c.sensor.(sensor.Named)
@@ -65,6 +67,9 @@ func TestBuiltInSensorsNameTheirMetrics(t *testing.T) {
 				t.Fatal("the sensor names nothing")
 			}
 			book := named.Names()
+			if want := groups[c.sensor.Name()]; !maps.Equal(book.Groups, want) {
+				t.Errorf("group labels = %v, want %v", book.Groups, want)
+			}
 			if len(book.Metrics) != len(c.metrics) || len(book.Families) != len(c.families) {
 				t.Errorf("names = %v, want exactly %v and %v", book, c.metrics, c.families)
 			}

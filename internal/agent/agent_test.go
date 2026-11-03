@@ -708,11 +708,12 @@ func (n *named) Names() names.Book {
 	return names.Book{
 		Metrics:  map[string]names.Text{"disk.free_bytes": {i18n.English: "Free on {mount}", i18n.Russian: "Свободно {mount}"}},
 		Families: map[string]names.Text{"disk": {i18n.English: "Disk"}},
+		Groups:   map[string]string{"disk": "mount"},
 	}
 }
 
-// spec: metric-names.md#ingest — a sensor's names travel in its manifest entry; one that
-// names nothing sends the entry it always did.
+// spec: metric-names.md#ingest, metric-names.md#groups — a sensor's names and group labels
+// travel in its manifest entry; one that names nothing sends the entry it always did.
 func TestTheManifestCarriesWhatASensorNames(t *testing.T) {
 	h, c := &hub{}, &clock{at: start}
 	a := newAgent(t, h, c, &named{stub{name: "disk"}}, &stub{name: "load"})
@@ -731,7 +732,10 @@ func TestTheManifestCarriesWhatASensorNames(t *testing.T) {
 	if metrics["disk.free_bytes"]["ru"] != "Свободно {mount}" || families["disk"]["en"] != "Disk" {
 		t.Errorf("manifest entry = %s %s, want the declared names", manifest[0].Names, manifest[0].Families)
 	}
-	if manifest[1].Names != nil || manifest[1].Families != nil {
-		t.Errorf("a sensor that names nothing sent %s %s", manifest[1].Names, manifest[1].Families)
+	if string(manifest[0].Groups) != `{"disk":"mount"}` {
+		t.Errorf("groups = %s, want the declared group label", manifest[0].Groups)
+	}
+	if manifest[1].Names != nil || manifest[1].Families != nil || manifest[1].Groups != nil {
+		t.Errorf("a sensor that names nothing sent %s %s %s", manifest[1].Names, manifest[1].Families, manifest[1].Groups)
 	}
 }

@@ -43,6 +43,8 @@ type SensorStatus struct {
 	// them, so that a malformed one is dropped alone instead of refusing the request.
 	Names    json.RawMessage `json:"names,omitempty"`
 	Families json.RawMessage `json:"families,omitempty"`
+	// Groups maps a family to the label it is grouped by, raw for the same reason.
+	Groups json.RawMessage `json:"groups,omitempty"`
 }
 
 // Declared is what Names and Families hold: an id, then its name by locale.
