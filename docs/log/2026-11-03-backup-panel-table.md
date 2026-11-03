@@ -27,3 +27,18 @@ columns by figure.
 - **One panel for both repositories.** Rejected: one colour would stand for two
   repositories, and it would undo the panel per value of the group label
   ([0051](../decisions/0051-a-sensor-groups-its-family-by-a-label.md)).
+
+## Revised the same day
+
+On the live page each backup panel took a whole row: "ago" made every age cell wide enough
+that two tables did not fit side by side. The reader dropped the word. The column heading
+already says the figure is an age, so a cell reads "12.7 h". Without the word, two panels
+of four columns each sit on one row; a panel with more columns still takes the row it
+needs, as the flex layout intends.
+
+The window links also moved. They stood above every series, but a panel shows newest values
+and the window changes nothing in it. The page now runs: panels, then the window links,
+then the charts. The other option was to keep each family's panels and charts together and
+put a set of window links above every family's charts. It was rejected: one control
+repeated per family is noise. The cost of the chosen order is that a family with both
+panels and charts gets two headings.

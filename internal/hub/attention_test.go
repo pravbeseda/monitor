@@ -148,6 +148,24 @@ func containsAll(t *testing.T, what, text string, wants ...string) {
 	}
 }
 
+// inOrder fails unless text carries every one of wants, each after the one before it.
+func inOrder(t *testing.T, text string, wants ...string) {
+	t.Helper()
+	at := 0
+	for i, want := range wants {
+		found := strings.Index(text[at:], want)
+		if found < 0 {
+			if i == 0 {
+				t.Errorf("%q is missing", want)
+			} else {
+				t.Errorf("%q is missing, or not after %q", want, wants[i-1])
+			}
+			return
+		}
+		at += found + len(want)
+	}
+}
+
 // spec: attention.md#items
 func TestNoItemWhenNothingNeedsAttention(t *testing.T) {
 	for name, current := range map[string]state.State{

@@ -81,23 +81,25 @@
         {{ end }}
       </ul>
     {{ end }}
-    <nav class="windows">
-      {{ .WindowLabel }}:
-      {{ range .Windows }}{{ if .Current }}<strong class="window">{{ .Label }}</strong>{{ else }}<a href="{{ .URL }}">{{ .Label }}</a>{{ end }} {{ end }}
-      <span class="zone">{{ .Zone }}</span>
-    </nav>
     <div class="columns">
       <div>
         {{ with .None }}<p class="quiet">{{ . }}</p>{{ end }}
-        {{ range .Families }}
+        {{ range .Families }}{{ if .Panels }}
           <section class="family">
             <h2 class="family-heading">{{ .Name }}</h2>
-            {{ with .Panels }}
-              <div class="groups">
-                {{ range . }}{{ template "group" . }}{{ end }}
-              </div>
-            {{ end }}
-            {{ if .Charts }}
+            <div class="groups">
+              {{ range .Panels }}{{ template "group" . }}{{ end }}
+            </div>
+          </section>
+        {{ end }}{{ end }}
+        <nav class="windows">
+          {{ .WindowLabel }}:
+          {{ range .Windows }}{{ if .Current }}<strong class="window">{{ .Label }}</strong>{{ else }}<a href="{{ .URL }}">{{ .Label }}</a>{{ end }} {{ end }}
+          <span class="zone">{{ .Zone }}</span>
+        </nav>
+        {{ range .Families }}{{ if .Charts }}
+          <section class="family">
+            <h2 class="family-heading">{{ .Name }}</h2>
             <div class="charts">
               {{ range .Charts }}
                 <figure class="chart" data-series="{{ .Name }}">
@@ -117,9 +119,8 @@
                 </figure>
               {{ end }}
             </div>
-            {{ end }}
           </section>
-        {{ end }}
+        {{ end }}{{ end }}
       </div>
       <section class="panel">
         <h2>{{ .ChangesLabel }}</h2>
