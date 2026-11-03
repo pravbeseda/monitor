@@ -218,9 +218,10 @@ the case gives either the error the agent logs naming the file, or the file's ow
   on `/debug`, marked as holding no fresh data, and whatever level they held is frozen
   ([evaluation.md](evaluation.md#freezing)). A series with a threshold stays in the list of
   what needs attention as holding no fresh data ([attention.md](attention.md#model)) until
-  its threshold is cleared — and with the defaults seeded, every job's flag and success age
-  has one, so a retired job stays there until its two thresholds are cleared. **A renamed backup or job** leaves the same rows behind, and the
-  new name starts new series.
+  its threshold is cleared — and with the defaults seeded, every job's flag has one, and its
+  success age too once it has succeeded, so a retired job stays there until those are
+  cleared. **A renamed backup or job** leaves the same rows behind, and the new name starts
+  new series.
 - **A file written by hand** is read like any other: the sensor cannot tell a job from a
   person, and the directory's permissions decide who may write.
 - **A machine that sleeps** reports nothing until it wakes, and its first reading carries the
