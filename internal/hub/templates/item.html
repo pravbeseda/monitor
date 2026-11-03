@@ -51,15 +51,16 @@
     .group-head .item-state { font-size: 0.8rem; }
     a.figure { color: inherit; font-variant-numeric: tabular-nums; text-decoration: none; }
     a.figure:hover { color: var(--link); text-decoration: underline; }
+    a.figure[class*="level-"] { text-decoration: underline dotted; text-underline-offset: 0.2em; }
     a.figure.level-warning { color: var(--warn); }
     a.figure.level-critical { color: var(--bad); }
     a.figure.level-unusual { color: var(--unusual); }
     a.figure.level-stale { color: var(--muted); }
-    .row-mark-word { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
+    .group-scroll { overflow-x: auto; }
     table.group-table { border-collapse: collapse; width: 100%; font-size: 0.85rem; font-variant-numeric: tabular-nums; }
     table.group-table th, table.group-table td { text-align: right; padding: 0.25rem 0 0.25rem 0.8rem; white-space: nowrap; }
     table.group-table th:first-child { text-align: left; padding-left: 0; }
-    table.group-table thead th { color: var(--muted); font-weight: 500; font-size: 0.72rem; border-bottom: 1px solid var(--rule); }
+    table.group-table thead th { color: var(--muted); font-weight: 500; font-size: 0.72rem; white-space: normal; vertical-align: bottom; border-bottom: 1px solid var(--rule); }
     table.group-table tbody th { font-weight: 600; }
     table.group-table tbody tr + tr > * { border-top: 1px solid var(--rule); }
     section.panel { background: var(--grid); border: 1px solid var(--rule); border-radius: 10px; padding: 1rem; }
@@ -130,13 +131,13 @@
 {{ define "group" }}
 <article class="group state-{{ .Class }}" data-group="{{ .Title }}">
   <header class="group-head"><span class="group-title">{{ .Title }}</span><span class="item-state state-{{ .Class }}">{{ .Word }}</span></header>
-  <table class="group-table">
+  <div class="group-scroll"><table class="group-table">
     {{ with .Columns }}<thead><tr><th></th>{{ range . }}<th class="group-column" scope="col" title="{{ .Metric }}">{{ .Label }}</th>{{ end }}</tr></thead>{{ end }}
     <tbody>
-      {{ range .Rows }}<tr class="group-row"><th scope="row">{{ if .Name.History }}{{ template "figure" .Name }}{{ else }}{{ .Name.Text }}{{ end }}</th>{{ range .Cells }}<td>{{ with . }}{{ template "figure" . }}{{ else }}—{{ end }}</td>{{ end }}</tr>
+      {{ range .Rows }}<tr class="group-row"><th scope="row"{{ with .Name.Hint }} title="{{ . }}"{{ end }}>{{ template "figure" .Name }}</th>{{ range .Cells }}<td{{ with . }}{{ with .Hint }} title="{{ . }}"{{ end }}{{ end }}>{{ with . }}{{ template "figure" . }}{{ else }}—{{ end }}</td>{{ end }}</tr>
       {{ end }}
     </tbody>
-  </table>
+  </table></div>
 </article>
 {{ end }}
-{{ define "figure" }}<a class="figure{{ with .Class }} {{ . }}{{ end }}" href="{{ .History }}"{{ with .Hint }} title="{{ . }}"{{ end }}>{{ .Text }}{{ with .Hint }}<span class="row-mark-word"> {{ . }}</span>{{ end }}</a>{{ end }}
+{{ define "figure" }}{{ if .History }}<a class="figure{{ with .Class }} {{ . }}{{ end }}" href="{{ .History }}">{{ .Text }}{{ with .Hint }}<span class="row-mark-word"> {{ . }}</span>{{ end }}</a>{{ else }}{{ .Text }}{{ end }}{{ end }}

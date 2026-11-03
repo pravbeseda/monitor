@@ -166,10 +166,10 @@ ordered by that value, byte by byte. A panel shows:
   that holds for its series by the rules of an item's state; a silence is a node's, so a
   panel is never "silent";
 - every series of the group by its newest value, formatted in its unit, linking to the
-  series' history page with the page's window and language — save the one a panel of its
-  own says otherwise, below. The mark a card's row gets is the value's colour, not a word
-  beside it: the word stays for a screen reader and on hover. A panel draws no line: the
-  chart is one click away.
+  series' history page with the page's window and language, except where a panel of its
+  own says otherwise below. The mark a card's row gets is the value's colour and a dotted
+  underline, not a word beside it: the word stays for a screen reader and on hover. A
+  panel draws no line: the chart is one click away.
 
 The labels of a group's series that a panel names are those other than the group label —
 and, on a site's page, other than `site`, as everywhere on it. A group whose every series
@@ -179,8 +179,8 @@ the page leaves out has no panel.
 whatever their keys, so one panel holds what `/debug` splits across matrices — named by
 those labels as `/debug` names a matrix row by its own, nameless when there is none, in
 the page order; a column per metric, headed as a `/debug` matrix column is, the metric id
-on hover, in metric id order; a cell its series' value and mark, a dash where the row has no series of that
-metric, as on `/debug`.
+on hover, in metric id order; a cell its series' value and mark, a dash where the row has
+no series of that metric, as on `/debug`.
 
 **A panel of its own** replaces the generic one for a family the skin knows. The one there
 is today is the backup panel, for the family `backup`. It is a table like the generic one,

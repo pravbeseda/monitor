@@ -38,16 +38,17 @@ func runWord(printer *i18n.Printer, value float64) string {
 	return fmt.Sprintf(printer.T("panel.backup.run"), format(printer, failedMetric, value))
 }
 
+// ago reads a value of metric, formatted in its unit, as a time ago.
 func ago(metric string) func(*i18n.Printer, float64) string {
 	return func(printer *i18n.Printer, value float64) string {
 		return fmt.Sprintf(printer.T("panel.backup.ago"), format(printer, metric, value))
 	}
 }
 
-// jobOf is the job a label set is, when its only label besides the group's is job.
-func jobOf(named map[string]string) (string, bool) {
-	job, has := named["job"]
-	return job, has && len(named) == 1
+// isJob is whether a label set is a job's: job is its only label besides the group's.
+func isJob(named map[string]string) bool {
+	_, has := named["job"]
+	return has && len(named) == 1
 }
 
 // backupTable is the backup panel: a row per job, by its name, then a row per other label
@@ -56,7 +57,7 @@ func jobOf(named map[string]string) (string, bool) {
 func backupTable(printer *i18n.Printer, book names.Book, series []panelSeries, link func(state.Subject) string) ([]columnView, []panelRow) {
 	var jobs, others [][]panelSeries
 	for _, set := range labelSets(series) {
-		if _, is := jobOf(set[0].named); is {
+		if isJob(set[0].named) {
 			jobs = append(jobs, set)
 		} else {
 			others = append(others, set)
@@ -72,12 +73,12 @@ func backupTable(printer *i18n.Printer, book names.Book, series []panelSeries, l
 			columns = append(columns, c)
 		}
 	}
-	columns = append(columns, columnsOf(series, func(metric string) bool { return known[metric] })...)
+	columns = append(columns, columnsOf(series, known)...)
 
 	return tableOf(printer, book, append(jobs, others...), columns, func(set []panelSeries) figureView {
 		text := notify.Describe(printer, set[0].named)
-		if job, is := jobOf(set[0].named); is {
-			text = notify.Quoted(job)
+		if isJob(set[0].named) {
+			text = notify.Quoted(set[0].named["job"])
 		}
 		at := slices.IndexFunc(set, func(s panelSeries) bool { return s.Metric == failedMetric })
 		if at < 0 {
@@ -89,7 +90,14 @@ func backupTable(printer *i18n.Printer, book names.Book, series []panelSeries, l
 			text = run
 		}
 		name := figureOf(printer, flag, text, link)
-		name.Hint = strings.Join(slices.DeleteFunc([]string{run, name.Hint}, func(word string) bool { return word == "" || word == text }), " · ")
+		var hint []string
+		if run != text {
+			hint = append(hint, run)
+		}
+		if name.Hint != "" {
+			hint = append(hint, name.Hint)
+		}
+		name.Hint = strings.Join(hint, " · ")
 		return name
 	}, link)
 }

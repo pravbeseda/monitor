@@ -130,12 +130,12 @@ type column struct {
 	say    func(printer *i18n.Printer, value float64) string
 }
 
-// columnsOf are a column per metric of the series that skip leaves out, in metric id order,
+// columnsOf are a column per metric of the series but the known ones, in metric id order,
 // formatted as /debug formats them.
-func columnsOf(series []panelSeries, skip func(metric string) bool) []column {
+func columnsOf(series []panelSeries, known map[string]bool) []column {
 	metrics := map[string]bool{}
 	for _, s := range series {
-		if !skip(s.Metric) {
+		if !known[s.Metric] {
 			metrics[s.Metric] = true
 		}
 	}
@@ -174,7 +174,7 @@ func tableOf(printer *i18n.Printer, book names.Book, sets [][]panelSeries, colum
 
 // genericOf lays a group out as a table: a row per label set, a column per metric.
 func genericOf(printer *i18n.Printer, book names.Book, series []panelSeries, link func(state.Subject) string) ([]columnView, []panelRow) {
-	columns := columnsOf(series, func(string) bool { return false })
+	columns := columnsOf(series, nil)
 	return tableOf(printer, book, labelSets(series), columns, func(set []panelSeries) figureView {
 		return figureView{Text: notify.Describe(printer, set[0].named)}
 	}, link)
