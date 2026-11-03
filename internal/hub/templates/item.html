@@ -40,8 +40,8 @@
     text { font-size: 10px; fill: var(--muted); }
     text.level-warning { fill: var(--warn); }
     text.level-critical { fill: var(--bad); }
-    .groups { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(100%, 24rem), 1fr)); gap: 0.8rem; margin-bottom: 0.8rem; }
-    article.group { background: var(--grid); border: 1px solid var(--rule); border-left: 4px solid var(--faint); border-radius: 8px; padding: 0.6rem 0.8rem; }
+    .groups { display: flex; flex-wrap: wrap; gap: 0.8rem; margin-bottom: 0.8rem; }
+    article.group { flex: 1 1 auto; min-width: min(100%, 24rem); max-width: 100%; box-sizing: border-box; background: var(--grid); border: 1px solid var(--rule); border-left: 4px solid var(--faint); border-radius: 8px; padding: 0.6rem 0.8rem; }
     article.group.state-ok { border-left-color: var(--accent); }
     article.group.state-warning { border-left-color: var(--warn); }
     article.group.state-critical { border-left-color: var(--bad); }
