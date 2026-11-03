@@ -45,16 +45,19 @@ type Ingest struct {
 	Names []Name
 }
 
-// NameKind says whether a name is a metric's or a family's.
+// NameKind says what a declaration is: a metric's name, a family's, or the label a family
+// is grouped by, which has no locale.
 type NameKind string
 
-// The two kinds of a declared name.
+// The kinds of a declaration.
 const (
 	MetricName NameKind = "metric"
 	FamilyName NameKind = "family"
+	GroupLabel NameKind = "group"
 )
 
-// Name is one declared name in one locale.
+// Name is one declared name in one locale, or a family's group label: then Text is the
+// label key and Locale is empty.
 type Name struct {
 	Kind   NameKind
 	Key    string

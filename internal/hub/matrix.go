@@ -113,15 +113,7 @@ func matrixOf(printer *i18n.Printer, book names.Book, node string, series []seri
 		metrics[row.metric] = true
 	}
 	for _, metric := range slices.Sorted(maps.Keys(metrics)) {
-		label := metric
-		if dotted {
-			label = strings.TrimPrefix(metric, family+".")
-		}
-		// A column names its metric, not a series: the labels are the rows' to say.
-		if template, named := book.Metrics[metric].In(printer.Locale()); named && names.Bare(template) != "" {
-			label = names.Bare(template)
-		}
-		out.Columns = append(out.Columns, columnView{Metric: metric, Label: label})
+		out.Columns = append(out.Columns, columnView{Metric: metric, Label: columnLabel(printer, book, metric)})
 	}
 
 	// The series come grouped by label set, so a set's series are consecutive.
@@ -134,6 +126,18 @@ func matrixOf(printer *i18n.Printer, book names.Book, node string, series []seri
 		start = end
 	}
 	return out
+}
+
+// columnLabel heads a column of one metric: its name with the labels it refers to left out,
+// since the labels are the rows' to say; its id less its family when that leaves nothing.
+func columnLabel(printer *i18n.Printer, book names.Book, metric string) string {
+	if template, named := book.Metrics[metric].In(printer.Locale()); named && names.Bare(template) != "" {
+		return names.Bare(template)
+	}
+	if family, dotted := familyOf(metric); dotted {
+		return strings.TrimPrefix(metric, family+".")
+	}
+	return metric
 }
 
 // setRowOf is the matrix row of one label set.

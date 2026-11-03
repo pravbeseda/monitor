@@ -56,10 +56,13 @@ func New(dir string, now func() time.Time) *Sensor {
 // Name is the sensor id the configuration and the manifest use.
 func (s *Sensor) Name() string { return "backup" }
 
-// Names are what this sensor calls its metrics (docs/specs/metric-names.md).
+// Names are what this sensor calls its metrics, and its family grouped by backup
+// (docs/specs/metric-names.md).
 func (s *Sensor) Names() names.Book {
-	return sensor.Catalogued(metricFailed, metricSuccessAge, metricArchives,
+	book := sensor.Catalogued(metricFailed, metricSuccessAge, metricArchives,
 		metricLatestArchiveAge, metricStored, metricLatestOriginal)
+	book.Groups = map[string]string{"backup": "backup"}
+	return book
 }
 
 // Applicable is true on every system the agent is built for; a node without jobs simply

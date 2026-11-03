@@ -193,6 +193,8 @@ Each line is an index into the ADR that owns it.
   is judged by — a direction and up to two values — is set on its page and
   stored with the data. What an agent collects and how often stays configuration.
   → 0032, 0033, 0048
+- **A sensor may group its family by a label**, and the item page draws each group as a
+  panel: generic, or one of the skin's own for a family it knows. → 0051
 - **The semantic core is the single source of truth**; the State API carries semantics only,
   never skin-specific fields. Skins are equal consumers of it, and drill-down, `at=` time
   travel and the event stream live outside them. → 0001

@@ -87,6 +87,7 @@ type itemPageView struct {
 type familyView struct {
 	key    string
 	Name   string
+	Panels []panelView
 	Charts []chartView
 }
 
@@ -101,8 +102,8 @@ type chartView struct {
 	Chart      *chart
 }
 
-// Item renders one item's page: its numbers, a chart of every series over a window, and
-// what changed (docs/specs/overview.md#item-page).
+// Item renders one item's page: its numbers, a panel of every group and a chart of every
+// other series over a window, and what changed (docs/specs/overview.md#item-page).
 func Item(read StateReader, reader history.Reader, store ItemStore, layout Layout, targets func(node string) (evaluate.Target, bool)) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		values := r.URL.Query()
@@ -225,17 +226,27 @@ func itemPageOf(ctx context.Context, printer *i18n.Printer, reader history.Reade
 			out.Numbers = append(out.Numbers, cardRowView{Name: it.rowName(printer, s), Value: format(printer, s.Metric, *s.Value), Mark: markOf(printer, s)})
 		}
 	}
+	// The series each family's panels gather, in the page order, by the family's index.
+	var grouped [][]state.Subject
 	for _, s := range shown {
+		if n := len(out.Families); n == 0 || out.Families[n-1].key != familyKey(s.Metric) {
+			family, _ := familyOf(s.Metric)
+			out.Families = append(out.Families, familyView{key: familyKey(s.Metric), Name: it.names.Family(printer.Locale(), family)})
+			grouped = append(grouped, nil)
+		}
+		last := &out.Families[len(out.Families)-1]
+		if _, inGroup := it.groupOf(s); inGroup {
+			grouped[len(grouped)-1] = append(grouped[len(grouped)-1], s)
+			continue
+		}
 		view, err := smallChartOf(ctx, printer, reader, store, it, s, window, lang)
 		if err != nil {
 			return out, err
 		}
-		if n := len(out.Families); n == 0 || out.Families[n-1].key != familyKey(s.Metric) {
-			family, _ := familyOf(s.Metric)
-			out.Families = append(out.Families, familyView{key: familyKey(s.Metric), Name: it.names.Family(printer.Locale(), family)})
-		}
-		last := &out.Families[len(out.Families)-1]
 		last.Charts = append(last.Charts, view)
+	}
+	for i := range out.Families {
+		out.Families[i].Panels = panelsOf(printer, it, grouped[i], window, lang)
 	}
 
 	changes, anomalies, err := changesOf(ctx, store, it)

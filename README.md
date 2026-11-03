@@ -29,8 +29,8 @@ off, history behind every value, and silence until something needs you.
   never notified.
 - **The timeline** at `/timeline` shows what needs attention now, each node's last
   24 hours, and what changed; **the overview** at `/overview` shows each computer, site and
-  service as a card of its telling numbers, opening a page with all of its charts; `/debug`
-  is the full table of every series.
+  service as a card of its telling numbers, opening a page with its charts, or a panel per
+  group of them; `/debug` is the full table of every series.
 - **The interface** speaks English and Russian.
 
 Finance and health come once they have sources that report on their own; the roadmap is in

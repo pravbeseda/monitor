@@ -74,6 +74,7 @@ One decision per file, each stating what was rejected and why. New records start
 | [0048](decisions/0048-a-sensor-names-its-metrics.md) | A sensor names its metrics; the hub shows the name wherever a person reads one | accepted |
 | [0049](decisions/0049-a-backup-job-reports-through-a-status-file.md) | A backup job reports through a status file the agent reads | accepted |
 | [0050](decisions/0050-macos-means-apple-silicon.md) | A macOS node is an Apple Silicon Mac; Intel Macs are not supported | accepted |
+| [0051](decisions/0051-a-sensor-groups-its-family-by-a-label.md) | A sensor groups its family by a label; the skin draws each group as a panel | accepted |
 
 ## Behaviour specs
 
@@ -100,8 +101,8 @@ can see ([ADR 0017](decisions/0017-one-spec-and-decision-gates.md)). New specs s
 | [anomaly.md](specs/anomaly.md) | Each series' norm, how far its newest value lies from it, the anomaly rank, and the record of when a series became unusual and came back | approved |
 | [attention.md](specs/attention.md) | What needs attention now, in what order, under what headline — the timeline's "Now" | approved |
 | [timeline.md](specs/timeline.md) | `/timeline`: what needs attention now, each node's last 24 hours, and the levels and anomalies that changed | approved |
-| [overview.md](specs/overview.md) | `/overview` and `/item`: a card per server, site and service with its telling numbers, and a page per item with every series charted beside its changes | approved |
-| [metric-names.md](specs/metric-names.md) | What a sensor declares its metrics and their families are called, and how every page and message names a series by it | approved |
+| [overview.md](specs/overview.md) | `/overview` and `/item`: a card per server, site and service with its telling numbers, and a page per item with every series charted or gathered in its group's panel beside its changes | approved |
+| [metric-names.md](specs/metric-names.md) | What a sensor declares its metrics and their families are called and the label each family is grouped by, and how every page and message names a series by it | approved |
 | [thresholds.md](specs/thresholds.md) | The page that sets what a series is judged by — what may be stored as a threshold, and whether it may be shown as unusual | approved |
 | [release.md](specs/release.md) | How a merge tags itself, what a tag publishes, how a release is signed, and how an artifact is checked | approved |
 | [installer.md](specs/installer.md) | One command that installs or upgrades a hub or an agent from a signed release, the hub following the version its host names, and an agent following the one the hub names | approved |
@@ -139,6 +140,7 @@ Reasoning from working sessions, including options that were rejected.
 | [2026-10-25](log/2026-10-25-overview.md) | The overview: how it is drawn, the five questions, the seven prototypes, and why sections follow who collects an item |
 | [2026-10-25](log/2026-10-25-metric-names.md) | Readable metric names: catalogue, sensor or interface, and the card style chosen from three |
 | [2026-10-28](log/2026-10-28-backup-sensor.md) | Backups a job reports: where the figures come from, who reports them, and why the path is the spec's |
+| [2026-11-03](log/2026-11-03-family-panels.md) | Family panels: why the sensor declares the grouping, the skin owns the look, and every series stays on its panel |
 
 ## Not written yet
 

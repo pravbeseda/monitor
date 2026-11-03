@@ -94,7 +94,7 @@ func name(p *i18n.Printer, declared names.Text, metric string, labels map[string
 	if !named {
 		template = metric
 	}
-	out, used := names.Fill(template, labels, filled)
+	out, used := names.Fill(template, labels, Quoted)
 	// A name made only of references to labels the series lacks fills to nothing; the id
 	// still names it.
 	if out == "" {
@@ -108,9 +108,9 @@ func name(p *i18n.Printer, declared names.Text, metric string, labels map[string
 	return out, rest
 }
 
-// filled is a label's value as a name says it: quoted like any label value, and an empty
+// Quoted is a label's value as a name says it: quoted like any label value, and an empty
 // one as an empty pair of quotes, since it still tells one series from another.
-func filled(value string) string {
+func Quoted(value string) string {
 	if value == "" {
 		return `""`
 	}

@@ -40,6 +40,16 @@ var catalogue = map[string]map[Locale]string{
 	"overview.service":         {English: "Service", Russian: "Сервис"},
 	"overview.last_report":     {English: "last report %s", Russian: "последний отчёт %s"},
 	"overview.no_series":       {English: "No series yet", Russian: "Серий ещё нет"},
+
+	// The backup panel's figures (docs/specs/overview.md#panels); %s is the value.
+	"panel.backup.ok":          {English: "last run ok", Russian: "запуск ок"},
+	"panel.backup.failed":      {English: "last run failed", Russian: "сбой запуска"},
+	"panel.backup.run":         {English: "last run %s", Russian: "запуск %s"},
+	"panel.backup.succeeded":   {English: "succeeded %s ago", Russian: "успех %s назад"},
+	"panel.backup.newest":      {English: "newest archive %s ago", Russian: "свежий архив %s назад"},
+	"panel.backup.archives":    {English: "archives: %s", Russian: "архивов: %s"},
+	"panel.backup.stored":      {English: "%s stored", Russian: "занято %s"},
+	"panel.backup.original":    {English: "%s of data", Russian: "данных %s"},
 	"overview.more":            {English: "%d more", Russian: "ещё %d"},
 	"overview.reason_below":    {English: "%s below %s", Russian: "%s ниже %s"},
 	"overview.reason_above":    {English: "%s above %s", Russian: "%s выше %s"},

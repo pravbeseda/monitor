@@ -79,3 +79,42 @@ func TestNamesSurviveARestart(t *testing.T) {
 		t.Errorf("after a restart the name is %q", got)
 	}
 }
+
+// spec: metric-names.md#groups — a family's group label is kept, replaced by a later one
+// from any node, left by a request without one, and still known after a restart.
+func TestSaveIngestKeepsTheNewestGroupLabel(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "monitor.db")
+	db, err := OpenSQLite(path)
+	if err != nil {
+		t.Fatalf("OpenSQLite: %v", err)
+	}
+	ctx := context.Background()
+	first := ingest("server-b", collected, free("/", 1))
+	first.Names = []Name{named(GroupLabel, "disk", "", "fs")}
+	later := ingest("laptop-a", collected, free("/", 2))
+	later.Names = []Name{named(GroupLabel, "disk", "", "mount")}
+	for _, in := range []Ingest{first, later, ingest("server-b", collected, free("/", 3))} {
+		if err := db.SaveIngest(ctx, in); err != nil {
+			t.Fatalf("SaveIngest: %v", err)
+		}
+	}
+	if err := db.Close(); err != nil {
+		t.Fatalf("Close: %v", err)
+	}
+
+	reopened, err := OpenSQLite(path)
+	if err != nil {
+		t.Fatalf("OpenSQLite: %v", err)
+	}
+	defer func() { _ = reopened.Close() }()
+	book, err := reopened.Names(ctx)
+	if err != nil {
+		t.Fatalf("Names: %v", err)
+	}
+	if got := book.Groups["disk"]; got != "mount" {
+		t.Errorf("group label = %q, want mount", got)
+	}
+	if len(book.Families) != 0 {
+		t.Errorf("families = %v: a group label is not a family's name", book.Families)
+	}
+}

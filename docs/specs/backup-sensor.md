@@ -97,7 +97,8 @@ one series of each metric it has a value for.
 | `backup.stored_bytes` | `stored_bytes` | Stored {backup} {job} | Занято {backup} {job} |
 | `backup.latest_archive_original_bytes` | `latest_archive_original_bytes` | Newest archive data {backup} {job} | Данные архива {backup} {job} |
 
-The family `backup` is "Backups" / "Бэкапы". For a job that makes archives the two ages are
+The family `backup` is "Backups" / "Бэкапы", grouped by `backup`, so that a page shows one
+panel per backup ([metric names](metric-names.md#groups)). For a job that makes archives the two ages are
 the same; they part for one that copies or checks a repository, whose run can succeed while
 the newest archive it found is old.
 

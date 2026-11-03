@@ -17,10 +17,12 @@ const MaxLength = 80
 type Text map[i18n.Locale]string
 
 // Book is every name the hub has been told: metrics by id, families by the part of an id
-// before its first dot.
+// before its first dot, and the label each grouped family is grouped by
+// (docs/specs/metric-names.md#groups).
 type Book struct {
 	Metrics  map[string]Text
 	Families map[string]Text
+	Groups   map[string]string
 }
 
 // In is the name in locale, in English when locale has none; false when neither was
@@ -88,6 +90,12 @@ func Fill(template string, labels map[string]string, quote func(string) string) 
 		used[key] = true
 	}
 	return strings.TrimSpace(out.String()), used
+}
+
+// ValidKey reports whether key is a label key a name can refer to, no longer than a name.
+func ValidKey(key string) bool {
+	_, length := reference("{" + key + "}")
+	return length == len(key)+2 && len(key) <= MaxLength
 }
 
 // reference reads `{key}` at the start of text and returns the key and the reference's
