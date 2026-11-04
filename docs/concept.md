@@ -58,7 +58,7 @@ Each principle below is recorded in full, with its alternatives, in the linked A
 |---|---|
 | Debug view | A table of every metric, at `/debug`. The first skin; it proves the State API is sufficient and stays as the debugging mode. |
 | Timeline | The primary view, at `/timeline`: what needs attention now — empty while all is well, anomalies surfacing on their own ([spec](specs/attention.md)) — each node's last 24 hours, and the levels and anomalies that changed ([spec](specs/timeline.md)). It absorbed mission control, the board that showed only the first part ([ADR 0041](decisions/0041-mission-control-folds-into-the-timeline.md)). |
-| Overview | At `/overview`: a card per server, site and service with its few telling numbers — a site's with its traffic over the last day, a service's with a line of its last day — grouped by who collects them; a card opens the item's page with every series charted or gathered in its group's panel beside its changes ([spec](specs/overview.md), [ADR 0046](decisions/0046-an-overview-of-items-rendered-by-the-hub.md)). |
+| Overview | At `/overview`: a card per server and service with its few telling numbers — a service's with a line of its last day — and the sites as one table sortable by any figure, grouped by who collects them; a card opens the item's page with every series charted or gathered in its group's panel beside its changes ([spec](specs/overview.md), [ADR 0046](decisions/0046-an-overview-of-items-rendered-by-the-hub.md)). |
 | Advisors | Per-domain summaries in plain language (an LLM over aggregates). |
 | City | Isometric city: districts are life areas, buildings are metrics. |
 | Organism | Metrics as body systems, with one overall "pulse" number. |

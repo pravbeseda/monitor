@@ -163,7 +163,7 @@ followed by what the labels it does not use name today
 | `Free on { mount }` | en | `Free on { mount }`: a space ends no key, so nothing is referred to |
 | a metric declared in `ru` only | en | the metric id followed by its labels |
 | a metric no sensor has named | any | the metric id followed by its labels, as today |
-| a series on a site's own card or page | any | its name without the `site` label, as the card already names the site ([overview](overview.md)) |
+| a series on a site's own row or page | any | its name without the `site` label, as the row already names the site ([overview](overview.md)) |
 | a name holding `<b>x</b>` | any | shown as those characters, on a page and in a message |
 
 **A family's name** is its declared name in the reader's locale, in English when that locale
