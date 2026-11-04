@@ -496,13 +496,22 @@ func cardOf(ctx context.Context, printer *i18n.Printer, reader history.Reader, s
 	return nil
 }
 
-// lastReported is when the item last reported, said only once it is silent or holds no
-// fresh data.
+// stopped is whether the item stopped reporting: it is silent, or holds no fresh data.
+func (it overviewItem) stopped() bool {
+	return it.cell == timeline.Silent || it.cell == timeline.NoFreshData
+}
+
+// lastReportText says when the item last reported.
+func (it overviewItem) lastReportText(printer *i18n.Printer) string {
+	return fmt.Sprintf(printer.T("overview.last_report"), printer.Time(it.lastReport))
+}
+
+// lastReported is when the item last reported, said only once it stopped.
 func (it overviewItem) lastReported(printer *i18n.Printer) string {
-	if it.cell != timeline.Silent && it.cell != timeline.NoFreshData {
+	if !it.stopped() {
 		return ""
 	}
-	return fmt.Sprintf(printer.T("overview.last_report"), printer.Time(it.lastReport))
+	return it.lastReportText(printer)
 }
 
 // reason is why the card holds its state, said at its foot (docs/specs/overview.md#card).

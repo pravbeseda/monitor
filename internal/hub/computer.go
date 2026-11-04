@@ -13,7 +13,6 @@ import (
 	"github.com/pravbeseda/monitor/internal/history"
 	"github.com/pravbeseda/monitor/internal/i18n"
 	"github.com/pravbeseda/monitor/internal/state"
-	"github.com/pravbeseda/monitor/internal/timeline"
 )
 
 // A computer's card puts each series where every other computer card puts it: four slots
@@ -408,8 +407,8 @@ func slotName(printer *i18n.Printer, plan linePlan) string {
 // many extra lines it leaves out.
 func (it overviewItem) computerOf(printer *i18n.Printer, plan computerPlan, ends map[string]float64) (*computerView, string) {
 	out := &computerView{
-		Seen: fmt.Sprintf(printer.T("overview.last_report"), printer.Time(it.lastReport)),
-		Late: it.cell == timeline.Silent || it.cell == timeline.NoFreshData,
+		Seen: it.lastReportText(printer),
+		Late: it.stopped(),
 	}
 	if s := plan.failed; s != nil {
 		out.Failed = &valueView{Text: fmt.Sprintf(printer.T("overview.failed"), int64(math.Round(*s.Value)))}
