@@ -1,6 +1,8 @@
 # 0053. Lay a computer's card out as lines on a scale its section shares
 
-- **Status:** accepted; amends [0046](0046-an-overview-of-items-rendered-by-the-hub.md) — a
+- **Status:** accepted, amended by
+  [0054](0054-the-backup-line-gathers-the-backup-families.md) — the backup line gathers the
+  backup families; amends [0046](0046-an-overview-of-items-rendered-by-the-hub.md) — a
   computer's card carries no line of the day, and its slots are a second place a metric
   needs code — and [0048](0048-a-sensor-names-its-metrics.md) — a slot is named by the
   skin, the declared name of its series said on hover
