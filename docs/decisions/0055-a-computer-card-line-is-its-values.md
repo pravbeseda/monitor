@@ -1,7 +1,9 @@
 # 0055. Draw nothing between a computer card line's name and its values
 
 - **Status:** accepted; amends [0053](0053-a-computer-card-is-lines-on-a-shared-scale.md) —
-  a line is no longer a bullet on a scale its section shares
+  a line is no longer a bullet on a scale its section shares; amended by
+  [0057](0057-a-site-card-leads-with-its-traffic.md) — site cards are as narrow as computer
+  cards
 - **Date:** 2026-11-04
 - **Source:** [overview.md](../specs/overview.md#computer-card)
 

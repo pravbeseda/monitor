@@ -2,8 +2,8 @@
 
 - **Status:** approved
 - **Owns:** the pages `GET /overview` and `GET /item` in `internal/hub` — the overview skin:
-  a card per item with a few numbers — a site's and a service's with a line of their last
-  day — and a page per item with
+  a card per item with a few numbers — a site's with its traffic over the last day, a
+  service's with a line of its last day — and a page per item with
   every series of it charted or gathered in its group's panel, and the changes it went
   through. What a level, a staleness or a
   silence *is* stays with [evaluation](evaluation.md) and [state](state.md), what an anomaly
@@ -27,14 +27,16 @@
   [0053](../decisions/0053-a-computer-card-is-lines-on-a-shared-scale.md),
   [0054](../decisions/0054-the-backup-line-gathers-the-backup-families.md),
   [0055](../decisions/0055-a-computer-card-line-is-its-values.md),
-  [0056](../decisions/0056-cards-in-a-section-are-ordered-by-name.md)
+  [0056](../decisions/0056-cards-in-a-section-are-ordered-by-name.md),
+  [0057](../decisions/0057-a-site-card-leads-with-its-traffic.md)
 
 ## Purpose
 
 The overview answers "how do things stand, in numbers": every computer, site and service as
 a card with the few figures that say most about it — a computer's in the places every
-computer card keeps them, so one reads against the next; a site's and a service's with how they
-moved over the last day. A card opens the item's page, where every series of it is charted over a chosen window, or
+computer card keeps them, so one reads against the next; a site's with its traffic over the
+last day and its other figures in the places every site card keeps them; a service's with how
+it moved over the last day. A card opens the item's page, where every series of it is charted over a chosen window, or
 gathered with its group in a panel, beside what changed. It judges nothing: a card's colour is a level evaluation stored, an anomaly, a
 silence or data that is or is not fresh, and every number is one the hub holds.
 
@@ -96,9 +98,9 @@ inside a family, the series without labels first, by metric id, then the labelle
 
 **A card** shows the item's name and its state's word marked in its colour, and links as a
 whole to the item's page. A computer's card lays its series out as
-[below](#computer-card); a site's or a service's shows the item's rows, the first two
-with a line of their last day. An item with no series reads "No series yet" in place of
-either.
+[below](#computer-card), a site's as [below](#site-card); a service's shows the item's
+rows, the first two with a line of their last day. An item with no series reads "No series
+yet" in place of them.
 
 **An item's rows** are up to six of its series, each with its name, its newest value
 formatted in its unit as `/debug` formats it, and at most one **mark**, the first that
@@ -111,9 +113,9 @@ warning; unusual. The rows are taken in this order, a series at most once:
 2. the item's **default series**, in the order of the table below;
 3. when neither gives a row, the first two series the item's page charts.
 
-When more series qualify by the first two steps than six rows hold, a site's or a
-service's card ends with "N more", N being how many of them are not shown. On a site's or
-a service's card the first two rows carry a line of the last 24 hours of their series, drawn
+When more series qualify by the first two steps than six rows hold, a service's card ends
+with "N more", N being how many of them are not shown. On a service's card the first two
+rows carry a line of the last 24 hours of their series, drawn
 as the history page draws a series — broken across a gap, a lone point drawn on its own —
 with no axes; a series with no point in that day has no line.
 
@@ -202,8 +204,36 @@ that series as a row names it and says why as above, "Newest archive borg job-a:
 an extra line by its row name; on hover, either names the series of its own value as a row
 names it.
 
-**A computer's card is narrower** than a site's or a service's, so at the page's full width
-four stand in a row where three of the others do.
+**A site's card** keeps its figures where every other site card keeps them
+([0057](../decisions/0057-a-site-card-leads-with-its-traffic.md)). It holds:
+
+- its **lead**: "Requests/min", the newest value of `site.requests_per_min` large, in the
+  colour of its mark, and beside it, small, its name and why it is marked as a line says it;
+  under them a line of its last 24 hours across the card, drawn as a row's line is
+  ([rows](#rows)), with no threshold drawn on it. On hover the lead names its series as a
+  row names it; a screen reader reads its name, its value and why, and nothing for the line.
+  The lead is faded when its series holds no fresh data, its value in the colour of no fresh
+  data; a site with no `site.requests_per_min` reads a dash in its place and draws no line;
+- its **slots**, each one line as a computer's card draws a line, in this order:
+
+  | Slot | Name | Its value |
+  |---|---|---|
+  | views | "Views/day" | `site.pageviews_24h` |
+  | errors | "Server errors" | `site.server_error_pct` |
+  | latency | "Response p95" | `site.response_p95_seconds` |
+
+  A slot with no series reads a dash, so the lines below keep their place. A site with none
+  of `site.requests_per_min` and the three slot series has no lead and no slots;
+- then its **extra lines**, as a computer's card has them: what needs attention that neither
+  the lead nor a slot shows, at most two, and "N more"; the first two series its page charts
+  when it has no lead, no slot and nothing needing attention;
+- at its foot, small and to the right, when it last reported — only once it is silent or
+  holds no fresh data.
+
+It carries no reason: the lead, the lines and their marks say it.
+
+**Computer and site cards are narrower** than a service's, so at the page's full width four
+stand in a row where three service cards do.
 
 On a narrow screen the cards flow one to a line, each section's heading above its own.
 
@@ -364,7 +394,7 @@ English catalogue's; every one of them has its Russian. `sites` is the node of c
 
 ### Rows {#rows}
 
-An item's rows: what its page lists as numbers, and a site's or a service's card shows.
+An item's rows: what its page lists as numbers, and a service's card shows.
 
 | State | Rows of the item |
 |---|---|
@@ -391,7 +421,7 @@ An item's rows: what its page lists as numbers, and a site's or a service's card
 | a series at `critical` | its row marked critical |
 | a series at `critical` that also ranks | its row marked critical |
 | a series at `critical` that is stale | its row marked as holding no fresh data, not critical |
-| the first two rows of a site's or a service's card | each with a line of its series' last 24 hours |
+| the first two rows of a service's card | each with a line of its series' last 24 hours |
 | the third row on | no line |
 | a series with a six-hour gap in its last day | its line broken across the gap |
 | a series with a single point in its last day | that point on its own |
@@ -399,12 +429,12 @@ An item's rows: what its page lists as numbers, and a site's or a service's card
 | any value | formatted in its unit as `/debug` formats it |
 | a row of `disk.free_pct` labelled `{mount: /srv, fs: ext4, removable: "false"}` | `disk.free_pct /srv`; no `ext4` |
 | a row of `queue.depth` labelled `{queue: payments}` | `queue.depth queue=payments` |
-| a row on a site's card | without `site=blog-a`: the card already names the site |
+| a row on a site's page, an extra line on its card | without `site=blog-a`: the card and the page already name the site |
 | any card | a link to that item's page, carrying the language |
 
 ### The card {#card}
 
-How a site's or a service's card lays out what the rows above choose
+How a service's card lays out what the rows above choose
 ([2026-10-25 metric names](../log/2026-10-25-metric-names.md#the-card) records the style
 chosen). Its state's word is a pill, and a stripe runs along its left edge, both in the
 colour the timeline's lanes draw that state ([timeline](timeline.md#lanes)). The first two
@@ -501,8 +531,41 @@ labelled `backup: borg`, `job: job-a`, reporting `backup.success_age_seconds`,
 | a state's word and failed units too long for the card's head beside the item's name | the name whole, the words beside it cut short |
 | a line whose values say why under them | its name centred against both rows |
 | a line, read by a screen reader | its name, its values and what it says under them: nothing is drawn to put in words |
-| the overview at its full width | four computer cards in a row, three site or service cards |
-| a site's card, a service's card | as before: rows, the first two with a line of their day ([card](#card)) |
+| the overview at its full width | four computer or site cards in a row, three service cards |
+| a service's card | as before: rows, the first two with a line of their day ([card](#card)) |
+
+### A site's card {#site-card}
+
+Unless a row says otherwise, the site `blog-a` reports `site.requests_per_min` 12.6,
+`site.pageviews_24h` 88, `site.server_error_pct` 0.1 and `site.response_p95_seconds` 0.4,
+every series fresh, nothing needing attention and no threshold readable. Values are as the
+English catalogue writes them.
+
+| State | The card |
+|---|---|
+| any site card | its state's word as a pill and a stripe of its colour, as [a card](#card) has; no reason at its foot |
+| the site above | the lead "Requests/min" reading "12.60" with its line of the day, then lines "Views/day" "88.00", "Server errors" "0.1%", "Response p95" "0.4 s", in that order, and nothing after them |
+| no `site.pageviews_24h` | "Views/day" a dash, still first among the lines |
+| no `site.response_p95_seconds` | "Response p95" a dash, still third |
+| no `site.requests_per_min` | the lead a dash, no line of the day; the three lines as above |
+| `site.requests_per_min` with no point in its last day | the lead's value, no line of the day |
+| a site whose only series is `uptime.x` | no lead, no slot; `uptime.x` as its extra line |
+| `site.requests_per_min` unusual at 34.2, norm 9.5 | "34.20" in the unusual colour, "usually 9.50" beside its name |
+| `site.requests_per_min` at `warning` under a readable `above` `warning` of 30 | its value in the warning colour, "threshold 30.00" beside its name, and no dashed line across its line of the day |
+| `site.requests_per_min` stale | the lead faded |
+| `site.requests_per_min` at `critical` and stale | the lead faded, its value in the colour of no fresh data, nothing beside its name: a stale level is no level |
+| `site.requests_per_min` at `warning`, its threshold unreadable | "warning" beside its name |
+| `site.requests_per_min` unusual | no extra line for it: the lead shows it |
+| a site whose only series is `site.requests_per_min` | the lead, then "Views/day", "Server errors", "Response p95" each a dash |
+| the lead, read by a screen reader | its name, its value and why; nothing for its line of the day |
+| `site.pageviews_24h` unusual at 423, norm 19 | "423.00" in the unusual colour on the views line, "usually 19.00" under it |
+| `site.server_error_pct` at `critical` | the errors line's value in the critical colour, the card red |
+| `site.client_error_pct` at `warning` | an extra line after the slots, named as its row is |
+| three series needing attention that neither the lead nor a slot shows | two extra lines and "1 more" |
+| `site.client_error_pct` at `warning` and `uptime.x` unusual | `site.client_error_pct`, then `uptime.x`: in the order attention lists them |
+| a site reporting | no last report on the card |
+| a silent site, or one with no fresh data | when it last reported, at its foot, in the brighter colour a stopped computer's foot takes |
+| a line's name or the lead's on hover | the series of its value, named as a row names it |
 
 ### The overview page {#overview-page}
 
@@ -652,10 +715,10 @@ same for `vpn`, and its family `backup` is grouped by `backup`.
 - Every item is on the overview exactly once, and every series of an item is on its page at
   most once.
 - A card in a state other than "ok" or "reporting, nothing watched" names its reason or its
-  silence: a series at that level, unusual or with no fresh data heads a site's or a
-  service's rows, and is in a computer's head, on one of its slots in its mark's colour —
-  said there by its word when the slot gathers it — or its first extra line; or the card
-  reads "No series yet".
+  silence: a series at that level, unusual or with no fresh data heads a service's rows; is
+  a site's lead, on one of its slots or its first extra line, in its mark's colour; or is in
+  a computer's head, on one of its slots in its mark's colour — said there by its word when
+  the slot gathers it — or its first extra line; or the card reads "No series yet".
 
 ## Edge cases
 
@@ -663,7 +726,8 @@ same for `vpn`, and its family `backup` is grouped by `backup`.
   laptop asleep does: the state cannot tell them apart ([attention](attention.md#model)),
   and its silence turns the card "silent" once past `silence_after`.
 - **A sensor switched off in the configuration** leaves a watched series stale; it is a row
-  marked as holding no fresh data, first on its card — on a computer's, its slot's line faded in its
+  marked as holding no fresh data, first on its card — on a site's, its lead or its slot's
+  line faded in its place, or an extra line; on a computer's, its slot's line faded in its
   place, said on the backup line when the slot gathers it and the line does not already say
   it, faded or by a mark as loud, or an extra line — for as long as its threshold is kept, as it is an item under "now".
 - **A site removed from the file** loses its card at once. A threshold on its series keeps
