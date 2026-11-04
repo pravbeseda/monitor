@@ -6,52 +6,47 @@ import (
 	"fmt"
 	"math"
 	"slices"
-	"strconv"
-	"strings"
 
 	"github.com/pravbeseda/monitor/internal/evaluate"
-	"github.com/pravbeseda/monitor/internal/history"
 	"github.com/pravbeseda/monitor/internal/i18n"
 	"github.com/pravbeseda/monitor/internal/names"
 	"github.com/pravbeseda/monitor/internal/state"
 )
 
-// A computer's card puts each series where every other computer card puts it: four slots
-// on scales the section shares, then what needs attention beyond them
-// (docs/specs/overview.md#computer-card, ADR 0053).
+// A computer's card puts each series where every other computer card puts it: four slots,
+// each a name and its values, then what needs attention beyond them
+// (docs/specs/overview.md#computer-card, ADR 0053, ADR 0055).
 
 const (
 	failedUnits = "systemd.failed_units"
 	// extraLines is how many extra lines a computer's card holds; the rest are counted.
 	extraLines = 2
-	// scaleHeadroom keeps the largest value on a shared scale short of its end.
-	scaleHeadroom = 1.1
 )
 
-// slot is one of a computer card's fixed lines: the series on its scale and those beside
+// slot is one of a computer card's fixed lines: the series of its own value and those beside
 // it, muted, and the families whose other series it gathers.
 type slot struct {
 	key     string
-	pick    func(it overviewItem) (scale state.Subject, beside []state.Subject, found bool)
+	pick    func(it overviewItem) (own state.Subject, beside []state.Subject, found bool)
 	gathers []string
 }
 
 var slots = []slot{
 	{key: "load", pick: func(it overviewItem) (state.Subject, []state.Subject, bool) {
-		scale, found := it.find("load.avg_15m", nil)
-		return scale, it.present([]string{"load.avg_1m", "load.avg_5m"}, nil), found
+		own, found := it.find("load.avg_15m", nil)
+		return own, it.present([]string{"load.avg_1m", "load.avg_5m"}, nil), found
 	}},
 	{key: "memory", pick: func(it overviewItem) (state.Subject, []state.Subject, bool) {
-		scale, found := it.find("memory.available_pct", nil)
-		return scale, it.present([]string{"memory.available_bytes"}, nil), found
+		own, found := it.find("memory.available_pct", nil)
+		return own, it.present([]string{"memory.available_bytes"}, nil), found
 	}},
 	{key: "disk", pick: func(it overviewItem) (state.Subject, []state.Subject, bool) {
-		scale, found := it.defaultOf("disk.free_pct")
-		return scale, it.present([]string{"disk.free_bytes"}, scale.Labels), found
+		own, found := it.defaultOf("disk.free_pct")
+		return own, it.present([]string{"disk.free_bytes"}, own.Labels), found
 	}},
 	{key: "backup", pick: func(it overviewItem) (state.Subject, []state.Subject, bool) {
-		scale, found := it.oldestBackup()
-		return scale, nil, found
+		own, found := it.oldestBackup()
+		return own, nil, found
 	}, gathers: []string{"backup", "timemachine"}},
 }
 
@@ -110,17 +105,18 @@ type lineSeries struct {
 	levels []threshold
 }
 
-// linePlan is one line before its scale is known: the series on the scale, nil for a slot
-// the computer has none for, the muted ones beside it, and the gathered one that speaks
-// louder than them all. key names a slot, and is empty on an extra line.
+// linePlan is one line: the series of its own value, nil for a slot the computer has none
+// for, the muted ones beside it, the one of them the line says why by, and the gathered one
+// that speaks louder than them all. key names a slot, and is empty on an extra line.
 type linePlan struct {
-	key    string
-	scale  *lineSeries
-	beside []lineSeries
-	loud   *lineSeries
+	key     string
+	own     *state.Subject
+	beside  []state.Subject
+	speaker *lineSeries
+	loud    *lineSeries
 }
 
-// computerPlan is what a computer's card shows, before the section's scales are known.
+// computerPlan is what a computer's card shows.
 type computerPlan struct {
 	slots  []linePlan
 	extras []linePlan
@@ -131,24 +127,24 @@ type computerPlan struct {
 // pickedLine is a line's series before their thresholds are read.
 type pickedLine struct {
 	key      string
-	scale    *state.Subject
+	own      *state.Subject
 	beside   []state.Subject
 	gathered []state.Subject
 }
 
-// computerLines pick a computer's lines: its slots, none when it has a series on no slot's
-// scale, then what needs attention that no line shows. shown are the series the card
+// computerLines pick a computer's lines: its slots, none when it has no slot's own value,
+// then what needs attention that no line shows. shown are the series the card
 // accounts for already.
 func (it overviewItem) computerLines(attention []item, shown []state.Subject) (slotted, extra []pickedLine, more int) {
 	for _, one := range slots {
 		line := pickedLine{key: one.key}
-		if scale, beside, found := one.pick(it); found {
-			line.scale, line.beside, line.gathered = &scale, beside, it.gathered(one.gathers, scale)
-			shown = append(append(append(shown, scale), beside...), line.gathered...)
+		if own, beside, found := one.pick(it); found {
+			line.own, line.beside, line.gathered = &own, beside, it.gathered(one.gathers, own)
+			shown = append(append(append(shown, own), beside...), line.gathered...)
 		}
 		slotted = append(slotted, line)
 	}
-	if !slices.ContainsFunc(slotted, func(p pickedLine) bool { return p.scale != nil }) {
+	if !slices.ContainsFunc(slotted, func(p pickedLine) bool { return p.own != nil }) {
 		slotted = nil
 	}
 
@@ -170,24 +166,23 @@ func (it overviewItem) computerLines(attention []item, shown []state.Subject) (s
 		series = series[:extraLines]
 	}
 	for _, s := range series {
-		extra = append(extra, pickedLine{scale: &s})
+		extra = append(extra, pickedLine{own: &s})
 	}
 	return slotted, extra, more
 }
 
-// gathered are the item's series of these families but the one on the scale, in the page
-// order.
-func (it overviewItem) gathered(families []string, scale state.Subject) []state.Subject {
+// gathered are the item's series of these families but the line's own, in the page order.
+func (it overviewItem) gathered(families []string, own state.Subject) []state.Subject {
 	var out []state.Subject
 	for _, s := range it.series {
-		if slices.Contains(families, names.FamilyOf(s.Metric)) && !sameSeries(s, scale) {
+		if slices.Contains(families, names.FamilyOf(s.Metric)) && !sameSeries(s, own) {
 			out = append(out, s)
 		}
 	}
 	return out
 }
 
-// computerPlan is a computer's lines with the thresholds they draw, and its failed units.
+// computerPlan is a computer's lines with the thresholds they say, and its failed units.
 func (it overviewItem) computerPlan(ctx context.Context, store ThresholdReader, attention []item) (computerPlan, error) {
 	var out computerPlan
 	var shown []state.Subject
@@ -212,31 +207,36 @@ func (it overviewItem) computerPlan(ctx context.Context, store ThresholdReader, 
 func linePlans(ctx context.Context, store ThresholdReader, lines []pickedLine) ([]linePlan, error) {
 	var out []linePlan
 	for _, line := range lines {
-		plan := linePlan{key: line.key}
-		if line.scale != nil {
-			scale, err := lineSeriesOf(ctx, store, *line.scale)
+		plan := linePlan{key: line.key, own: line.own, beside: line.beside}
+		if line.own != nil {
+			speaker, err := lineSeriesOf(ctx, store, speakerOf(*line.own, line.beside))
 			if err != nil {
 				return nil, err
 			}
-			plan.scale = &scale
-			for _, s := range line.beside {
-				muted, err := lineSeriesOf(ctx, store, s)
+			plan.speaker = &speaker
+			if loud, found := loudest(append([]state.Subject{*line.own}, line.beside...), line.gathered); found {
+				louder, err := lineSeriesOf(ctx, store, loud)
 				if err != nil {
 					return nil, err
 				}
-				plan.beside = append(plan.beside, muted)
-			}
-			if loud, found := loudest(append([]state.Subject{*line.scale}, line.beside...), line.gathered); found {
-				speaker, err := lineSeriesOf(ctx, store, loud)
-				if err != nil {
-					return nil, err
-				}
-				plan.loud = &speaker
+				plan.loud = &louder
 			}
 		}
 		out = append(out, plan)
 	}
 	return out, nil
+}
+
+// speakerOf is the series a line says why by: the most urgent mark among its own and those
+// beside it, its own first among equals.
+func speakerOf(own state.Subject, beside []state.Subject) state.Subject {
+	speaker := own
+	for _, s := range beside {
+		if markKindOf(s) > markKindOf(speaker) {
+			speaker = s
+		}
+	}
+	return speaker
 }
 
 func lineSeriesOf(ctx context.Context, store ThresholdReader, s state.Subject) (lineSeries, error) {
@@ -261,66 +261,6 @@ func loudest(shown, gathered []state.Subject) (state.Subject, bool) {
 	return out, found
 }
 
-// reach is the largest a series asks of its scale: its value, its band's top and its
-// threshold's values.
-func (s lineSeries) reach() float64 {
-	largest := *s.Value
-	if s.Anomaly != nil {
-		largest = max(largest, s.Anomaly.High)
-	}
-	for _, level := range s.levels {
-		largest = max(largest, level.value)
-	}
-	return largest
-}
-
-// scaleEnd is where a scale ends: a percentage's at 100, any other's past the largest
-// reach of the series it holds, at 1 when nothing reaches above zero.
-func scaleEnd(metric string, series []lineSeries) float64 {
-	if history.UnitOf(metric) == history.Percent {
-		return 100
-	}
-	largest := 0.0
-	for _, s := range series {
-		largest = max(largest, s.reach())
-	}
-	if largest <= 0 {
-		return 1
-	}
-	return scaleHeadroom * largest
-}
-
-// sharedEnds are where each slot's scale ends on every computer card of the section, set
-// by the series on it that hold fresh data, or by all of them when none does. A nil plan is
-// a card that is not a computer's.
-func sharedEnds(plans []*computerPlan) map[string]float64 {
-	fresh, all := map[string][]lineSeries{}, map[string][]lineSeries{}
-	metric := map[string]string{}
-	for _, plan := range plans {
-		if plan == nil {
-			continue
-		}
-		for _, line := range plan.slots {
-			if line.scale == nil {
-				continue
-			}
-			metric[line.key] = line.scale.Metric
-			all[line.key] = append(all[line.key], *line.scale)
-			if !line.scale.Stale {
-				fresh[line.key] = append(fresh[line.key], *line.scale)
-			}
-		}
-	}
-	out := map[string]float64{}
-	for key, m := range metric {
-		if len(fresh[key]) == 0 {
-			fresh[key] = all[key]
-		}
-		out[key] = scaleEnd(m, fresh[key])
-	}
-	return out
-}
-
 // computerView is a computer's card. Seen, when it last reported, closes every one; Late
 // says it stopped: silent, or holding no fresh data.
 type computerView struct {
@@ -336,24 +276,14 @@ type lineView struct {
 	Title string
 	Faded bool
 	Empty bool
-	Band  *bandView
-	Ticks []tickView
-	Dot   *tickView
-	// Values are the muted ones first, then the one on the scale.
+	// Values are the muted ones first, then the line's own.
 	Values []valueView
 	Why    string
 	// WhyClass and WhyHint are set when a gathered series speaks: its mark's colour, and its
 	// name and reason, said on hover and to a screen reader.
 	WhyClass string
 	WhyHint  string
-	// Said is the scale in words, for a reader who cannot see it: the usual range and the
-	// threshold values its ticks mark.
-	Said string
 }
-
-type bandView struct{ Left, Width, Norm string }
-
-type tickView struct{ Class, Left string }
 
 type valueView struct {
 	Text   string
@@ -363,51 +293,20 @@ type valueView struct {
 	Marked bool
 }
 
-// place is a value's place on a scale ending at end, in percent of its width.
-func place(value, end float64) float64 {
-	return max(0, min(100, value/end*100))
-}
-
-func percent(p float64) string {
-	return strconv.FormatFloat(p, 'f', 1, 64)
-}
-
-func (it overviewItem) computerLine(printer *i18n.Printer, plan linePlan, name string, end float64) lineView {
+func (it overviewItem) computerLine(printer *i18n.Printer, plan linePlan, name string) lineView {
 	out := lineView{Key: plan.key, Name: name}
-	if plan.scale == nil {
+	if plan.own == nil {
 		out.Empty = true
 		return out
 	}
-	s := *plan.scale
-	out.Title = it.rowName(printer, s.Subject)
+	s := *plan.own
+	out.Title = it.rowName(printer, s)
 	out.Faded = s.Stale
-	var said []string
-	if s.Anomaly != nil {
-		low, high := place(s.Anomaly.Low, end), place(s.Anomaly.High, end)
-		out.Band = &bandView{Left: percent(low), Width: percent(high - low), Norm: percent(place(s.Anomaly.Norm, end))}
-		said = append(said, fmt.Sprintf(printer.T("overview.usual_range"), format(printer, s.Metric, s.Anomaly.Low), format(printer, s.Metric, s.Anomaly.High)))
-	}
-	for _, level := range s.levels {
-		if level.value >= 0 && level.value <= end {
-			out.Ticks = append(out.Ticks, tickView{Class: "level-" + level.level.String(), Left: percent(place(level.value, end))})
-			said = append(said, fmt.Sprintf(printer.T("overview.tick"), printer.T("level."+level.level.String()), format(printer, s.Metric, level.value)))
-		}
-	}
-	out.Said = strings.Join(said, ", ")
-	out.Dot = &tickView{Left: percent(place(*s.Value, end))}
-	if mark := markOf(printer, s.Subject); mark != nil {
-		out.Dot.Class = mark.Class
-	}
-
-	speaker := s
 	for _, one := range plan.beside {
-		out.Values = append(out.Values, valueOf(printer, one.Subject, true))
-		if markKindOf(one.Subject) > markKindOf(speaker.Subject) {
-			speaker = one
-		}
+		out.Values = append(out.Values, valueOf(printer, one, true))
 	}
-	out.Values = append(out.Values, valueOf(printer, s.Subject, false))
-	out.Why = whyOf(printer, speaker)
+	out.Values = append(out.Values, valueOf(printer, s, false))
+	out.Why = whyOf(printer, *plan.speaker)
 
 	if loud := plan.loud; loud != nil {
 		mark := markOf(printer, loud.Subject)
@@ -454,17 +353,17 @@ func whyOf(printer *i18n.Printer, s lineSeries) string {
 // slotName names a slot; the disk's names the volume it shows.
 func slotName(printer *i18n.Printer, plan linePlan) string {
 	switch {
-	case plan.key == "disk" && plan.scale == nil:
+	case plan.key == "disk" && plan.own == nil:
 		return printer.T("overview.no_disk")
 	case plan.key == "disk":
-		return fmt.Sprintf(printer.T("overview.disk"), plan.scale.Labels["mount"])
+		return fmt.Sprintf(printer.T("overview.disk"), plan.own.Labels["mount"])
 	}
 	return printer.T("overview." + plan.key)
 }
 
-// computerOf lays a computer's card out by its plan on the section's scales, and says how
-// many extra lines it leaves out.
-func (it overviewItem) computerOf(printer *i18n.Printer, plan computerPlan, ends map[string]float64) (*computerView, string) {
+// computerOf lays a computer's card out by its plan, and says how many extra lines it leaves
+// out.
+func (it overviewItem) computerOf(printer *i18n.Printer, plan computerPlan) (*computerView, string) {
 	out := &computerView{
 		Seen: it.lastReportText(printer),
 		Late: it.stopped(),
@@ -476,11 +375,10 @@ func (it overviewItem) computerOf(printer *i18n.Printer, plan computerPlan, ends
 		}
 	}
 	for _, line := range plan.slots {
-		out.Lines = append(out.Lines, it.computerLine(printer, line, slotName(printer, line), ends[line.key]))
+		out.Lines = append(out.Lines, it.computerLine(printer, line, slotName(printer, line)))
 	}
 	for _, line := range plan.extras {
-		end := scaleEnd(line.scale.Metric, []lineSeries{*line.scale})
-		out.Lines = append(out.Lines, it.computerLine(printer, line, it.rowName(printer, line.scale.Subject), end))
+		out.Lines = append(out.Lines, it.computerLine(printer, line, it.rowName(printer, *line.own)))
 	}
 	more := ""
 	if plan.more > 0 {
