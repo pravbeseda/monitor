@@ -136,8 +136,9 @@ other computer card puts it, so one card reads against the next
 ([0053](../decisions/0053-a-computer-card-is-lines-on-a-shared-scale.md)). It holds:
 
 - in its head, before the state's word, "failed units: N" when its `systemd.failed_units`
-  holds a value above zero or carries a mark, N a whole number, in the colour of that
-  series' mark — the muted colour when it carries none. That series is never a line;
+  holds a value above zero, carries a mark, or is all the card would show, N a whole number,
+  in the colour of that series' mark — the muted colour when it carries none. That series is
+  never a line;
 - under its head, when it is silent or holds no fresh data, when it last reported;
 - its **slots**, each one **line**, in this order:
 
@@ -428,6 +429,7 @@ catalogue writes them.
 | `memory.available_pct` 38.5, `memory.available_bytes` 2 GB | the memory line reading the bytes muted, then "38.5%", the dot at 38.5 |
 | volumes `/` at 40% free and `/srv` at 12% | "Disk /srv free", `/srv`'s `free_bytes` beside it |
 | a Time Machine destination backed up 2 days ago and a backup job that last succeeded 9 days ago, both fresh | "Backup" at the 9-day one |
+| a Time Machine destination and a backup job of the same age | "Backup" at the job: the first in the page order |
 | the 9-day job stale | "Backup" at the 2-day one |
 | `systemd.failed_units` 2, unwatched and usual | "failed units: 2" in the head before the state's word, in the muted colour; no line for it |
 | `systemd.failed_units` 2 at `critical` | "failed units: 2" in the critical colour; no extra line for it |
@@ -435,6 +437,7 @@ catalogue writes them.
 | `systemd.failed_units` 2, stale | "failed units: 2" in the colour of no fresh data |
 | `systemd.failed_units` 0, watched and stale | "failed units: 0" in the colour of no fresh data; no line for it |
 | `systemd.failed_units` 0, unusual against a norm of 3 | "failed units: 0" in the unusual colour |
+| a computer whose only series is `systemd.failed_units` 0 | "failed units: 0" in the head, no line |
 | three computers whose `load.avg_15m` are 0.5, 2 and 4, no band above 4 | every load scale from 0 to 4.4, the dots at 11%, 45% and 91% of it |
 | the same, one of them holding a `warning` of 5 on its `load.avg_15m` | every load scale to 5.5 |
 | the same, one of them with a band reaching 6 | every load scale to 6.6 |
@@ -453,6 +456,7 @@ catalogue writes them.
 | `memory.available_pct` unusual at 38.5, norm 46 | its dot and "38.5%" in the unusual colour, "usually 46.0%" under the values |
 | `disk.free_pct /` at `warning` under a readable `warning` of 10 | its dot and value in the warning colour, "threshold 10.0%" under the values |
 | `disk.free_pct /` at `warning`, its threshold unreadable | "warning" under the values |
+| `load.avg_15m` and `load.avg_1m` both at `warning`, under readable `warning`s of 0.5 and 0.4 | "threshold 0.50": the one on the scale first among equals |
 | `load.avg_15m` unusual, `load.avg_1m` at `critical` under a readable `critical` of 8 | `load.avg_1m` in the critical colour, "threshold 8.00" under the values: the most urgent mark speaks |
 | `memory.available_pct` usual, `memory.available_bytes` unusual with norm 3 GB | the bytes in the unusual colour, "usually 3.0 GB" under the values, the dot in the text colour |
 | `load.avg_15m` stale | the load line faded, its dot hollow, nothing under the values |
