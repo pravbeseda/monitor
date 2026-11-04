@@ -7,6 +7,7 @@ import (
 	"net/http/httptest"
 	"regexp"
 	"slices"
+	"strconv"
 	"strings"
 	"testing"
 	"time"
@@ -24,9 +25,6 @@ var (
 	linePattern   = regexp.MustCompile(`(?s)<li class="line([^"]*)"(?: data-line="([^"]*)")?(?: title="([^"]*)")?>(.*?)</li>`)
 	lineName      = regexp.MustCompile(`<span class="line-name">([^<]*)</span>`)
 	valuePattern  = regexp.MustCompile(`<span class="value([^"]*)"[^>]*>([^<]*)</span>`)
-	dotPattern    = regexp.MustCompile(`<span class="dot([^"]*)" style="left: ([0-9.]+)%"></span>`)
-	bandPattern   = regexp.MustCompile(`<span class="band" style="left: ([0-9.]+)%; width: ([0-9.]+)%"></span><span class="norm" style="left: ([0-9.]+)%"></span>`)
-	tickPattern   = regexp.MustCompile(`<span class="tick (level-[a-z]+)" style="left: ([0-9.]+)%"></span>`)
 	whyPattern    = regexp.MustCompile(`<span class="line-why([^"]*)"(?: title="([^"]*)")?>([^<]*)(?:<span class="row-mark-word"> ([^<]*)</span>)?</span>`)
 	failedPattern = regexp.MustCompile(`<span class="card-failed([^"]*)"[^>]*>([^<]*)</span>`)
 	seenPattern   = regexp.MustCompile(`<span class="card-seen ?([^"]*)">last report [^<]*</span>`)
@@ -79,15 +77,6 @@ func (l line) values() []string {
 		out = append(out, text)
 	}
 	return out
-}
-
-func (l line) dot(t *testing.T) (class, left string) {
-	t.Helper()
-	found := dotPattern.FindStringSubmatch(l.body)
-	if found == nil {
-		t.Fatalf("line %q has no dot: %s", l.name, l.body)
-	}
-	return strings.TrimSpace(found[1]), found[2]
 }
 
 func (l line) why() string { return l.whySaid().text }
@@ -186,8 +175,8 @@ func TestComputerCardSlots(t *testing.T) {
 		body := computerCard(t, stateOf(without(linux("server-b"), "backup.success_age_seconds")...), limits{}, "server-b")
 		equal(t, "lines", lineNames(body), slotNames)
 		backup := linesOf(body)[3]
-		if !backup.empty() || !strings.Contains(backup.body, "—") || strings.Contains(backup.body, `class="dot`) {
-			t.Errorf("the backup slot is not a dash over an empty scale: %s", backup.body)
+		if !backup.empty() || !strings.Contains(backup.body, "—") {
+			t.Errorf("the backup slot is not a dash: %s", backup.body)
 		}
 	})
 	t.Run("no disk", func(t *testing.T) {
@@ -204,14 +193,25 @@ func TestComputerCardSlots(t *testing.T) {
 			t.Errorf("a removable volume fills the disk slot: %s", disk.body)
 		}
 	})
-	t.Run("a muted series without its scale", func(t *testing.T) {
+	t.Run("nothing drawn between a line's name and its values", func(t *testing.T) {
+		subjects := replaced(linux("server-b"), banded(freePct("server-b", "/", 40), 38, 40, 42, 1))
+		ref := storage.SeriesRef{Node: "server-b", Metric: "disk.free_pct", Labels: map[string]string{"mount": "/", "fs": "ext4", "removable": "false"}}
+		body := computerCard(t, stateOf(subjects...), limits{heldKey(ref): below(f(10), f(5))}, "server-b")
+		nameThenValues := regexp.MustCompile(`^<span class="line-name">[^<]*</span>\s*<span class="line-values">.*</span>$`)
+		for _, one := range linesOf(body) {
+			if !nameThenValues.MatchString(one.body) || strings.Contains(one.body, "warning at") {
+				t.Errorf("line %q holds more than its name and its values: %s", one.name, one.body)
+			}
+		}
+	})
+	t.Run("a muted series without its value", func(t *testing.T) {
 		body := computerCard(t, stateOf(without(linux("server-b"), "load.avg_15m")...), limits{}, "server-b")
 		load := lineCalled(t, body, "Load")
 		if !load.empty() || strings.Contains(load.body, "0.61") {
 			t.Errorf("load without its 15-minute average: %s", load.body)
 		}
 	})
-	t.Run("a muted series without its scale needing attention", func(t *testing.T) {
+	t.Run("a muted series without its value needing attention", func(t *testing.T) {
 		subjects := replaced(without(linux("server-b"), "load.avg_15m"), judgedAt(plain("server-b", "load.avg_5m", 9), evaluate.Critical))
 		body := computerCard(t, stateOf(subjects...), limits{}, "server-b")
 		equal(t, "lines", lineNames(body), append(append([]string(nil), slotNames...), "load.avg_5m"))
@@ -267,23 +267,17 @@ func TestComputerCardSlots(t *testing.T) {
 
 // spec: overview.md#computer-card
 func TestComputerCardValues(t *testing.T) {
-	t.Run("load: three averages, the 15-minute one on the scale", func(t *testing.T) {
+	t.Run("load: three averages, the 15-minute one its own", func(t *testing.T) {
 		load := lineCalled(t, computerCard(t, stateOf(linux("server-b")...), limits{}, "server-b"), "Load")
 		equal(t, "values", load.values(), []string{"0.52 (muted)", "0.61 (muted)", "0.67"})
-		if _, left := load.dot(t); left != "90.9" {
-			t.Errorf("the dot at %s%%, want 90.9%% of a scale ending at 0.737", left)
-		}
 	})
 	t.Run("no 1-minute average", func(t *testing.T) {
 		load := lineCalled(t, computerCard(t, stateOf(without(linux("server-b"), "load.avg_1m")...), limits{}, "server-b"), "Load")
 		equal(t, "values", load.values(), []string{"0.61 (muted)", "0.67"})
 	})
-	t.Run("memory: bytes muted, then the percent on the scale", func(t *testing.T) {
+	t.Run("memory: bytes muted, then the percent its own", func(t *testing.T) {
 		memory := lineCalled(t, computerCard(t, stateOf(linux("server-b")...), limits{}, "server-b"), "Free RAM")
 		equal(t, "values", memory.values(), []string{"2.0 GB (muted)", "38.5%"})
-		if _, left := memory.dot(t); left != "38.5" {
-			t.Errorf("the dot at %s%%, want 38.5%%", left)
-		}
 	})
 	t.Run("the least free volume", func(t *testing.T) {
 		subjects := append(linux("server-b"), freePct("server-b", "/srv", 12), free("server-b", "/srv", 12e9))
@@ -308,7 +302,7 @@ func TestComputerCardValues(t *testing.T) {
 	})
 	t.Run("a line's name on hover", func(t *testing.T) {
 		if load := lineCalled(t, computerCard(t, stateOf(linux("server-b")...), limits{}, "server-b"), "Load"); load.title != "load.avg_15m" {
-			t.Errorf("hover = %q, want the series on the scale", load.title)
+			t.Errorf("hover = %q, want the series of its own value", load.title)
 		}
 	})
 }
@@ -349,137 +343,6 @@ func TestComputerCardFailedUnits(t *testing.T) {
 }
 
 // spec: overview.md#computer-card
-func TestComputerCardScale(t *testing.T) {
-	three := func(loads ...state.Subject) state.State {
-		var subjects []state.Subject
-		for i, node := range []string{"server-b", "server-c", "server-d"} {
-			subjects = append(subjects, replaced(linux(node), loads[i])...)
-		}
-		return stateOf(subjects...)
-	}
-	dots := func(t *testing.T, current state.State, stored limits) []string {
-		t.Helper()
-		body := overviewUnder(t, current, stored)
-		var out []string
-		for _, node := range []string{"server-b", "server-c", "server-d"} {
-			_, left := lineCalled(t, card(t, body, node), "Load").dot(t)
-			out = append(out, left)
-		}
-		return out
-	}
-	loads := []state.Subject{plain("server-b", "load.avg_15m", 0.5), plain("server-c", "load.avg_15m", 2), plain("server-d", "load.avg_15m", 4)}
-
-	t.Run("shared by the section", func(t *testing.T) {
-		equal(t, "dots", dots(t, three(loads...), limits{}), []string{"11.4", "45.5", "90.9"})
-	})
-	t.Run("reaching a threshold", func(t *testing.T) {
-		ref := storage.SeriesRef{Node: "server-b", Metric: "load.avg_15m", Labels: map[string]string{}}
-		stored := limits{heldKey(ref): {Direction: storage.Above, Warning: f(5)}}
-		equal(t, "dots", dots(t, three(loads...), stored), []string{"9.1", "36.4", "72.7"})
-	})
-	t.Run("reaching a band", func(t *testing.T) {
-		equal(t, "dots", dots(t, three(banded(loads[0], 0.1, 0.5, 6, 0), loads[1], loads[2]), limits{}), []string{"7.6", "30.3", "60.6"})
-	})
-	t.Run("nothing above zero", func(t *testing.T) {
-		zero := []state.Subject{plain("server-b", "load.avg_15m", 0), plain("server-c", "load.avg_15m", 0), plain("server-d", "load.avg_15m", 0)}
-		equal(t, "dots", dots(t, three(zero...), limits{}), []string{"0.0", "0.0", "0.0"})
-	})
-	t.Run("a percentage runs to 100", func(t *testing.T) {
-		if _, left := lineCalled(t, computerCard(t, stateOf(linux("server-b")...), limits{}, "server-b"), "Disk / free").dot(t); left != "40.0" {
-			t.Errorf("the dot at %s%%, want 40%%", left)
-		}
-	})
-	t.Run("stale series set no scale", func(t *testing.T) {
-		var asleep []state.Subject
-		for _, s := range replaced(linux("laptop-a"), jobAge("laptop-a", "a", 40*86400)) {
-			asleep = append(asleep, staled(s))
-		}
-		current := stateOf(append(asleep, linux("server-b")...)...)
-		body := overviewUnder(t, current, limits{})
-		if _, left := lineCalled(t, card(t, body, "laptop-a"), "Backup").dot(t); left != "100.0" {
-			t.Errorf("the stale backup at %s%%, want the scale's end", left)
-		}
-		if _, left := lineCalled(t, card(t, body, "server-b"), "Backup").dot(t); left != "90.9" {
-			t.Errorf("the fresh backup at %s%%, want 90.9%%", left)
-		}
-	})
-	t.Run("stale series set the scale when none is fresh", func(t *testing.T) {
-		var asleep []state.Subject
-		for _, s := range replaced(linux("laptop-a"), jobAge("laptop-a", "a", 40*86400)) {
-			asleep = append(asleep, staled(s))
-		}
-		if _, left := lineCalled(t, computerCard(t, stateOf(asleep...), limits{}, "laptop-a"), "Backup").dot(t); left != "90.9" {
-			t.Errorf("the stale backup at %s%%, want 90.9%% of a scale it sets", left)
-		}
-	})
-}
-
-// spec: overview.md#computer-card
-func TestComputerCardBandAndTicks(t *testing.T) {
-	memory := func(t *testing.T, s state.Subject) line {
-		t.Helper()
-		return lineCalled(t, computerCard(t, stateOf(replaced(linux("server-b"), s)...), limits{}, "server-b"), "Free RAM")
-	}
-	t.Run("a band and its norm", func(t *testing.T) {
-		found := bandPattern.FindStringSubmatch(memory(t, banded(plain("server-b", "memory.available_pct", 38.5), 43, 46, 52, 0)).body)
-		if found == nil || found[1] != "43.0" || found[2] != "9.0" || found[3] != "46.0" {
-			t.Errorf("band = %q, want 43 to 52, norm at 46", found)
-		}
-	})
-	t.Run("no anomaly, no band", func(t *testing.T) {
-		if strings.Contains(memory(t, plain("server-b", "memory.available_pct", 38.5)).body, `class="band"`) {
-			t.Errorf("a band without an anomaly")
-		}
-	})
-	t.Run("past the band, unmarked", func(t *testing.T) {
-		if class, _ := memory(t, banded(plain("server-b", "memory.available_pct", 60), 43, 46, 52, 0)).dot(t); class != "" {
-			t.Errorf("dot marked %q, want unmarked", class)
-		}
-	})
-	t.Run("a band of one value", func(t *testing.T) {
-		found := bandPattern.FindStringSubmatch(memory(t, banded(plain("server-b", "memory.available_pct", 0), 0, 0, 0, 0)).body)
-		if found == nil || found[1] != "0.0" || found[2] != "0.0" {
-			t.Errorf("band = %q, want a sliver at zero", found)
-		}
-	})
-	t.Run("below zero", func(t *testing.T) {
-		if _, left := memory(t, plain("server-b", "memory.available_pct", -3)).dot(t); left != "0.0" {
-			t.Errorf("the dot at %s%%, want 0", left)
-		}
-	})
-	t.Run("unusual already", func(t *testing.T) {
-		if class, _ := memory(t, banded(plain("server-b", "memory.available_pct", 60), 43, 46, 52, 1)).dot(t); class != "level-unusual" {
-			t.Errorf("dot marked %q, want unusual", class)
-		}
-	})
-
-	ref := storage.SeriesRef{Node: "server-b", Metric: "disk.free_pct", Labels: map[string]string{"mount": "/", "fs": "ext4", "removable": "false"}}
-	ticks := func(t *testing.T, th storage.Threshold) []string {
-		t.Helper()
-		disk := lineCalled(t, computerCard(t, stateOf(linux("server-b")...), limits{heldKey(ref): th}, "server-b"), "Disk / free")
-		var out []string
-		for _, found := range tickPattern.FindAllStringSubmatch(disk.body, -1) {
-			out = append(out, found[1]+" "+found[2])
-		}
-		return out
-	}
-	t.Run("the scale in words for a screen reader", func(t *testing.T) {
-		subjects := replaced(linux("server-b"), banded(freePct("server-b", "/", 40), 38, 40, 42, 0))
-		disk := lineCalled(t, computerCard(t, stateOf(subjects...), limits{heldKey(ref): below(f(10), f(5))}, "server-b"), "Disk / free")
-		containsAll(t, "line", disk.body, `<span class="row-mark-word">usually 38.0%–42.0%, warning at 10.0%, critical at 5.0%</span>`)
-	})
-	t.Run("ticks at the threshold's values", func(t *testing.T) {
-		equal(t, "ticks", ticks(t, below(f(10), f(5))), []string{"level-warning 10.0", "level-critical 5.0"})
-	})
-	t.Run("a value off the scale has no tick", func(t *testing.T) {
-		equal(t, "ticks", ticks(t, below(f(-5), f(-10))), nil)
-	})
-	t.Run("an unreadable threshold has no tick", func(t *testing.T) {
-		equal(t, "ticks", ticks(t, storage.Threshold{Direction: "sideways", Warning: f(10)}), nil)
-	})
-}
-
-// spec: overview.md#computer-card
 func TestComputerCardMarks(t *testing.T) {
 	diskRef := storage.SeriesRef{Node: "server-b", Metric: "disk.free_pct", Labels: map[string]string{"mount": "/", "fs": "ext4", "removable": "false"}}
 	show := func(t *testing.T, stored limits, with ...state.Subject) string {
@@ -493,9 +356,6 @@ func TestComputerCardMarks(t *testing.T) {
 
 	t.Run("unusual", func(t *testing.T) {
 		memory := lineCalled(t, show(t, limits{}, banded(plain("server-b", "memory.available_pct", 38.5), 43, 46, 52, 1)), "Free RAM")
-		if class, _ := memory.dot(t); class != "level-unusual" {
-			t.Errorf("dot %q", class)
-		}
 		equal(t, "values", memory.values(), []string{"2.0 GB (muted)", "38.5% (level-unusual marked)"})
 		if memory.why() != "usually 46.0%" {
 			t.Errorf("why = %q", memory.why())
@@ -503,15 +363,12 @@ func TestComputerCardMarks(t *testing.T) {
 	})
 	t.Run("a level under a readable threshold", func(t *testing.T) {
 		disk := lineCalled(t, show(t, limits{heldKey(diskRef): below(f(10), f(5))}, judgedAt(freePct("server-b", "/", 8), evaluate.Warning)), "Disk / free")
-		if class, _ := disk.dot(t); class != "level-warning" {
-			t.Errorf("dot %q", class)
-		}
 		equal(t, "values", disk.values(), []string{"40.0 GB (muted)", "8.0% (level-warning marked)"})
 		if disk.why() != "threshold 10.0%" {
 			t.Errorf("why = %q", disk.why())
 		}
 	})
-	t.Run("the one on the scale first among equals", func(t *testing.T) {
+	t.Run("the line's own first among equals", func(t *testing.T) {
 		above := func(metric string) string {
 			return heldKey(storage.SeriesRef{Node: "server-b", Metric: metric, Labels: map[string]string{}})
 		}
@@ -538,17 +395,15 @@ func TestComputerCardMarks(t *testing.T) {
 	})
 	t.Run("a muted series marked", func(t *testing.T) {
 		memory := lineCalled(t, show(t, limits{}, banded(plain("server-b", "memory.available_bytes", 2e9), 2.5e9, 3e9, 3.5e9, 1)), "Free RAM")
-		if class, _ := memory.dot(t); class != "" {
-			t.Errorf("dot %q, want unmarked", class)
-		}
+		equal(t, "values", memory.values(), []string{"2.0 GB (muted level-unusual marked)", "38.5%"})
 		if memory.why() != "usually 3.0 GB" {
 			t.Errorf("why = %q", memory.why())
 		}
 	})
 	t.Run("stale", func(t *testing.T) {
 		load := lineCalled(t, show(t, limits{}, staled(plain("server-b", "load.avg_15m", 0.67))), "Load")
-		if class, _ := load.dot(t); !strings.Contains(load.class, "faded") || class != "level-stale" || load.why() != "" {
-			t.Errorf("a stale line: class %q, dot %q, why %q", load.class, class, load.why())
+		if !strings.Contains(load.class, "faded") || load.why() != "" {
+			t.Errorf("a stale line: class %q, why %q", load.class, load.why())
 		}
 	})
 	t.Run("stale, a muted series fresh and unusual", func(t *testing.T) {
@@ -567,8 +422,9 @@ func TestComputerCardExtraLines(t *testing.T) {
 		body := computerCard(t, stateOf(subjects...), limits{}, "server-b")
 		equal(t, "lines", lineNames(body), []string{"Load", "Free RAM", "Disk /srv free", "Backup", "disk.free_bytes /"})
 		extra := linesOf(body)[4]
-		if _, left := extra.dot(t); left != "90.9" || extra.key != "" {
-			t.Errorf("extra line %q at %s%%, want its own scale", extra.key, left)
+		equal(t, "values", extra.values(), []string{"9.0 GB (level-warning marked)"})
+		if extra.key != "" {
+			t.Errorf("extra line keyed %q, want none", extra.key)
 		}
 	})
 	t.Run("at most two, then more", func(t *testing.T) {
@@ -587,19 +443,51 @@ func TestComputerCardExtraLines(t *testing.T) {
 	})
 }
 
-// spec: overview.md#computer-card — a line's values never wrap, and take a column of one
-// width on every card, so the scales are as wide.
+// spec: overview.md#computer-card — a line's values never wrap and a long name is cut short;
+// name and values stand centred between the rules; the item's name stays whole beside long
+// words in the card's head.
 func TestComputerCardLayout(t *testing.T) {
 	body := overviewUnder(t, stateOf(linux("server-b")...), limits{})
-	if !regexp.MustCompile(`li\.line \{ display: grid; grid-template-columns: [0-9.]+rem minmax\([^)]*\) [0-9.]+rem;`).MatchString(body) {
-		t.Errorf("the values do not take a column of one width")
-	}
-	containsAll(t, "stylesheet", body, ".line-values { white-space: nowrap;", "li.line.faded .value:not(.marked)",
+	containsAll(t, "stylesheet", body,
+		"li.line { display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: center;",
+		".line-name { color: var(--muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }",
+		".line-values { white-space: nowrap;", "li.line.faded .value:not(.marked)",
 		// A marked word or value keeps its mark's colour: the muted colour is for the unmarked.
 		`.value.muted:not([class*="level-"]) { color: var(--muted); }`, `.line-why:not([class*="level-"]) { color: var(--muted); }`,
-		`li.line.faded .line-why:not([class*="level-"])`)
+		`li.line.faded .line-why:not([class*="level-"])`,
+		// The item's name stays whole; a long state's word gives way to it.
+		".card-name { flex: none; max-width: 100%;", ".card-state { min-width: 0; overflow: hidden; text-overflow: ellipsis;",
+		".card-flags { display: flex; align-items: center; gap: 0.4rem; min-width: 0; }",
+		".card-failed { min-width: 0; overflow: hidden; text-overflow: ellipsis;")
 	if found := regexp.MustCompile(`\.(line-why|value\.muted) \{[^}]*color`).FindString(body); found != "" {
 		t.Errorf("%q gives every one the muted colour, over its mark's", found)
+	}
+}
+
+// spec: overview.md#computer-card — at the page's full width, four computer cards stand in
+// a row and three of a site's or a service's.
+func TestComputerCardsFourInARow(t *testing.T) {
+	body := overviewUnder(t, stateOf(linux("server-b")...), limits{})
+	rem := func(pattern string) float64 {
+		t.Helper()
+		found := regexp.MustCompile(pattern).FindStringSubmatch(body)
+		if found == nil {
+			t.Fatalf("no %s in the stylesheet", pattern)
+		}
+		value, err := strconv.ParseFloat(found[1], 64)
+		if err != nil {
+			t.Fatal(err)
+		}
+		return value
+	}
+	page := rem(`body \{[^}]*max-width: ([0-9.]+)rem;`) - 2*rem(`body \{[^}]*padding: 0 ([0-9.]+)rem;`)
+	gap := rem(`\.cards \{[^}]*gap: ([0-9.]+)rem;`)
+	perRow := func(card float64) int { return int((page + gap) / (card + gap)) }
+	if got := perRow(rem(`section\[data-section="overview\.computers"\] \.cards \{ grid-template-columns: repeat\(auto-fill, minmax\(min\(100%, ([0-9.]+)rem\), 1fr\)\);`)); got != 4 {
+		t.Errorf("%d computer cards in a row, want 4", got)
+	}
+	if got := perRow(rem(`\.cards \{ display: grid; grid-template-columns: repeat\(auto-fill, minmax\(min\(100%, ([0-9.]+)rem\), 1fr\)\);`)); got != 3 {
+		t.Errorf("%d other cards in a row, want 3", got)
 	}
 }
 
@@ -687,9 +575,6 @@ func TestComputerCardGathersTheBackup(t *testing.T) {
 		equal(t, "lines", lineNames(body), slotNames)
 		backup := backupOf(t, body)
 		is(t, backup.whySaid(), whySaid{"unusual", "level-unusual", archiveHint, archiveHint})
-		if class, _ := backup.dot(t); class != "" {
-			t.Errorf("dot %q, want the text colour", class)
-		}
 		equal(t, "values", backup.values(), []string{"1.0 h"})
 	})
 	t.Run("many gathered, nothing else needing attention", func(t *testing.T) {
@@ -708,8 +593,8 @@ func TestComputerCardGathersTheBackup(t *testing.T) {
 		containsAll(t, "card", body, `<span class="card-more">1 more</span>`)
 	})
 	t.Run("the most urgent mark speaks", func(t *testing.T) {
-		scale := banded(successOf(), 60, 120, 180, 1)
-		is(t, saidOn(t, limits{}, gathering("server-b"), scale, failedAt("job-a", evaluate.Critical)),
+		own := banded(successOf(), 60, 120, 180, 1)
+		is(t, saidOn(t, limits{}, gathering("server-b"), own, failedAt("job-a", evaluate.Critical)),
 			whySaid{"critical", "level-critical", "Failed borg job-a: critical", "Failed borg job-a: critical"})
 	})
 	t.Run("a readable threshold", func(t *testing.T) {
@@ -726,16 +611,16 @@ func TestComputerCardGathersTheBackup(t *testing.T) {
 		is(t, saidOn(t, limits{}, gathering("server-b"), failedAt("job-b", evaluate.Critical), failedAt("job-a", evaluate.Critical)),
 			whySaid{"critical", "level-critical", hint, hint})
 	})
-	t.Run("the one on the scale more urgent", func(t *testing.T) {
-		scale := judgedAt(successOf(), evaluate.Critical)
-		stored := limits{heldKey(refOf(scale)): {Direction: storage.Above, Critical: f(1800)}}
-		is(t, saidOn(t, stored, gathering("server-b"), scale, failedAt("job-a", evaluate.Warning)), whySaid{text: "threshold 30.0 min"})
+	t.Run("the line's own more urgent", func(t *testing.T) {
+		own := judgedAt(successOf(), evaluate.Critical)
+		stored := limits{heldKey(refOf(own)): {Direction: storage.Above, Critical: f(1800)}}
+		is(t, saidOn(t, stored, gathering("server-b"), own, failedAt("job-a", evaluate.Warning)), whySaid{text: "threshold 30.0 min"})
 	})
-	t.Run("the one on the scale first among equals", func(t *testing.T) {
-		scale := banded(successOf(), 60, 120, 180, 1)
-		is(t, saidOn(t, limits{}, gathering("server-b"), scale, unusualArchive("job-a")), whySaid{text: "usually 2.0 min"})
+	t.Run("the line's own first among equals", func(t *testing.T) {
+		own := banded(successOf(), 60, 120, 180, 1)
+		is(t, saidOn(t, limits{}, gathering("server-b"), own, unusualArchive("job-a")), whySaid{text: "usually 2.0 min"})
 	})
-	t.Run("a Time Machine destination on the scale, the job's success at warning", func(t *testing.T) {
+	t.Run("a Time Machine destination on the line, the job's success at warning", func(t *testing.T) {
 		subjects := append(gathering("server-b"), tmAge("server-b", "disk-a", 9*86400))
 		body := show(t, limits{}, subjects, judgedAt(successOf(), evaluate.Warning))
 		equal(t, "lines", lineNames(body), slotNames)
@@ -755,7 +640,7 @@ func TestComputerCardGathersTheBackup(t *testing.T) {
 		hint := "Failed borg job-a: no fresh data"
 		is(t, saidOn(t, limits{}, gathering("server-b"), staled(failedAt("job-a", evaluate.Critical))), whySaid{"no fresh data", "level-stale", hint, hint})
 	})
-	t.Run("the one on the scale stale, a gathered series watched and stale", func(t *testing.T) {
+	t.Run("the line's own stale, a gathered series watched and stale", func(t *testing.T) {
 		backup := backupOf(t, show(t, limits{}, gathering("server-b"), staled(successOf()),
 			watchedOnly(staled(borg("server-b", "backup.latest_archive_age_seconds", "job-a", 3600)))))
 		if !strings.Contains(backup.class, "faded") {
@@ -763,26 +648,12 @@ func TestComputerCardGathersTheBackup(t *testing.T) {
 		}
 		is(t, backup.whySaid(), whySaid{})
 	})
-	t.Run("the one on the scale stale", func(t *testing.T) {
+	t.Run("the line's own stale", func(t *testing.T) {
 		backup := backupOf(t, show(t, limits{}, gathering("server-b"), staled(successOf()), unusualArchive("job-a")))
-		if class, _ := backup.dot(t); !strings.Contains(backup.class, "faded") || class != "level-stale" {
-			t.Errorf("line %q, dot %q, want faded and hollow", backup.class, class)
+		if !strings.Contains(backup.class, "faded") {
+			t.Errorf("line %q, want faded", backup.class)
 		}
 		is(t, backup.whySaid(), whySaid{"unusual", "level-unusual", archiveHint, archiveHint})
-	})
-	t.Run("no tick for a gathered threshold", func(t *testing.T) {
-		archive := borg("server-b", "backup.latest_archive_age_seconds", "job-a", 3600)
-		backup := backupOf(t, show(t, limits{heldKey(refOf(archive)): {Direction: storage.Above, Warning: f(1800)}}, gathering("server-b")))
-		if ticks := tickPattern.FindAllString(backup.body, -1); len(ticks) != 0 {
-			t.Errorf("ticks %q", ticks)
-		}
-	})
-	t.Run("the scale set by the ones on it", func(t *testing.T) {
-		backup := backupOf(t, show(t, limits{}, gathering("server-b"), borg("server-b", "backup.latest_archive_age_seconds", "job-a", 40*86400)))
-		if _, left := backup.dot(t); left != "90.9" {
-			t.Errorf("dot at %s%%, want the scale set by the success age alone", left)
-		}
-		equal(t, "values", backup.values(), []string{"1.0 h"})
 	})
 	t.Run("the card's state", func(t *testing.T) {
 		current := stateOf(append(upserted(gathering("server-b"), failedAt("job-a", evaluate.Critical)), linux("box-x")...)...)
@@ -791,7 +662,7 @@ func TestComputerCardGathersTheBackup(t *testing.T) {
 		if word := stateWord(t, body, "server-b"); word != "critical" {
 			t.Errorf("pill %q", word)
 		}
-		equal(t, "sections", flatten(sections(body)), []string{"Computers · 2 · 1 critical", "server-b", "box-x"})
+		equal(t, "sections", flatten(sections(body)), []string{"Computers · 2 · 1 critical", "box-x", "server-b"})
 	})
 	t.Run("a backup slot reading a dash gathers none", func(t *testing.T) {
 		body := show(t, limits{}, without(gathering("server-b"), "backup.success_age_seconds"), failedAt("job-a", evaluate.Critical))

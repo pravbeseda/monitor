@@ -71,11 +71,10 @@ var sectionKeys = [...]struct{ plural, singular string }{
 	sectionServices:  {"overview.services", "overview.service"},
 }
 
-// cardOrder is the order of a section's cards by state: the worst first, and no fresh data
-// last, since a laptop asleep is the everyday case.
-var cardOrder = []timeline.Cell{
-	timeline.Silent, timeline.Critical, timeline.Warning, timeline.Unusual,
-	timeline.OK, timeline.Reporting, timeline.NoFreshData,
+// headingOrder are the states a section's heading counts, in its order: the worst first, and
+// no fresh data last, since a laptop asleep is the everyday case.
+var headingOrder = []timeline.Cell{
+	timeline.Silent, timeline.Critical, timeline.Warning, timeline.Unusual, timeline.NoFreshData,
 }
 
 // overviewItem is one node, or one site of the sites node, before it is translated.
@@ -91,7 +90,8 @@ type overviewItem struct {
 	names names.Book
 }
 
-// overviewItems are the items the state holds, by section and then as their cards stand.
+// overviewItems are the items the state holds, by section and then by name, whatever their
+// state, so a card keeps its place (ADR 0056).
 func overviewItems(current state.State, layout Layout) []overviewItem {
 	silent := silentNodes(current)
 	byNode := map[string][]state.Subject{}
@@ -124,11 +124,11 @@ func overviewItems(current state.State, layout Layout) []overviewItem {
 	}
 	sort.SliceStable(out, func(i, j int) bool {
 		a, b := out[i], out[j]
-		switch {
+		switch first, second := strings.ToLower(a.name), strings.ToLower(b.name); {
 		case a.section != b.section:
 			return a.section < b.section
-		case a.cell != b.cell:
-			return slices.Index(cardOrder, a.cell) < slices.Index(cardOrder, b.cell)
+		case first != second:
+			return first < second
 		}
 		return a.name < b.name
 	})
@@ -404,24 +404,17 @@ func overviewOf(ctx context.Context, printer *i18n.Printer, reader history.Reade
 		return out, nil
 	}
 	attention := itemsOf(current)
-	plans := make([]*computerPlan, len(found))
-	for i, it := range found {
+	for _, it := range found {
+		if n := len(out.Sections); n == 0 || out.Sections[n-1].section != it.section {
+			out.Sections = append(out.Sections, sectionView{section: it.section, counts: map[timeline.Cell]int{}, Key: sectionKeys[it.section].plural})
+		}
+		view := it.cardHead(printer, lang)
 		if it.section == sectionComputers {
 			plan, err := it.computerPlan(ctx, store, attention)
 			if err != nil {
 				return out, err
 			}
-			plans[i] = &plan
-		}
-	}
-	ends := sharedEnds(plans)
-	for i, it := range found {
-		if n := len(out.Sections); n == 0 || out.Sections[n-1].section != it.section {
-			out.Sections = append(out.Sections, sectionView{section: it.section, counts: map[timeline.Cell]int{}, Key: sectionKeys[it.section].plural})
-		}
-		view := it.cardHead(printer, lang)
-		if plans[i] != nil {
-			view.Computer, view.More = it.computerOf(printer, *plans[i], ends)
+			view.Computer, view.More = it.computerOf(printer, plan)
 		} else if err := cardOf(ctx, printer, reader, store, it, attention, &view); err != nil {
 			return out, err
 		}
@@ -436,11 +429,11 @@ func overviewOf(ctx context.Context, printer *i18n.Printer, reader history.Reade
 }
 
 // headingOf is a section's name, how many items it holds, and how many are in each state
-// other than ok and reporting, in the order cards stand.
+// its heading counts.
 func headingOf(printer *i18n.Printer, section sectionView) string {
 	parts := []string{printer.T(section.Key), fmt.Sprint(len(section.Cards))}
-	for _, cell := range cardOrder {
-		if count := section.counts[cell]; count > 0 && cell != timeline.OK && cell != timeline.Reporting {
+	for _, cell := range headingOrder {
+		if count := section.counts[cell]; count > 0 {
 			parts = append(parts, fmt.Sprintf("%d %s", count, printer.T(cellNames[cell].word)))
 		}
 	}

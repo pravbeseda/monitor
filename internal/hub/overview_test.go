@@ -26,6 +26,8 @@ import (
 
 var classes = map[string]string{
 	"server-a": "server", "server-b": "server", "server-c": "server", "server-d": "server", "server-e": "server",
+	"Server-f": "server", "Server-a": "server", "Сервер-б": "server", "сервер-а": "server", "server-9": "server", "server-10": "server",
+	"ёж-а": "server", "яр-б": "server",
 	"laptop-a": "laptop", "box-x": "box", "sites": "sites", "gdrive-a": "service",
 }
 
@@ -367,7 +369,41 @@ func TestOverviewOrder(t *testing.T) {
 		freePct("server-d", "/", 40),
 		judgedAt(freePct("server-e", "/", 40), evaluate.OK),
 	)
-	equal(t, "cards", sections(body)[0][1:], []string{"server-c", "server-b", "server-a", "server-e", "server-d", "laptop-a"})
+	equal(t, "cards", sections(body)[0][1:], []string{"laptop-a", "server-a", "server-b", "server-c", "server-d", "server-e"})
+
+	for _, tc := range []struct {
+		name  string
+		nodes []string
+		want  []string
+	}{
+		{"a capital as its small letter", []string{"Server-f", "server-e"}, []string{"server-e", "Server-f"}},
+		{"in any alphabet", []string{"Сервер-б", "сервер-а"}, []string{"сервер-а", "Сервер-б"}},
+		{"by code point", []string{"ёж-а", "яр-б"}, []string{"яр-б", "ёж-а"}},
+		{"equal but for case, by their bytes", []string{"server-a", "Server-a"}, []string{"Server-a", "server-a"}},
+		{"no number is read", []string{"server-9", "server-10"}, []string{"server-10", "server-9"}},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			var subjects []state.Subject
+			for _, node := range tc.nodes {
+				subjects = append(subjects, freePct(node, "/", 40))
+			}
+			equal(t, "cards", sections(overview(t, subjects...))[0][1:], tc.want)
+		})
+	}
+	t.Run("the section before the name", func(t *testing.T) {
+		body := overview(t, siteOf("blog-a", "site.requests_per_min", 4), freePct("server-b", "/", 40))
+		equal(t, "sections", flatten(sections(body)), []string{"Computers · 1", "server-b", "Sites · 1", "blog-a"})
+	})
+	t.Run("sites", func(t *testing.T) {
+		body := overview(t, judgedAt(siteOf("shop-c", "site.requests_per_min", 9), evaluate.Critical), siteOf("blog-a", "site.requests_per_min", 4))
+		equal(t, "cards", sections(body)[0][1:], []string{"blog-a", "shop-c"})
+	})
+	t.Run("a card keeps its place as its state changes", func(t *testing.T) {
+		for _, level := range []evaluate.Level{evaluate.OK, evaluate.Critical} {
+			body := overview(t, judgedAt(freePct("server-b", "/", 40), evaluate.OK), judgedAt(freePct("server-c", "/", 1), level))
+			equal(t, "cards", sections(body)[0][1:], []string{"server-b", "server-c"})
+		}
+	})
 }
 
 func tmAge(node, destination string, value float64) state.Subject {
