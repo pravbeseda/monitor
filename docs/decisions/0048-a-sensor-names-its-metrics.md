@@ -1,6 +1,7 @@
 # 0048. A sensor names its metrics; the hub shows the name wherever a person reads one
 
-- **Status:** accepted
+- **Status:** accepted; amended by [0053](0053-a-computer-card-is-lines-on-a-shared-scale.md)
+  — a computer card's slot is named by the skin, its series' declared name said on hover
 - **Date:** 2026-10-25
 - **Source:** [2026-10-25 metric names](../log/2026-10-25-metric-names.md),
   [0003](0003-sensors-are-modules.md), [0032](0032-thresholds-are-set-in-the-interface.md)

@@ -111,10 +111,10 @@ func reporting() stored {
 	}
 }
 
-// usualLoad is a week of load whose norm is 0.4 and whose band reaches 0.76 above it, so
+// usualLoad is a week of load whose norm is 0.4 and whose band runs from 0.1 to 0.76, so
 // the 3.1 reported above scores 7.5 (docs/specs/anomaly.md#wire-format).
 func usualLoad() []storage.Point {
-	values := append(make([]float64, 0, 100), 0.76, 0.9)
+	values := append(make([]float64, 0, 100), 0.1, 0.76, 0.9)
 	for len(values) < 100 {
 		values = append(values, 0.4)
 	}
@@ -148,7 +148,7 @@ func TestStateWireFormat(t *testing.T) {
 		`"unit":"percent","value":12,"ts":"2026-08-31T11:45:00.000Z","anomaly":null},` +
 		`{"node":"server-b","metric":"load.avg_5m","labels":{},"watched":false,"level":null,"since":null,` +
 		`"stale":false,"unit":"number","value":3.1,"ts":"2026-08-31T11:55:00.000Z",` +
-		`"anomaly":{"norm":0.4,"score":7.5,"rank":1}}]}`
+		`"anomaly":{"norm":0.4,"low":0.1,"high":0.76,"score":7.5,"rank":1}}]}`
 	if got := strings.TrimSpace(rec.Body.String()); got != want {
 		t.Fatalf("body = %s\nwant   %s", got, want)
 	}

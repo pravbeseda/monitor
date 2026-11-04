@@ -229,7 +229,7 @@ func (it overviewItem) owns(s state.Subject) bool {
 // defaultMetrics are the product's choice of what says most about a kind of item, in the
 // order a card shows them.
 var defaultMetrics = []string{
-	"disk.free_pct", "memory.available_pct", "load.avg_15m", "systemd.failed_units",
+	"disk.free_pct", "memory.available_pct", "load.avg_15m", failedUnits,
 	"timemachine.backup_age_seconds", "backup.success_age_seconds",
 	"site.requests_per_min", "site.server_error_pct", "site.response_p95_seconds",
 	"gdrive.free_pct",
@@ -241,14 +241,12 @@ var defaultMetrics = []string{
 func (it overviewItem) cardSeries(attention []item) ([]state.Subject, int) {
 	var out []state.Subject
 	add := func(s state.Subject) {
-		if !slices.ContainsFunc(out, func(o state.Subject) bool { return o.Metric == s.Metric && maps.Equal(o.Labels, s.Labels) }) {
+		if !slices.ContainsFunc(out, func(o state.Subject) bool { return sameSeries(o, s) }) {
 			out = append(out, s)
 		}
 	}
-	for _, one := range attention {
-		if !one.silence() && it.owns(one.subject) {
-			add(one.subject)
-		}
+	for _, s := range it.attended(attention) {
+		add(s)
 	}
 	for _, metric := range defaultMetrics {
 		if chosen, found := it.defaultOf(metric); found {
@@ -263,6 +261,21 @@ func (it overviewItem) cardSeries(attention []item) ([]state.Subject, int) {
 		return out[:cardRowsShown], len(out) - cardRowsShown
 	}
 	return out, 0
+}
+
+// attended are the item's series that need attention, in the list's order.
+func (it overviewItem) attended(attention []item) []state.Subject {
+	var out []state.Subject
+	for _, one := range attention {
+		if !one.silence() && it.owns(one.subject) {
+			out = append(out, one.subject)
+		}
+	}
+	return out
+}
+
+func sameSeries(a, b state.Subject) bool {
+	return a.Node == b.Node && a.Metric == b.Metric && maps.Equal(a.Labels, b.Labels)
 }
 
 // defaultOf picks the item's series of a default metric: the least free volume that is not
@@ -346,6 +359,9 @@ type cardView struct {
 	More string
 	// Reason closes the card: why it holds its state (docs/specs/overview.md#card).
 	Reason string
+	// Computer lays a computer's card out in place of rows and a reason
+	// (docs/specs/overview.md#computer-card).
+	Computer *computerView
 }
 
 type cardRowView struct {
@@ -388,12 +404,25 @@ func overviewOf(ctx context.Context, printer *i18n.Printer, reader history.Reade
 		return out, nil
 	}
 	attention := itemsOf(current)
-	for _, it := range found {
+	plans := make([]*computerPlan, len(found))
+	for i, it := range found {
+		if it.section == sectionComputers {
+			plan, err := it.computerPlan(ctx, store, attention)
+			if err != nil {
+				return out, err
+			}
+			plans[i] = &plan
+		}
+	}
+	ends := sharedEnds(plans)
+	for i, it := range found {
 		if n := len(out.Sections); n == 0 || out.Sections[n-1].section != it.section {
 			out.Sections = append(out.Sections, sectionView{section: it.section, counts: map[timeline.Cell]int{}, Key: sectionKeys[it.section].plural})
 		}
-		view, err := cardOf(ctx, printer, reader, store, it, attention, lang)
-		if err != nil {
+		view := it.cardHead(printer, lang)
+		if plans[i] != nil {
+			view.Computer, view.More = it.computerOf(printer, *plans[i], ends)
+		} else if err := cardOf(ctx, printer, reader, store, it, attention, &view); err != nil {
 			return out, err
 		}
 		section := &out.Sections[len(out.Sections)-1]
@@ -418,7 +447,9 @@ func headingOf(printer *i18n.Printer, section sectionView) string {
 	return strings.Join(parts, " · ")
 }
 
-func cardOf(ctx context.Context, printer *i18n.Printer, reader history.Reader, store ThresholdReader, it overviewItem, attention []item, lang string) (cardView, error) {
+// cardHead is what every card shows whatever its section: its name, its state, its link,
+// and that it has no series yet.
+func (it overviewItem) cardHead(printer *i18n.Printer, lang string) cardView {
 	out := cardView{
 		Name:  it.name,
 		Class: cellNames[it.cell].class,
@@ -427,8 +458,15 @@ func cardOf(ctx context.Context, printer *i18n.Printer, reader history.Reader, s
 	}
 	if len(it.shownSeries()) == 0 {
 		out.None = printer.T("overview.no_series")
+	}
+	return out
+}
+
+// cardOf lays a site's or a service's card out by its rows, under its head.
+func cardOf(ctx context.Context, printer *i18n.Printer, reader history.Reader, store ThresholdReader, it overviewItem, attention []item, out *cardView) error {
+	if out.None != "" {
 		out.Reason = it.lastReported(printer)
-		return out, nil
+		return nil
 	}
 	shown, more := it.cardSeries(attention)
 	var first storage.Threshold
@@ -441,13 +479,13 @@ func cardOf(ctx context.Context, printer *i18n.Printer, reader history.Reader, s
 		}
 		th, readable, levels, err := levelsOf(ctx, store, s)
 		if err != nil {
-			return out, err
+			return err
 		}
 		if i == 0 {
 			first, firstReadable = th, readable
 		}
 		if row.Line, err = lineOf(ctx, printer, reader, s, history.DefaultWindow, sparkFrame, levels...); err != nil {
-			return out, err
+			return err
 		}
 		out.Main = append(out.Main, row)
 	}
@@ -455,16 +493,25 @@ func cardOf(ctx context.Context, printer *i18n.Printer, reader history.Reader, s
 		out.More = fmt.Sprintf(printer.T("overview.more"), more)
 	}
 	out.Reason = it.reason(printer, shown, first, firstReadable)
-	return out, nil
+	return nil
 }
 
-// lastReported is when the item last reported, said only once it is silent or holds no
-// fresh data.
+// stopped is whether the item stopped reporting: it is silent, or holds no fresh data.
+func (it overviewItem) stopped() bool {
+	return it.cell == timeline.Silent || it.cell == timeline.NoFreshData
+}
+
+// lastReportText says when the item last reported.
+func (it overviewItem) lastReportText(printer *i18n.Printer) string {
+	return fmt.Sprintf(printer.T("overview.last_report"), printer.Time(it.lastReport))
+}
+
+// lastReported is when the item last reported, said only once it stopped.
 func (it overviewItem) lastReported(printer *i18n.Printer) string {
-	if it.cell != timeline.Silent && it.cell != timeline.NoFreshData {
+	if !it.stopped() {
 		return ""
 	}
-	return fmt.Sprintf(printer.T("overview.last_report"), printer.Time(it.lastReport))
+	return it.lastReportText(printer)
 }
 
 // reason is why the card holds its state, said at its foot (docs/specs/overview.md#card).
@@ -505,12 +552,12 @@ func (it overviewItem) reason(printer *i18n.Printer, shown []state.Subject, th s
 // markOf is the one mark a row carries: a stale series is marked stale whatever level it
 // stored, as attention gives it no level.
 func markOf(printer *i18n.Printer, s state.Subject) *levelView {
-	switch {
-	case s.Stale:
+	switch markKindOf(s) {
+	case markStale:
 		return &levelView{Class: "level-stale", Word: printer.T("value.stale")}
-	case s.Level != nil && *s.Level > evaluate.OK:
+	case markWarning, markCritical:
 		return levelOf(printer, s.Level)
-	case s.Anomaly != nil && s.Anomaly.Rank > 0:
+	case markUnusual:
 		return &levelView{Class: "level-unusual", Word: printer.T("timeline.unusual")}
 	}
 	return nil

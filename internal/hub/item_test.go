@@ -474,8 +474,11 @@ func TestItemPageMore(t *testing.T) {
 		if rec.Code != http.StatusInternalServerError {
 			t.Errorf("failing points answer %d on the item's page", rec.Code)
 		}
+		// A computer's card draws no line of the day, so a service's card reads the points.
+		service := func(context.Context) (state.State, error) { return stateOf(freePct("gdrive-a", "/", 20)), nil }
+		drive := storage.SeriesRef{Node: "gdrive-a", Metric: "disk.free_pct", Labels: ext4("/")}
 		rec = httptest.NewRecorder()
-		hub.Overview(read, historyOf(recent), limits{}, layout()).ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/overview", nil))
+		hub.Overview(service, historyOf(broken{held{heldKey(drive): {{TS: lastSeen.Add(-time.Hour), Value: 20}}}}), limits{}, layout()).ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/overview", nil))
 		if rec.Code != http.StatusInternalServerError {
 			t.Errorf("failing points answer %d on the overview", rec.Code)
 		}

@@ -13,7 +13,8 @@
   [0030](../decisions/0030-the-state-api-reports-the-stored-verdict.md),
   [0033](../decisions/0033-a-subject-is-a-series.md),
   [0036](../decisions/0036-an-anomaly-is-a-value-outside-its-weeks-band.md),
-  [0042](../decisions/0042-an-anomalys-start-and-end-are-recorded.md)
+  [0042](../decisions/0042-an-anomalys-start-and-end-are-recorded.md),
+  [0053](../decisions/0053-a-computer-card-is-lines-on-a-shared-scale.md)
 
 ## Purpose
 
@@ -139,10 +140,14 @@ Each subject of `/api/v1/state` carries `anomaly`, an object or `null`:
 { "node": "server-b", "metric": "load.avg_5m", "labels": {},
   "watched": false, "level": null, "since": null, "stale": false,
   "unit": "number", "value": 3.1, "ts": "2026-09-23T09:55:00.000Z",
-  "anomaly": { "norm": 0.4, "score": 7.5, "rank": 1 } }
+  "anomaly": { "norm": 0.4, "low": 0.1, "high": 0.76, "score": 7.5, "rank": 1 } }
 ```
 
-`norm` is in the unit of the series, as `value` is. `score` is a number with at most two
+`norm`, `low` and `high` are in the unit of the series, as `value` is: its norm and its
+band, the 1st and 99th percentiles of the norm period ([model](#model)), so a skin can draw
+the range the series usually keeps ([overview](overview.md#computer-card)). The score is
+measured in the widths of the band's sides, which are wider than `low` and `high` say where
+a side was widened to an extreme, a floor or a step. `score` is a number with at most two
 decimals, or `null`; `rank` is a positive integer or `null`, present for an anomalous
 value by [the rule above](#model), so a series still unusual since it scored 2 carries a
 rank at a score of 1.8. `anomaly` is `null` exactly when
@@ -251,6 +256,14 @@ The norm period holds only −5:
 |---|---|---|
 | −5.04 | −0.8 | `null`: the floor is 1% of the norm's magnitude, 0.05 |
 | −5.1 | −2 | a rank |
+
+### The band on the wire {#band}
+
+| Norm period | Newest value | `anomaly` |
+|---|---|---|
+| the values 1, 2, …, 100 | any | `norm` 50, `low` 1, `high` 99 |
+| 2014 values of 0.00, and 0.5 and 0.6 | 0.5 | `low`, `norm` and `high` 0, `score` 0.83: the side the score is measured by is wider than the band |
+| only zeros | 1 | `low`, `norm` and `high` 0, `score` `null` |
 
 ### Which subjects carry one {#subjects}
 

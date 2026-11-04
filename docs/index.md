@@ -69,13 +69,14 @@ One decision per file, each stating what was rejected and why. New records start
 | [0043](decisions/0043-the-hub-hosts-backup-belongs-to-its-provisioning.md) | The hub host's backup belongs to its provisioning; the repository states what it must keep | accepted |
 | [0044](decisions/0044-a-sensor-takes-its-parameters-from-the-hub.md) | A sensor takes its parameters from the hub, in its entry of the configuration | accepted |
 | [0045](decisions/0045-sites-are-a-node-their-hosts-report-for.md) | Sites are a node of their own, which the agent of each site's host reports for | accepted |
-| [0046](decisions/0046-an-overview-of-items-rendered-by-the-hub.md) | An overview of items, rendered by the hub, opens a page per item | accepted |
+| [0046](decisions/0046-an-overview-of-items-rendered-by-the-hub.md) | An overview of items, rendered by the hub, opens a page per item | accepted, amended by [0053](decisions/0053-a-computer-card-is-lines-on-a-shared-scale.md) |
 | [0047](decisions/0047-a-pull-request-opens-without-a-gate.md) | A pull request opens without a gate; only the merge waits | accepted |
-| [0048](decisions/0048-a-sensor-names-its-metrics.md) | A sensor names its metrics; the hub shows the name wherever a person reads one | accepted |
+| [0048](decisions/0048-a-sensor-names-its-metrics.md) | A sensor names its metrics; the hub shows the name wherever a person reads one | accepted, amended by [0053](decisions/0053-a-computer-card-is-lines-on-a-shared-scale.md) |
 | [0049](decisions/0049-a-backup-job-reports-through-a-status-file.md) | A backup job reports through a status file the agent reads | accepted |
 | [0050](decisions/0050-macos-means-apple-silicon.md) | A macOS node is an Apple Silicon Mac; Intel Macs are not supported | accepted |
 | [0051](decisions/0051-a-sensor-groups-its-family-by-a-label.md) | A sensor groups its family by a label; the skin draws each group as a panel | accepted |
 | [0052](decisions/0052-a-sensor-declares-default-thresholds-seeded-once.md) | A sensor declares default thresholds, and the hub seeds each series with them once; the form applies one threshold to every series of a metric | accepted |
+| [0053](decisions/0053-a-computer-card-is-lines-on-a-shared-scale.md) | A computer's card is a fixed set of lines on a scale its section shares: band, norm, thresholds and a dot for now | accepted |
 
 ## Behaviour specs
 
@@ -144,6 +145,7 @@ Reasoning from working sessions, including options that were rejected.
 | [2026-11-03](log/2026-11-03-family-panels.md) | Family panels: why the sensor declares the grouping, the skin owns the look, and every series stays on its panel |
 | [2026-11-03](log/2026-11-03-backup-panel-table.md) | The backup panel becomes a table: the job's name stands for the failure flag, marks become colour, headings are the declared names |
 | [2026-11-03](log/2026-11-03-default-thresholds.md) | Default thresholds: written once by the sensor's declaration, never layered; applying one threshold to every series of a metric |
+| [2026-11-04](log/2026-11-04-computer-card.md) | The computer card: eight layouts weighed, why bullets on a shared scale, and how each of its questions was settled |
 
 ## Not written yet
 

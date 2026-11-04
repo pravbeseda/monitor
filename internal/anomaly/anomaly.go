@@ -110,14 +110,17 @@ func smallestStep(sorted []float64, from, to float64) float64 {
 	return smallest
 }
 
-// Anomaly is a series' newest value against its norm. A nil Score is a value off a side of
-// no width, which is as unusual as a value can be. Held says the series was unusual already
-// and has not come back since. Rank is zero when it is not unusual.
+// Anomaly is a series' newest value against its norm. Low and High are the band the series
+// usually keeps, for a reader to draw; the score is measured in its sides' widths, which a
+// floor, a step or an extreme can make wider. A nil Score is a value off a side of no width,
+// which is as unusual as a value can be. Held says the series was unusual already and has
+// not come back since. Rank is zero when it is not unusual.
 type Anomaly struct {
-	Norm  float64
-	Score *float64
-	Held  bool
-	Rank  int
+	Norm      float64
+	Low, High float64
+	Score     *float64
+	Held      bool
+	Rank      int
 }
 
 // Unusual is whether the value ranks at all: a series starts being unusual at the cut-off,
@@ -136,7 +139,7 @@ func (a Anomaly) Unusual() bool {
 // decimals: the rounded score is the one reported, and the one compared. held is whether
 // the series is unusual already, which is what it has to come back from.
 func (n Norm) Judge(value float64, held bool) Anomaly {
-	out := Anomaly{Norm: n.median, Held: held}
+	out := Anomaly{Norm: n.median, Low: n.low, High: n.high, Held: held}
 	var score float64
 	switch {
 	case value > n.median && n.above == 0, value < n.median && n.below == 0:

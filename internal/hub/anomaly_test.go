@@ -24,14 +24,14 @@ func TestAnAnomalyWithoutARankOrAScore(t *testing.T) {
 		free("server-b", "/a", 12),
 		free("server-b", "/b", 1),
 	)
-	current.Subjects[0].Anomaly = &anomaly.Anomaly{Norm: 14, Score: &score}
+	current.Subjects[0].Anomaly = &anomaly.Anomaly{Norm: 14, Low: 11.5, High: 15, Score: &score}
 	current.Subjects[1].Anomaly = &anomaly.Anomaly{Norm: 0, Rank: 1}
 	rec := httptest.NewRecorder()
 	hub.StateAPI(func(context.Context) (state.State, error) { return current, nil }).
 		ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/api/v1/state", nil))
 	for _, want := range []string{
-		`"anomaly":{"norm":14,"score":-0.8,"rank":null}`,
-		`"anomaly":{"norm":0,"score":null,"rank":1}`,
+		`"anomaly":{"norm":14,"low":11.5,"high":15,"score":-0.8,"rank":null}`,
+		`"anomaly":{"norm":0,"low":0,"high":0,"score":null,"rank":1}`,
 	} {
 		if !strings.Contains(rec.Body.String(), want) {
 			t.Errorf("body does not carry %s: %s", want, rec.Body)
@@ -40,7 +40,7 @@ func TestAnAnomalyWithoutARankOrAScore(t *testing.T) {
 }
 
 // loadAt is server-b reporting its 5-minute load average at value, against a week of load
-// whose norm is 0.4.
+// whose norm is 0.4 and whose band runs from 0.1 to 0.76.
 func loadAt(value float64) stored {
 	store := reporting()
 	store.states[0].Values[2].Value = value
@@ -83,7 +83,7 @@ func TestOneHourOneNorm(t *testing.T) {
 	}
 
 	store.states[0].Values[2].Value = 0.4
-	if got := anomalyOf(t, routes, "load.avg_5m"); !strings.Contains(string(*got), `"norm":0.4,"score":0,"rank":null`) {
+	if got := anomalyOf(t, routes, "load.avg_5m"); !strings.Contains(string(*got), `"norm":0.4,"low":0.1,"high":0.76,"score":0,"rank":null`) {
 		t.Fatalf("a new value scored %s, want 0 against the same norm", *got)
 	}
 }

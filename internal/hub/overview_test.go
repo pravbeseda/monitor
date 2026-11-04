@@ -223,6 +223,16 @@ func neverReported(current state.State, node string) state.State {
 	return current
 }
 
+// itemRows are an item's rows as its page lists them: a computer's card shows lines instead.
+func itemRows(t *testing.T, current state.State, item string) []string {
+	t.Helper()
+	target := "/item?node=" + item
+	if _, site := hosts[item]; site {
+		target = "/item?node=sites&label.site=" + item
+	}
+	return captured(numberPattern, itemPage(t, current, held{}, logbook{}, target))
+}
+
 // spec: overview.md#items
 func TestOverviewItems(t *testing.T) {
 	body := overview(t,
@@ -407,7 +417,7 @@ func TestOverviewRows(t *testing.T) {
 	}
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {
-			equal(t, "rows", cardRows(t, overview(t, c.subjects...), c.item), c.want)
+			equal(t, "rows", itemRows(t, stateOf(c.subjects...), c.item), c.want)
 		})
 	}
 
@@ -416,53 +426,53 @@ func TestOverviewRows(t *testing.T) {
 		for i, node := range []string{"server-b", "server-c", "server-d", "server-e", "laptop-a"} {
 			subjects = append(subjects, ranked(plain(node, "load.avg_1m", 9), i+1))
 		}
-		equal(t, "rows", cardRows(t, overview(t, subjects...), "server-a")[:1], []string{"load.avg_1m"})
+		equal(t, "rows", itemRows(t, stateOf(subjects...), "server-a")[:1], []string{"load.avg_1m"})
 	})
 
 	t.Run("six rows at most", func(t *testing.T) {
 		six := []state.Subject{}
 		for _, mount := range []string{"/a", "/b", "/c", "/d", "/e", "/f"} {
-			six = append(six, judgedAt(freePct("server-b", mount, 9), evaluate.Warning))
+			six = append(six, judgedAt(freePct("gdrive-a", mount, 9), evaluate.Warning))
 		}
 		body := overview(t, six...)
-		if got := cardRows(t, body, "server-b"); len(got) != 6 {
+		if got := cardRows(t, body, "gdrive-a"); len(got) != 6 {
 			t.Errorf("rows = %d, want 6", len(got))
 		}
-		if strings.Contains(card(t, body, "server-b"), "more") {
+		if strings.Contains(card(t, body, "gdrive-a"), "more") {
 			t.Errorf("a more line with six qualifying")
 		}
 
 		eight := []state.Subject{
-			judgedAt(freePct("server-b", "/a", 9), evaluate.Warning), judgedAt(freePct("server-b", "/b", 9), evaluate.Warning),
-			judgedAt(freePct("server-b", "/c", 9), evaluate.Warning), judgedAt(freePct("server-b", "/d", 9), evaluate.Warning),
-			freePct("server-b", "/e", 5), plain("server-b", "memory.available_pct", 50),
-			plain("server-b", "load.avg_15m", 1), plain("server-b", "systemd.failed_units", 0),
+			judgedAt(freePct("gdrive-a", "/a", 9), evaluate.Warning), judgedAt(freePct("gdrive-a", "/b", 9), evaluate.Warning),
+			judgedAt(freePct("gdrive-a", "/c", 9), evaluate.Warning), judgedAt(freePct("gdrive-a", "/d", 9), evaluate.Warning),
+			freePct("gdrive-a", "/e", 5), plain("gdrive-a", "memory.available_pct", 50),
+			plain("gdrive-a", "load.avg_15m", 1), plain("gdrive-a", "systemd.failed_units", 0),
 		}
 		body = overview(t, eight...)
-		containsAll(t, "card", card(t, body, "server-b"), "2 more")
+		containsAll(t, "card", card(t, body, "gdrive-a"), "2 more")
 	})
 
 	t.Run("marks", func(t *testing.T) {
 		body := overview(t,
-			judgedAt(freePct("server-b", "/a", 1), evaluate.Critical),
-			ranked(judgedAt(freePct("server-b", "/b", 1), evaluate.Critical), 1),
-			staled(judgedAt(freePct("server-b", "/c", 1), evaluate.Critical)),
-			freePct("server-b", "/d", 50),
+			judgedAt(freePct("gdrive-a", "/a", 1), evaluate.Critical),
+			ranked(judgedAt(freePct("gdrive-a", "/b", 1), evaluate.Critical), 1),
+			staled(judgedAt(freePct("gdrive-a", "/c", 1), evaluate.Critical)),
+			freePct("gdrive-a", "/d", 50),
 		)
 		for series, want := range map[string]string{
 			"disk.free_pct /a": "critical", "disk.free_pct /b": "critical", "disk.free_pct /c": "no fresh data",
 		} {
-			if got := rowMark(t, body, "server-b", series); got != want {
+			if got := rowMark(t, body, "gdrive-a", series); got != want {
 				t.Errorf("%s marked %q, want %q", series, got, want)
 			}
 		}
 	})
 
 	t.Run("names", func(t *testing.T) {
-		body := overview(t, reading("box-x", "queue.depth", map[string]string{"queue": "payments"}, 2), siteOf("blog-a", "site.requests_per_min", 4))
-		equal(t, "rows", cardRows(t, body, "box-x"), []string{"queue.depth queue=payments"})
+		body := overview(t, reading("gdrive-a", "queue.depth", map[string]string{"queue": "payments"}, 2), siteOf("blog-a", "site.requests_per_min", 4))
+		equal(t, "rows", cardRows(t, body, "gdrive-a"), []string{"queue.depth queue=payments"})
 		equal(t, "rows", cardRows(t, body, "blog-a"), []string{"site.requests_per_min"})
-		equal(t, "rows", cardRows(t, overview(t, freePct("server-b", "/srv", 40)), "server-b"), []string{"disk.free_pct /srv"})
+		equal(t, "rows", cardRows(t, overview(t, freePct("gdrive-a", "/srv", 40)), "gdrive-a"), []string{"disk.free_pct /srv"})
 	})
 
 	t.Run("a value in its unit", func(t *testing.T) {
@@ -472,9 +482,9 @@ func TestOverviewRows(t *testing.T) {
 	// spec: metric-names.md#where — a row is named by its metric's declared name, in the
 	// reader's language, and a site's row leaves its site out.
 	t.Run("declared names", func(t *testing.T) {
-		current := named(stateOf(freePct("server-b", "/srv", 40), siteOf("blog-a", "site.requests_per_min", 4)))
+		current := named(stateOf(freePct("gdrive-a", "/srv", 40), siteOf("blog-a", "site.requests_per_min", 4)))
 		body := showOverview(t, current, held{}, "/overview?lang=ru")
-		equal(t, "rows", cardRows(t, body, "server-b"), []string{"Свободно /srv"})
+		equal(t, "rows", cardRows(t, body, "gdrive-a"), []string{"Свободно /srv"})
 		equal(t, "rows", cardRows(t, body, "blog-a"), []string{"Запросов в минуту"})
 	})
 
@@ -487,7 +497,7 @@ func TestOverviewRows(t *testing.T) {
 // spec: overview.md#rows
 func TestOverviewLines(t *testing.T) {
 	ref := func(mount string) storage.SeriesRef {
-		return storage.SeriesRef{Node: "server-b", Metric: "disk.free_pct", Labels: map[string]string{"mount": mount, "fs": "ext4", "removable": "false"}}
+		return storage.SeriesRef{Node: "gdrive-a", Metric: "disk.free_pct", Labels: map[string]string{"mount": mount, "fs": "ext4", "removable": "false"}}
 	}
 	points := held{
 		heldKey(ref("/a")): {{TS: lastSeen.Add(-3 * time.Hour), Value: 10}, {TS: lastSeen.Add(-3*time.Hour + 5*time.Minute), Value: 11}},
@@ -496,10 +506,10 @@ func TestOverviewLines(t *testing.T) {
 		heldKey(ref("/c")): {{TS: lastSeen.Add(-time.Hour), Value: 10}},
 	}
 	current := stateOf(
-		judgedAt(freePct("server-b", "/a", 9), evaluate.Warning), judgedAt(freePct("server-b", "/b", 9), evaluate.Warning),
-		judgedAt(freePct("server-b", "/c", 9), evaluate.Warning),
+		judgedAt(freePct("gdrive-a", "/a", 9), evaluate.Warning), judgedAt(freePct("gdrive-a", "/b", 9), evaluate.Warning),
+		judgedAt(freePct("gdrive-a", "/c", 9), evaluate.Warning),
 	)
-	body := card(t, showOverview(t, current, points, "/overview"), "server-b")
+	body := card(t, showOverview(t, current, points, "/overview"), "gdrive-a")
 	found := rowPattern.FindAllStringSubmatch(body, -1)
 	if len(found) != 3 {
 		t.Fatalf("rows = %d", len(found))
@@ -515,13 +525,13 @@ func TestOverviewLines(t *testing.T) {
 	}
 
 	t.Run("no point in the last day", func(t *testing.T) {
-		body := card(t, showOverview(t, stateOf(freePct("server-b", "/", 9)), held{}, "/overview"), "server-b")
+		body := card(t, showOverview(t, stateOf(freePct("gdrive-a", "/", 9)), held{}, "/overview"), "gdrive-a")
 		if strings.Contains(body, "<svg") {
 			t.Errorf("a line with no points")
 		}
 	})
 	t.Run("a single point", func(t *testing.T) {
-		body := card(t, showOverview(t, stateOf(judgedAt(freePct("server-b", "/c", 9), evaluate.Warning)), points, "/overview"), "server-b")
+		body := card(t, showOverview(t, stateOf(judgedAt(freePct("gdrive-a", "/c", 9), evaluate.Warning)), points, "/overview"), "gdrive-a")
 		if !strings.Contains(body, `<polyline class="point"`) {
 			t.Errorf("a lone point is not drawn: %s", body)
 		}
@@ -552,17 +562,17 @@ func TestOverviewPage(t *testing.T) {
 // spec: overview.md#rows — a line reads exactly its series: an empty label or a family of
 // sixty siblings costs the card nothing.
 func TestOverviewLineReadsItsOwnSeries(t *testing.T) {
-	odd := reading("box-x", "queue.depth", map[string]string{"queue": ""}, 2)
-	points := held{heldKey(storage.SeriesRef{Node: "box-x", Metric: "queue.depth", Labels: map[string]string{"queue": ""}}): {
+	odd := reading("gdrive-a", "queue.depth", map[string]string{"queue": ""}, 2)
+	points := held{heldKey(storage.SeriesRef{Node: "gdrive-a", Metric: "queue.depth", Labels: map[string]string{"queue": ""}}): {
 		{TS: lastSeen.Add(-time.Hour), Value: 2}, {TS: lastSeen.Add(-55 * time.Minute), Value: 3},
 	}}
 	subjects := []state.Subject{odd}
 	for i := range 60 {
 		labels := map[string]string{"queue": "", "shard": strings.Repeat("s", i+1)}
-		subjects = append(subjects, reading("box-x", "queue.depth", labels, 1))
-		points[heldKey(storage.SeriesRef{Node: "box-x", Metric: "queue.depth", Labels: labels})] = []storage.Point{{TS: lastSeen.Add(-time.Hour), Value: 1}}
+		subjects = append(subjects, reading("gdrive-a", "queue.depth", labels, 1))
+		points[heldKey(storage.SeriesRef{Node: "gdrive-a", Metric: "queue.depth", Labels: labels})] = []storage.Point{{TS: lastSeen.Add(-time.Hour), Value: 1}}
 	}
-	body := card(t, showOverview(t, stateOf(subjects...), points, "/overview"), "box-x")
+	body := card(t, showOverview(t, stateOf(subjects...), points, "/overview"), "gdrive-a")
 	if !strings.Contains(body, "<polyline") {
 		t.Errorf("the empty-labelled series has no line: %s", body)
 	}
@@ -571,10 +581,10 @@ func TestOverviewLineReadsItsOwnSeries(t *testing.T) {
 // spec: overview.md#rows — two series whose labels render alike are still two rows.
 func TestOverviewRowsKeepLabelSetsApart(t *testing.T) {
 	body := overview(t,
-		judgedAt(reading("box-x", "queue.depth", map[string]string{"a=b": "c"}, 9), evaluate.Warning),
-		judgedAt(reading("box-x", "queue.depth", map[string]string{"a": "b=c"}, 9), evaluate.Warning),
+		judgedAt(reading("gdrive-a", "queue.depth", map[string]string{"a=b": "c"}, 9), evaluate.Warning),
+		judgedAt(reading("gdrive-a", "queue.depth", map[string]string{"a": "b=c"}, 9), evaluate.Warning),
 	)
-	if got := cardRows(t, body, "box-x"); len(got) != 2 {
+	if got := cardRows(t, body, "gdrive-a"); len(got) != 2 {
 		t.Errorf("rows = %q, want both series", got)
 	}
 }

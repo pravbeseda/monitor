@@ -203,7 +203,7 @@ func itemPageOf(ctx context.Context, printer *i18n.Printer, reader history.Reade
 		Kind:         printer.T(sectionKeys[it.section].singular),
 		Class:        cellNames[it.cell].class,
 		Word:         printer.T(cellNames[it.cell].word),
-		LastReport:   fmt.Sprintf(printer.T("overview.last_report"), printer.Time(it.lastReport)),
+		LastReport:   it.lastReportText(printer),
 		WindowLabel:  printer.T("history.window"),
 		Zone:         printer.Zone(current.At),
 		SetLabel:     printer.T("history.set"),
