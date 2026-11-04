@@ -3,7 +3,9 @@
 - **Status:** accepted; amended by [0051](0051-a-sensor-groups-its-family-by-a-label.md) —
   a grouped family's series are gathered in panels on the item's page, not charted; amended
   by [0053](0053-a-computer-card-is-lines-on-a-shared-scale.md) — a computer's card is lines
-  on a scale its section shares, without a line of the day
+  on a scale its section shares, without a line of the day; amended by
+  [0056](0056-cards-in-a-section-are-ordered-by-name.md) — a section's cards are ordered by
+  name
 - **Date:** 2026-10-25
 - **Source:** [overview spec](../specs/overview.md),
   [design notes](../log/2026-10-25-overview.md)

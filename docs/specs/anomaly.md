@@ -14,7 +14,8 @@
   [0033](../decisions/0033-a-subject-is-a-series.md),
   [0036](../decisions/0036-an-anomaly-is-a-value-outside-its-weeks-band.md),
   [0042](../decisions/0042-an-anomalys-start-and-end-are-recorded.md),
-  [0053](../decisions/0053-a-computer-card-is-lines-on-a-shared-scale.md)
+  [0053](../decisions/0053-a-computer-card-is-lines-on-a-shared-scale.md),
+  [0055](../decisions/0055-a-computer-card-line-is-its-values.md)
 
 ## Purpose
 
@@ -144,8 +145,8 @@ Each subject of `/api/v1/state` carries `anomaly`, an object or `null`:
 ```
 
 `norm`, `low` and `high` are in the unit of the series, as `value` is: its norm and its
-band, the 1st and 99th percentiles of the norm period ([model](#model)), so a skin can draw
-the range the series usually keeps ([overview](overview.md#computer-card)). The score is
+band, the 1st and 99th percentiles of the norm period ([model](#model)); no skin draws the
+band for now ([0055](../decisions/0055-a-computer-card-line-is-its-values.md)). The score is
 measured in the widths of the band's sides, which are wider than `low` and `high` say where
 a side was widened to an extreme, a floor or a step. `score` is a number with at most two
 decimals, or `null`; `rank` is a positive integer or `null`, present for an anomalous
