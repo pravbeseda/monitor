@@ -5,7 +5,8 @@
   by [0053](0053-a-computer-card-is-lines-on-a-shared-scale.md) — a computer's card is lines
   on a scale its section shares, without a line of the day; amended by
   [0056](0056-cards-in-a-section-are-ordered-by-name.md) — a section's cards are ordered by
-  name, the red ones first
+  name, the red ones first; amended by [0057](0057-sites-are-a-sortable-table.md) —
+  the sites are a sortable table, not cards
 - **Date:** 2026-10-25
 - **Source:** [overview spec](../specs/overview.md),
   [design notes](../log/2026-10-25-overview.md)

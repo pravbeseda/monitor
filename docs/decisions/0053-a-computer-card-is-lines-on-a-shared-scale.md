@@ -2,8 +2,10 @@
 
 - **Status:** accepted, amended by
   [0054](0054-the-backup-line-gathers-the-backup-families.md) — the backup line gathers the
-  backup families — and by [0055](0055-a-computer-card-line-is-its-values.md) — a line is
-  its name and its values, no scale; amends [0046](0046-an-overview-of-items-rendered-by-the-hub.md) — a
+  backup families — by [0055](0055-a-computer-card-line-is-its-values.md) — a line is
+  its name and its values, no scale — and by
+  [0057](0057-sites-are-a-sortable-table.md) — the sites are a table;
+  amends [0046](0046-an-overview-of-items-rendered-by-the-hub.md) — a
   computer's card carries no line of the day, and its slots are a second place a metric
   needs code — and [0048](0048-a-sensor-names-its-metrics.md) — a slot is named by the
   skin, the declared name of its series said on hover

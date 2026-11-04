@@ -124,15 +124,13 @@ func overviewItems(current state.State, layout Layout) []overviewItem {
 	}
 	sort.SliceStable(out, func(i, j int) bool {
 		a, b := out[i], out[j]
-		switch first, second := strings.ToLower(a.name), strings.ToLower(b.name); {
+		switch {
 		case a.section != b.section:
 			return a.section < b.section
 		case a.red() != b.red():
 			return a.red()
-		case first != second:
-			return first < second
 		}
-		return a.name < b.name
+		return byName(a.name, b.name) < 0
 	})
 	return out
 }
@@ -352,6 +350,8 @@ type sectionView struct {
 	Key     string
 	Heading string
 	Cards   []cardView
+	// Sites lays the sites out as a table in place of cards (docs/specs/overview.md#site-table).
+	Sites *sitesView
 }
 
 type cardView struct {
@@ -378,8 +378,8 @@ type cardRowView struct {
 	Line  *chart
 }
 
-// Overview renders the overview skin: a card per item, grouped by who collects it
-// (docs/specs/overview.md).
+// Overview renders the overview skin: a card per computer and service and a row per site,
+// grouped by who collects them (docs/specs/overview.md).
 func Overview(read StateReader, reader history.Reader, store ThresholdReader, layout Layout) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		values := r.URL.Query()
@@ -391,7 +391,7 @@ func Overview(read StateReader, reader history.Reader, store ThresholdReader, la
 			storageFailure(w, printer, err)
 			return
 		}
-		view, err := overviewOf(r.Context(), printer, reader, store, current, layout, lang)
+		view, err := overviewOf(r.Context(), printer, reader, store, current, layout, lang, siteSortOf(values.Get("sort")))
 		if err != nil {
 			storageFailure(w, printer, err)
 			return
@@ -403,7 +403,7 @@ func Overview(read StateReader, reader history.Reader, store ThresholdReader, la
 	})
 }
 
-func overviewOf(ctx context.Context, printer *i18n.Printer, reader history.Reader, store ThresholdReader, current state.State, layout Layout, lang string) (overviewView, error) {
+func overviewOf(ctx context.Context, printer *i18n.Printer, reader history.Reader, store ThresholdReader, current state.State, layout Layout, lang string, sorted siteSort) (overviewView, error) {
 	out := overviewView{shell: shellOf(printer, "overview.title", "overview", lang)}
 	found := overviewItems(current, layout)
 	if len(found) == 0 {
@@ -415,21 +415,38 @@ func overviewOf(ctx context.Context, printer *i18n.Printer, reader history.Reade
 		if n := len(out.Sections); n == 0 || out.Sections[n-1].section != it.section {
 			out.Sections = append(out.Sections, sectionView{section: it.section, counts: map[timeline.Cell]int{}, Key: sectionKeys[it.section].plural})
 		}
-		view := it.cardHead(printer, lang)
-		if it.section == sectionComputers {
-			plan, err := it.computerPlan(ctx, store, attention)
+		section := &out.Sections[len(out.Sections)-1]
+		section.counts[it.cell]++
+		if it.section == sectionSites {
+			if section.Sites == nil {
+				section.Sites = &sitesView{Headers: sitesHeaders(printer, sorted, lang)}
+			}
+			row, err := it.siteRowOf(ctx, printer, reader, store, attention, lang)
 			if err != nil {
 				return out, err
 			}
-			view.Computer, view.More = it.computerOf(printer, plan)
-		} else if err := cardOf(ctx, printer, reader, store, it, attention, &view); err != nil {
+			section.Sites.Rows = append(section.Sites.Rows, row)
+			continue
+		}
+		view := it.cardHead(printer, lang)
+		var err error
+		if it.section == sectionComputers {
+			var plan linedPlan
+			if plan, err = it.linedPlan(ctx, store, attention, computerSlots); err == nil {
+				view.Computer, view.More = it.computerOf(printer, plan)
+			}
+		} else {
+			err = cardOf(ctx, printer, reader, store, it, attention, &view)
+		}
+		if err != nil {
 			return out, err
 		}
-		section := &out.Sections[len(out.Sections)-1]
 		section.Cards = append(section.Cards, view)
-		section.counts[it.cell]++
 	}
 	for i := range out.Sections {
+		if sites := out.Sections[i].Sites; sites != nil {
+			sorted.sortRows(sites.Rows)
+		}
 		out.Sections[i].Heading = headingOf(printer, out.Sections[i])
 	}
 	return out, nil
@@ -438,7 +455,11 @@ func overviewOf(ctx context.Context, printer *i18n.Printer, reader history.Reade
 // headingOf is a section's name, how many items it holds, and how many are in each state
 // its heading counts.
 func headingOf(printer *i18n.Printer, section sectionView) string {
-	parts := []string{printer.T(section.Key), fmt.Sprint(len(section.Cards))}
+	total := 0
+	for _, count := range section.counts {
+		total += count
+	}
+	parts := []string{printer.T(section.Key), fmt.Sprint(total)}
 	for _, cell := range headingOrder {
 		if count := section.counts[cell]; count > 0 {
 			parts = append(parts, fmt.Sprintf("%d %s", count, printer.T(cellNames[cell].word)))
@@ -462,7 +483,7 @@ func (it overviewItem) cardHead(printer *i18n.Printer, lang string) cardView {
 	return out
 }
 
-// cardOf lays a site's or a service's card out by its rows, under its head.
+// cardOf lays a service's card out by its rows, under its head.
 func cardOf(ctx context.Context, printer *i18n.Printer, reader history.Reader, store ThresholdReader, it overviewItem, attention []item, out *cardView) error {
 	if out.None != "" {
 		out.Reason = it.lastReported(printer)

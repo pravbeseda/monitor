@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"regexp"
+	"slices"
 	"strings"
 	"testing"
 	"time"
@@ -134,7 +135,8 @@ var (
 	sectionPattern = regexp.MustCompile(`(?s)<section class="section"[^>]*>.*?</section>`)
 	headingPattern = regexp.MustCompile(`(?s)<h2 class="section-heading">(.*?)</h2>`)
 	cardPattern    = regexp.MustCompile(`(?s)<a class="card [^"]*" href="[^"]*" data-item="([^"]*)">.*?</a>`)
-	cardState      = regexp.MustCompile(`<span class="card-state">([^<]*)</span>`)
+	sitePattern    = regexp.MustCompile(`(?s)<tr class="site [^"]*" data-item="([^"]*)">.*?</tr>`)
+	cardState      = regexp.MustCompile(`<span class="(?:card-state|site-state row-mark-word)">([^<]*)</span>`)
 	rowPattern     = regexp.MustCompile(`(?s)<li class="row[^"]*" data-series="([^"]*)">.*?</li>`)
 	markPattern    = regexp.MustCompile(`<span class="row-mark-word">([^<]*)</span>`)
 )
@@ -144,7 +146,7 @@ func sections(body string) [][]string {
 	var out [][]string
 	for _, section := range sectionPattern.FindAllString(body, -1) {
 		one := []string{strings.TrimSpace(headingPattern.FindStringSubmatch(section)[1])}
-		for _, card := range cardPattern.FindAllStringSubmatch(section, -1) {
+		for _, card := range entries(section) {
 			one = append(one, card[1])
 		}
 		out = append(out, one)
@@ -152,9 +154,22 @@ func sections(body string) [][]string {
 	return out
 }
 
+// entries are a page's cards and the sites table's rows, each its markup and its name, in page
+// order.
+func entries(body string) [][]string {
+	found := append(cardPattern.FindAllStringSubmatchIndex(body, -1), sitePattern.FindAllStringSubmatchIndex(body, -1)...)
+	slices.SortFunc(found, func(a, b []int) int { return a[0] - b[0] })
+	var out [][]string
+	for _, at := range found {
+		out = append(out, []string{body[at[0]:at[1]], body[at[2]:at[3]]})
+	}
+	return out
+}
+
+// card is an item's card, or a site's row in the sites table.
 func card(t *testing.T, body, name string) string {
 	t.Helper()
-	for _, found := range cardPattern.FindAllStringSubmatch(body, -1) {
+	for _, found := range entries(body) {
 		if found[1] == name {
 			return found[0]
 		}
@@ -225,7 +240,8 @@ func neverReported(current state.State, node string) state.State {
 	return current
 }
 
-// itemRows are an item's rows as its page lists them: a computer's card shows lines instead.
+// itemRows are an item's rows as its page lists them: a computer's card shows lines instead,
+// and a site is a row of the sites table.
 func itemRows(t *testing.T, current state.State, item string) []string {
 	t.Helper()
 	target := "/item?node=" + item
@@ -525,9 +541,11 @@ func TestOverviewRows(t *testing.T) {
 	})
 
 	t.Run("names", func(t *testing.T) {
-		body := overview(t, reading("gdrive-a", "queue.depth", map[string]string{"queue": "payments"}, 2), siteOf("blog-a", "site.requests_per_min", 4))
+		body := overview(t, reading("gdrive-a", "queue.depth", map[string]string{"queue": "payments"}, 2), siteOf("blog-a", "site.requests_per_min", 4),
+			judgedAt(siteOf("blog-a", "site.client_error_pct", 4), evaluate.Warning))
 		equal(t, "rows", cardRows(t, body, "gdrive-a"), []string{"queue.depth queue=payments"})
-		equal(t, "rows", cardRows(t, body, "blog-a"), []string{"site.requests_per_min"})
+		items, _ := alsoOf(t, card(t, body, "blog-a"))
+		equal(t, "also", items, []string{"site.client_error_pct 4.0% (level-warning marked)"})
 		equal(t, "rows", cardRows(t, overview(t, freePct("gdrive-a", "/srv", 40)), "gdrive-a"), []string{"disk.free_pct /srv"})
 	})
 
@@ -535,13 +553,15 @@ func TestOverviewRows(t *testing.T) {
 		containsAll(t, "card", card(t, overview(t, freePct("server-b", "/", 40)), "server-b"), "40.0%")
 	})
 
-	// spec: metric-names.md#where — a row is named by its metric's declared name, in the
-	// reader's language, and a site's row leaves its site out.
+	// spec: metric-names.md#where — a row, and a site's value cell on hover, is named by its
+	// metric's declared name, in the reader's language, leaving the site out.
 	t.Run("declared names", func(t *testing.T) {
 		current := named(stateOf(freePct("gdrive-a", "/srv", 40), siteOf("blog-a", "site.requests_per_min", 4)))
 		body := showOverview(t, current, held{}, "/overview?lang=ru")
 		equal(t, "rows", cardRows(t, body, "gdrive-a"), []string{"Свободно /srv"})
-		equal(t, "rows", cardRows(t, body, "blog-a"), []string{"Запросов в минуту"})
+		if requests := siteCell(t, card(t, body, "blog-a"), "requests"); requests.title != "Запросов в минуту" {
+			t.Errorf("a site's cell names %q", requests.title)
+		}
 	})
 
 	t.Run("a card links to its item", func(t *testing.T) {
