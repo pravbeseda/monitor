@@ -111,13 +111,13 @@ type lineSeries struct {
 }
 
 // linePlan is one line before its scale is known: the series on the scale, nil for a slot
-// the computer has none for, the muted ones beside it, and those it gathers. key names a
-// slot, and is empty on an extra line.
+// the computer has none for, the muted ones beside it, and the gathered one that speaks
+// louder than them all. key names a slot, and is empty on an extra line.
 type linePlan struct {
-	key      string
-	scale    *lineSeries
-	beside   []lineSeries
-	gathered []lineSeries
+	key    string
+	scale  *lineSeries
+	beside []lineSeries
+	loud   *lineSeries
 }
 
 // computerPlan is what a computer's card shows, before the section's scales are known.
@@ -219,11 +219,19 @@ func linePlans(ctx context.Context, store ThresholdReader, lines []pickedLine) (
 				return nil, err
 			}
 			plan.scale = &scale
-			if plan.beside, err = lineSeriesOfAll(ctx, store, line.beside); err != nil {
-				return nil, err
+			for _, s := range line.beside {
+				muted, err := lineSeriesOf(ctx, store, s)
+				if err != nil {
+					return nil, err
+				}
+				plan.beside = append(plan.beside, muted)
 			}
-			if plan.gathered, err = lineSeriesOfAll(ctx, store, line.gathered); err != nil {
-				return nil, err
+			if loud, found := loudest(append([]state.Subject{*line.scale}, line.beside...), line.gathered); found {
+				speaker, err := lineSeriesOf(ctx, store, loud)
+				if err != nil {
+					return nil, err
+				}
+				plan.loud = &speaker
 			}
 		}
 		out = append(out, plan)
@@ -236,16 +244,21 @@ func lineSeriesOf(ctx context.Context, store ThresholdReader, s state.Subject) (
 	return lineSeries{Subject: s, levels: levels}, err
 }
 
-func lineSeriesOfAll(ctx context.Context, store ThresholdReader, series []state.Subject) ([]lineSeries, error) {
-	var out []lineSeries
-	for _, s := range series {
-		one, err := lineSeriesOf(ctx, store, s)
-		if err != nil {
-			return nil, err
-		}
-		out = append(out, one)
+// loudest is the first gathered series whose mark is louder than every shown one's and
+// than the gathered before it.
+func loudest(shown, gathered []state.Subject) (state.Subject, bool) {
+	bar := unmarked
+	for _, s := range shown {
+		bar = max(bar, markKindOf(s))
 	}
-	return out, nil
+	var out state.Subject
+	found := false
+	for _, s := range gathered {
+		if mark := gatheredMark(s); mark > bar {
+			out, bar, found = s, mark, true
+		}
+	}
+	return out, found
 }
 
 // reach is the largest a series asks of its scale: its value, its band's top and its
@@ -396,14 +409,7 @@ func (it overviewItem) computerLine(printer *i18n.Printer, plan linePlan, name s
 	out.Values = append(out.Values, valueOf(printer, s.Subject, false))
 	out.Why = whyOf(printer, speaker)
 
-	var loud *lineSeries
-	loudest := markKindOf(speaker.Subject)
-	for i, one := range plan.gathered {
-		if mark := gatheredMark(one.Subject); mark > loudest {
-			loud, loudest = &plan.gathered[i], mark
-		}
-	}
-	if loud != nil {
+	if loud := plan.loud; loud != nil {
 		mark := markOf(printer, loud.Subject)
 		out.Why, out.WhyClass = mark.Word, mark.Class
 		out.WhyHint = fmt.Sprintf(printer.T("overview.reason_level"), it.rowName(printer, loud.Subject), cmp.Or(whyOf(printer, *loud), mark.Word))
