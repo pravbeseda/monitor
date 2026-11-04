@@ -106,13 +106,14 @@ type lineSeries struct {
 }
 
 // linePlan is one line: the series of its own value, nil for a slot the computer has none
-// for, the muted ones beside it, and the gathered one that speaks louder than them all. key
-// names a slot, and is empty on an extra line.
+// for, the muted ones beside it, the one of them the line says why by, and the gathered one
+// that speaks louder than them all. key names a slot, and is empty on an extra line.
 type linePlan struct {
-	key    string
-	own    *lineSeries
-	beside []lineSeries
-	loud   *lineSeries
+	key     string
+	own     *state.Subject
+	beside  []state.Subject
+	speaker *lineSeries
+	loud    *lineSeries
 }
 
 // computerPlan is what a computer's card shows.
@@ -206,31 +207,36 @@ func (it overviewItem) computerPlan(ctx context.Context, store ThresholdReader, 
 func linePlans(ctx context.Context, store ThresholdReader, lines []pickedLine) ([]linePlan, error) {
 	var out []linePlan
 	for _, line := range lines {
-		plan := linePlan{key: line.key}
+		plan := linePlan{key: line.key, own: line.own, beside: line.beside}
 		if line.own != nil {
-			own, err := lineSeriesOf(ctx, store, *line.own)
+			speaker, err := lineSeriesOf(ctx, store, speakerOf(*line.own, line.beside))
 			if err != nil {
 				return nil, err
 			}
-			plan.own = &own
-			for _, s := range line.beside {
-				muted, err := lineSeriesOf(ctx, store, s)
-				if err != nil {
-					return nil, err
-				}
-				plan.beside = append(plan.beside, muted)
-			}
+			plan.speaker = &speaker
 			if loud, found := loudest(append([]state.Subject{*line.own}, line.beside...), line.gathered); found {
-				speaker, err := lineSeriesOf(ctx, store, loud)
+				louder, err := lineSeriesOf(ctx, store, loud)
 				if err != nil {
 					return nil, err
 				}
-				plan.loud = &speaker
+				plan.loud = &louder
 			}
 		}
 		out = append(out, plan)
 	}
 	return out, nil
+}
+
+// speakerOf is the series a line says why by: the most urgent mark among its own and those
+// beside it, its own first among equals.
+func speakerOf(own state.Subject, beside []state.Subject) state.Subject {
+	speaker := own
+	for _, s := range beside {
+		if markKindOf(s) > markKindOf(speaker) {
+			speaker = s
+		}
+	}
+	return speaker
 }
 
 func lineSeriesOf(ctx context.Context, store ThresholdReader, s state.Subject) (lineSeries, error) {
@@ -294,17 +300,13 @@ func (it overviewItem) computerLine(printer *i18n.Printer, plan linePlan, name s
 		return out
 	}
 	s := *plan.own
-	out.Title = it.rowName(printer, s.Subject)
+	out.Title = it.rowName(printer, s)
 	out.Faded = s.Stale
-	speaker := s
 	for _, one := range plan.beside {
-		out.Values = append(out.Values, valueOf(printer, one.Subject, true))
-		if markKindOf(one.Subject) > markKindOf(speaker.Subject) {
-			speaker = one
-		}
+		out.Values = append(out.Values, valueOf(printer, one, true))
 	}
-	out.Values = append(out.Values, valueOf(printer, s.Subject, false))
-	out.Why = whyOf(printer, speaker)
+	out.Values = append(out.Values, valueOf(printer, s, false))
+	out.Why = whyOf(printer, *plan.speaker)
 
 	if loud := plan.loud; loud != nil {
 		mark := markOf(printer, loud.Subject)
@@ -376,7 +378,7 @@ func (it overviewItem) computerOf(printer *i18n.Printer, plan computerPlan) (*co
 		out.Lines = append(out.Lines, it.computerLine(printer, line, slotName(printer, line)))
 	}
 	for _, line := range plan.extras {
-		out.Lines = append(out.Lines, it.computerLine(printer, line, it.rowName(printer, line.own.Subject)))
+		out.Lines = append(out.Lines, it.computerLine(printer, line, it.rowName(printer, *line.own)))
 	}
 	more := ""
 	if plan.more > 0 {
