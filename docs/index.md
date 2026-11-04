@@ -79,7 +79,7 @@ One decision per file, each stating what was rejected and why. New records start
 | [0053](decisions/0053-a-computer-card-is-lines-on-a-shared-scale.md) | A computer's card is a fixed set of lines on a scale its section shares: band, norm, thresholds and a dot for now | accepted, amended by [0054](decisions/0054-the-backup-line-gathers-the-backup-families.md), [0055](decisions/0055-a-computer-card-line-is-its-values.md) |
 | [0054](decisions/0054-the-backup-line-gathers-the-backup-families.md) | A computer card's backup line gathers the backup families' series and says their marks | accepted |
 | [0055](decisions/0055-a-computer-card-line-is-its-values.md) | A computer card's line is its name and its values, nothing drawn between; four cards to a row | accepted |
-| [0056](decisions/0056-cards-in-a-section-are-ordered-by-name.md) | An overview section's cards are ordered by name, not by state | accepted |
+| [0056](decisions/0056-cards-in-a-section-are-ordered-by-name.md) | An overview section's cards are ordered by name, the red ones (critical, silent) first | accepted |
 
 ## Behaviour specs
 

@@ -80,8 +80,10 @@ lanes use ([timeline](timeline.md#lanes)):
 a service node that has stored nothing, when the hub recorded it — or, for a site, the
 newest point among its series. A card in the silent or the no-fresh-data state says it.
 
-**Cards in a section** are ordered by the item's name, whatever their state, so a card keeps
-its place as states change ([0056](../decisions/0056-cards-in-a-section-are-ordered-by-name.md)):
+**Cards in a section** stand in two runs
+([0056](../decisions/0056-cards-in-a-section-are-ordered-by-name.md)): first the red ones —
+critical or silent — then every other, each run by the item's name, so a card keeps its
+place as it turns unusual or warning and back. By name means
 character by character in the order of their code points, a capital letter read as its
 small one in any alphabet and a digit as a character, not as part of a number; names equal
 but for case by their bytes.
@@ -345,15 +347,20 @@ English catalogue's; every one of them has its Russian. `sites` is the node of c
 
 | State | Order inside the section |
 |---|---|
-| `server-a` `ok`, `server-b` `critical`, `server-c` silent | `server-a`, `server-b`, `server-c` |
+| `server-a` `ok`, `server-b` `critical`, `server-c` silent | `server-b`, `server-c`, `server-a`: the red ones first, each run by name |
+| `server-a` `critical`, `server-b` silent | `server-a`, `server-b`: silent and critical are one run |
+| `server-a` silent, `server-b` `critical` | `server-a`, `server-b` |
 | `laptop-a` with no fresh data, `server-d` reporting with nothing watched, `server-e` `ok` | `laptop-a`, `server-d`, `server-e` |
+| `server-a` `ok`, `server-b` `warning`, `server-c` unusual, `server-d` `ok` | `server-a`, `server-b`, `server-c`, `server-d`: by name |
 | `Server-f` and `server-e` | `server-e`, `Server-f`: a capital as its small letter |
 | `Сервер-б` and `сервер-а` | `сервер-а`, `Сервер-б`: in any alphabet |
 | `ёж-а` and `яр-б` | `яр-б`, `ёж-а`: by code point, not by a language's alphabet |
 | `server-a` and `Server-a` | `Server-a`, `server-a`: equal but for case, by their bytes |
 | `server-10` and `server-9` | `server-10`, `server-9`: no number is read |
-| sites `shop-c` `critical` and `blog-a` | `blog-a`, `shop-c` |
-| `server-c` turning `critical` while the page is open | it keeps its place |
+| sites `shop-c` `ok` and `blog-a` | `blog-a`, `shop-c` |
+| sites `shop-c` `critical` and `blog-a` | `shop-c`, `blog-a` |
+| `server-c` turning unusual or `warning` while the page is open | it keeps its place |
+| `server-c` turning `critical` while the page is open | it moves to the red run at the top |
 
 ### Rows {#rows}
 
@@ -504,7 +511,7 @@ labelled `backup: borg`, `job: job-a`, reporting `backup.success_age_seconds`,
 | `/overview` | the sections and their cards, under the tabs with "Overview" marked ([web](web.md#skins)) |
 | `/overview?lang=ru` | every word in Russian, the language kept on every link |
 | `/overview?x=1` | the overview: like the other skins, it reads `lang` and nothing else |
-| a level change, a new value or a node falling silent while the page is open | on the page within 30 seconds without a reload ([web](web.md#live)), every card in its place |
+| a level change, a new value or a node falling silent while the page is open | on the page within 30 seconds without a reload ([web](web.md#live)), the cards in the order of [Order of cards](#order) |
 | the state or the stored points cannot be read | the same failure `/debug` answers with |
 
 ### The item's page {#item-page}
