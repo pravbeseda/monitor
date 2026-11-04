@@ -22,13 +22,15 @@
   [0042](../decisions/0042-an-anomalys-start-and-end-are-recorded.md),
   [0045](../decisions/0045-sites-are-a-node-their-hosts-report-for.md),
   [0046](../decisions/0046-an-overview-of-items-rendered-by-the-hub.md),
-  [0051](../decisions/0051-a-sensor-groups-its-family-by-a-label.md)
+  [0051](../decisions/0051-a-sensor-groups-its-family-by-a-label.md),
+  [0053](../decisions/0053-a-computer-card-is-lines-on-a-shared-scale.md)
 
 ## Purpose
 
 The overview answers "how do things stand, in numbers": every computer, site and service as
-a card with the few figures that say most about it and how they moved over the last day. A
-card opens the item's page, where every series of it is charted over a chosen window, or
+a card with the few figures that say most about it — a computer's laid on scales every
+computer card shares, so one reads against the next; a site's and a service's with how they
+moved over the last day. A card opens the item's page, where every series of it is charted over a chosen window, or
 gathered with its group in a panel, beside what changed. It judges nothing: a card's colour is a level evaluation stored, an anomaly, a
 silence or data that is or is not fresh, and every number is one the hub holds.
 
@@ -83,11 +85,16 @@ the part of a metric id before its first dot as on `/debug` ([history](history.m
 inside a family, the series without labels first, by metric id, then the labelled ones as
 `/debug` orders the rows of a matrix and its columns.
 
-**A card** shows the item's name, its state's word marked in its colour, and up to six
-**rows**, each one series of the item: its name, its newest value formatted in its unit as
-`/debug` formats it, and at most one mark, the first that applies: no fresh data when the
-series is stale, whatever level it stored; critical; warning; unusual. The rows are taken in
-this order, a series at most once:
+**A card** shows the item's name and its state's word marked in its colour, and links as a
+whole to the item's page. A computer's card lays its series out as
+[below](#computer-card); a site's or a service's shows the item's rows, the first two
+with a line of their last day. An item with no series reads "No series yet" in place of
+either.
+
+**An item's rows** are up to six of its series, each with its name, its newest value
+formatted in its unit as `/debug` formats it, and at most one **mark**, the first that
+applies: no fresh data when the series is stale, whatever level it stored; critical;
+warning; unusual. The rows are taken in this order, a series at most once:
 
 1. every series of the item that would be an item of the list of what needs attention by
    that list's kinds — a level, an anomaly, no fresh data ([attention](attention.md#model))
@@ -95,12 +102,11 @@ this order, a series at most once:
 2. the item's **default series**, in the order of the table below;
 3. when neither gives a row, the first two series the item's page charts.
 
-When more series qualify by the first two steps than six rows hold, the card ends with "N
-more", N being how many of them are not shown. The first two rows carry a line of the last
-24 hours of their series, drawn as the history page draws a series — broken across a gap, a
-lone point drawn on its own — with no axes; a series with no point in that day has no line.
-An item with no series reads "No series yet" in place of rows. The whole card links to the
-item's page.
+When more series qualify by the first two steps than six rows hold, a site's or a
+service's card ends with "N more", N being how many of them are not shown. On a site's or
+a service's card the first two rows carry a line of the last 24 hours of their series, drawn
+as the history page draws a series — broken across a gap, a lone point drawn on its own —
+with no axes; a series with no point in that day has no line.
 
 **Default series**, the product's choice of what says most about a kind of item:
 
@@ -125,13 +131,72 @@ row.
 and its being removable; either leaves out the `site` label on a site's own card and page.
 A family is headed by its family's name.
 
+**A computer's card** — a card under "Computers" — puts each of its series where every
+other computer card puts it, so one card reads against the next
+([0053](../decisions/0053-a-computer-card-is-lines-on-a-shared-scale.md)). It holds:
+
+- in its head, before the state's word, "failed units: N" when its `systemd.failed_units`
+  holds a value above zero or carries a mark, N a whole number, in the colour of that
+  series' mark — the muted colour when it carries none. That series is never a line;
+- under its head, when it is silent or holds no fresh data, when it last reported;
+- its **slots**, each one **line**, in this order:
+
+  | Slot | Name | On the scale | Beside it, muted |
+  |---|---|---|---|
+  | load | "Load" | `load.avg_15m` | `load.avg_1m`, `load.avg_5m` |
+  | memory | "Free RAM" | `memory.available_pct` | `memory.available_bytes` |
+  | disk | "Disk *mount* free" | `disk.free_pct` of the volume the default picks | `disk.free_bytes` of that volume |
+  | backup | "Backup" | of the `timemachine.backup_age_seconds` and the `backup.success_age_seconds` the defaults pick, the older; a fresh one before a stale one | — |
+
+  A slot with no series on its scale — a disk slot with no volume the default picks is
+  named "Disk free" — reads a dash where its values stand, over an empty scale, so the lines
+  below it keep their place; its muted series are not shown. A computer with no series on
+  any of the four scales has no slots;
+- then its **extra lines**: the series its rows' first step takes — what needs attention —
+  that no line shows, in that order, at most two, and "N more" when more qualify. A
+  computer with no slot and no such series has the first two series its page charts as its
+  extra lines.
+
+**A line** is a name, a **scale** and the values. On the scale, from zero to its end:
+
+- the band of the series on the scale — its anomaly's `low` to `high`
+  ([anomaly](anomaly.md#wire-format)), the range it usually keeps — with its norm marked
+  inside; no band when the series carries no anomaly. The dot is marked unusual only while
+  its series is unusual ([anomaly](anomaly.md#model)) — from a score of 2, measured in its
+  side's width, which can be wider than the band, until it falls back to 1.6 — so a dot just
+  outside the band is usually unmarked; a band of one value is drawn as a sliver at it;
+- a tick at each of its readable threshold's `warning` and `critical` values
+  ([state](state.md#listing)) that lies on the scale, in that level's colour; a value off
+  the scale has no tick;
+- a dot at its newest value, in the colour of its mark, the text colour when it carries
+  none; hollow, and the line faded, when the series holds no fresh data — all but the
+  values that carry the mark of a level or an anomaly.
+
+A value or a band below zero is drawn from zero, and past the scale's end up to the end.
+The values stand at the line's right end, in a column of one width on every computer card
+of the section, the scale taking what is left; they never wrap. The muted ones come first,
+in the slot's order, then the one on the scale, each formatted as `/debug` formats it and in
+the colour of its own mark — a muted one in the muted colour when it carries none. Under
+them the line says why it is marked, by the most urgent mark among its series — critical,
+warning, unusual, the one on the scale first among equals: "threshold X" when that series'
+threshold is readable and holds a value for its level, otherwise the level's word; "usually
+X" with its norm when it is unusual. A slot's line is named by its slot, an extra line by
+its row name; on hover, either names the series on its scale as a row names it.
+
+**A slot's scale** ends at the same place on every computer card of the section: a
+percentage's at 100; any other's at 1.1 times the largest, over those cards' series on that
+scale that hold fresh data, of their values, their bands' `high` and their readable
+thresholds' values — at 1 when none of them is above zero. An extra line's scale is its
+own, by the same rule over its one series, fresh or not. The scale's end is layout, not a
+figure: no number on the page says it.
+
 On a narrow screen the cards flow one to a line, each section's heading above its own.
 
 **The item's page** has, from the top:
 
 - the item's name, its section's singular ("Computer", "Site", "Service"), its state's word,
   and when it last reported, whatever its state;
-- the card's rows, as numbers, without lines;
+- the item's rows, as numbers, without lines;
 - every series of the item that `/debug` would show — a removable volume that is stale left
   out ([history](history.md#page)) — under its family's name: in its group's panel, below,
   when its family has a group label and the series carries it, otherwise as a small chart
@@ -273,7 +338,9 @@ English catalogue's; every one of them has its Russian. `sites` is the node of c
 
 ### Rows {#rows}
 
-| State | Rows of the card |
+An item's rows: what its page lists as numbers, and a site's or a service's card shows.
+
+| State | Rows of the item |
 |---|---|
 | a Linux computer with `disk`, `memory`, `load` and `systemd` series, `/` its least-free volume, nothing needing attention | `disk.free_pct /`, `memory.available_pct`, `load.avg_15m`, `systemd.failed_units` |
 | the same computer, `load.avg_15m` unusual | `load.avg_15m`, `disk.free_pct /`, `memory.available_pct`, `systemd.failed_units` |
@@ -297,7 +364,7 @@ English catalogue's; every one of them has its Russian. `sites` is the node of c
 | a series at `critical` | its row marked critical |
 | a series at `critical` that also ranks | its row marked critical |
 | a series at `critical` that is stale | its row marked as holding no fresh data, not critical |
-| the first two rows | each with a line of its series' last 24 hours |
+| the first two rows of a site's or a service's card | each with a line of its series' last 24 hours |
 | the third row on | no line |
 | a series with a six-hour gap in its last day | its line broken across the gap |
 | a series with a single point in its last day | that point on its own |
@@ -310,7 +377,7 @@ English catalogue's; every one of them has its Russian. `sites` is the node of c
 
 ### The card {#card}
 
-How a card lays out what the rows above choose
+How a site's or a service's card lays out what the rows above choose
 ([2026-10-25 metric names](../log/2026-10-25-metric-names.md#the-card) records the style
 chosen). Its state's word is a pill, and a stripe runs along its left edge, both in the
 colour the timeline's lanes draw that state ([timeline](timeline.md#lanes)). The first two
@@ -335,6 +402,69 @@ filled. The rows after them follow in a run that wraps. A reason closes the card
 | a card silent or with no fresh data | its last report as the reason |
 | a card "reporting, nothing watched" | no reason: its pill says it |
 
+### A computer's card {#computer-card}
+
+Unless a row says otherwise, the computer is a Linux server reporting `load`, `memory`,
+`disk` with the one volume `/`, `systemd.failed_units` 0 and a backup job, every series
+fresh, nothing needing attention, no threshold readable and no anomaly band. Values are as the English
+catalogue writes them.
+
+| State | The card |
+|---|---|
+| any computer card | its state's word as a pill and a stripe of its colour, as [a card](#card) has; no line of the day, and no reason at its foot |
+| the computer above | lines "Load", "Free RAM", "Disk / free", "Backup", in that order, and nothing after them |
+| a Mac with Time Machine and no `systemd` | the same four lines |
+| a computer with no backup series | "Backup" a dash over an empty scale, in fourth place |
+| a computer with no `disk` series | "Disk free" a dash in third place, "Backup" still fourth |
+| every volume removable | "Disk free" a dash |
+| `load.avg_5m` and no `load.avg_15m` | "Load" a dash; `load.avg_5m` not shown |
+| `load.avg_5m` at `critical` and no `load.avg_15m` | "Load" a dash; `load.avg_5m` an extra line |
+| a computer reporting only `uptime.boot_seconds` and `queue.depth`, nothing needing attention | no slot; `queue.depth`, then `uptime.boot_seconds`, as its extra lines |
+| a computer with no series | "No series yet", no slot |
+| a silent computer | when it last reported, under its head |
+| a computer with no fresh data | when it last reported, under its head |
+| `load.avg_1m` 0.52, `load.avg_5m` 0.61, `load.avg_15m` 0.67 | "0.52 0.61 0.67" on the load line, the first two muted, the dot at 0.67 |
+| no `load.avg_1m` | "0.61 0.67" |
+| `memory.available_pct` 38.5, `memory.available_bytes` 2 GB | the memory line reading the bytes muted, then "38.5%", the dot at 38.5 |
+| volumes `/` at 40% free and `/srv` at 12% | "Disk /srv free", `/srv`'s `free_bytes` beside it |
+| a Time Machine destination backed up 2 days ago and a backup job that last succeeded 9 days ago, both fresh | "Backup" at the 9-day one |
+| the 9-day job stale | "Backup" at the 2-day one |
+| `systemd.failed_units` 2, unwatched and usual | "failed units: 2" in the head before the state's word, in the muted colour; no line for it |
+| `systemd.failed_units` 2 at `critical` | "failed units: 2" in the critical colour; no extra line for it |
+| `systemd.failed_units` 0 | nothing in the head |
+| `systemd.failed_units` 2, stale | "failed units: 2" in the colour of no fresh data |
+| `systemd.failed_units` 0, watched and stale | "failed units: 0" in the colour of no fresh data; no line for it |
+| `systemd.failed_units` 0, unusual against a norm of 3 | "failed units: 0" in the unusual colour |
+| three computers whose `load.avg_15m` are 0.5, 2 and 4, no band above 4 | every load scale from 0 to 4.4, the dots at 11%, 45% and 91% of it |
+| the same, one of them holding a `warning` of 5 on its `load.avg_15m` | every load scale to 5.5 |
+| the same, one of them with a band reaching 6 | every load scale to 6.6 |
+| every `load.avg_15m` 0, no band, no threshold | every load scale to 1 |
+| `backup.success_age_seconds` of 40 days on a laptop whose series are stale, the other backups under 2 days | the backup scale set by the fresh ones; the laptop's dot at its end |
+| any `disk.free_pct` | its scale from 0 to 100, whatever the values |
+| a series on the scale whose anomaly has `low` 43, `norm` 46, `high` 52 | a band from 43 to 52, its norm marked at 46 |
+| a series on the scale carrying no anomaly | no band |
+| a value at a score of 1.5, past the band's `high` | the dot past the band, unmarked |
+| a series unusual already, now at a score of 1.8 | its dot in the unusual colour |
+| a band whose `low`, `norm` and `high` are all 0 | a sliver at zero |
+| a value below zero on a line | its dot at zero |
+| `disk.free_pct /` with a readable `below` threshold, `warning` 10 and `critical` 5 | a warning tick at 10 and a critical tick at 5 |
+| a threshold whose `warning` is −5 | no tick for it |
+| a threshold this build cannot read | no tick |
+| `memory.available_pct` unusual at 38.5, norm 46 | its dot and "38.5%" in the unusual colour, "usually 46.0%" under the values |
+| `disk.free_pct /` at `warning` under a readable `warning` of 10 | its dot and value in the warning colour, "threshold 10.0%" under the values |
+| `disk.free_pct /` at `warning`, its threshold unreadable | "warning" under the values |
+| `load.avg_15m` unusual, `load.avg_1m` at `critical` under a readable `critical` of 8 | `load.avg_1m` in the critical colour, "threshold 8.00" under the values: the most urgent mark speaks |
+| `memory.available_pct` usual, `memory.available_bytes` unusual with norm 3 GB | the bytes in the unusual colour, "usually 3.0 GB" under the values, the dot in the text colour |
+| `load.avg_15m` stale | the load line faded, its dot hollow, nothing under the values |
+| `load.avg_15m` stale, `load.avg_1m` fresh and unusual | the line faded but for `load.avg_1m`, in the unusual colour, and "usually X" under the values |
+| `disk.free_bytes /` at `warning` while the disk line shows `/srv` | an extra line after the slots named as its row is, its values its own, on its own scale |
+| three series needing attention that no slot shows | two extra lines and "1 more" |
+| `memory.available_bytes` unusual | no extra line: the memory line shows it |
+| a line's name on hover | the series on its scale, named as a row names it |
+| a line's values on the narrowest card | on one line: the scale narrows, the values never wrap |
+| any line of one section | its values in a column of the same width on every card, so the scales are as wide and the dots line up |
+| a site's card, a service's card | as before: rows, the first two with a line of their day ([card](#card)) |
+
 ### The overview page {#overview-page}
 
 | Request | What the reader sees |
@@ -352,7 +482,7 @@ filled. The rows after them follow in a run that wraps. A reason closes the card
 | `/item?node=server-b` | `server-b`'s page: its name, "Computer", its state's word and when it last reported |
 | `/item?node=sites&label.site=blog-a` | `blog-a`'s page: its name, "Site", and the time of its newest point |
 | `/item?node=gdrive-a`, a `service` node that has stored nothing | its page, "Service", "no fresh data", last reported at the time the hub recorded it, "No series yet" and the window links |
-| any item's page | the card's rows as numbers, without lines, above the panels and the charts |
+| any item's page | the item's rows as numbers, without lines, above the panels and the charts |
 | a family `q` grouped by `queue` with a panel `a`, beside `disk.free_pct /` | the panel `a`, then the window links, then the disk's chart: every panel comes before every chart, whatever the families' order |
 | a page with panels and no chart | the window links below the panels |
 | a page with charts and no panel | the window links above the charts |
@@ -479,12 +609,14 @@ same for `vpn`, and its family `backup` is grouped by `backup`.
 
 - The overview and the item's pages show nothing the [State API](state.md), the history
   endpoint, the stored thresholds and the event log would not return at the same instant: no
-  level, staleness, value, anomaly or change of their own.
+  level, staleness, value, anomaly or change of their own. Where a computer's scale ends is
+  layout drawn from those, not a figure: no number on the page says it.
 - Every item is on the overview exactly once, and every series of an item is on its page at
   most once.
-- A card in a state other than "ok" or "reporting, nothing watched" names its reason among
-  its rows or by its silence: a series at that level, unusual or with no fresh data heads its
-  rows, or the card reads "No series yet".
+- A card in a state other than "ok" or "reporting, nothing watched" names its reason or its
+  silence: a series at that level, unusual or with no fresh data heads a site's or a
+  service's rows, and is in a computer's head, on one of its slots in its mark's colour, or
+  its first extra line; or the card reads "No series yet".
 
 ## Edge cases
 
@@ -492,17 +624,17 @@ same for `vpn`, and its family `backup` is grouped by `backup`.
   laptop asleep does: the state cannot tell them apart ([attention](attention.md#model)),
   and its silence turns the card "silent" once past `silence_after`.
 - **A sensor switched off in the configuration** leaves a watched series stale; it is a row
-  marked as holding no fresh data, first on its card, for as long as its threshold is kept,
-  as it is an item under "now".
+  marked as holding no fresh data, first on its card — on a computer's, its slot's line faded in its
+  place or an extra line — for as long as its threshold is kept, as it is an item under "now".
 - **A site removed from the file** loses its card at once. A threshold on its series keeps
   it under the timeline's "now" as no fresh data until the threshold is cleared; the
   overview shows the sites the file lists, and leaves that one to the timeline and `/debug`.
 - **The site's host moved**: its series keep their label, so its card and its page carry on
   ([0045](../decisions/0045-sites-are-a-node-their-hosts-report-for.md)); its silence is
   judged by the host the file names now.
-- **A volume's byte and percentage series** both needing attention take the first two rows,
-  and their two lines have the same shape: they are two series
-  ([0033](../decisions/0033-a-subject-is-a-series.md)).
+- **A volume's byte and percentage series** both needing attention are two series
+  ([0033](../decisions/0033-a-subject-is-a-series.md)): a computer's disk line shows both
+  when the volume is the one it picks, and for another volume they are two extra lines.
 - **A fresh hub** has no norms for about two days, so no card reads "unusual" yet.
 - **A long window on a large item** reads every point of every series in it on each refresh,
   as that many history pages would; the page stays correct and grows slow, not wrong.
@@ -511,8 +643,8 @@ same for `vpn`, and its family `backup` is grouped by `backup`.
 
 - **A health score, a trend or a forecast** on a card — not built
   ([0046](../decisions/0046-an-overview-of-items-rendered-by-the-hub.md)).
-- **A norm band drawn on a chart** — the State API carries the norm, not the band, and the
-  band of the current hour drawn over a month would mislead.
+- **A norm band drawn on a chart** — the band of the current hour drawn over a month would
+  mislead; a computer's line sets it against the newest value only.
 - **Choosing a card's rows in the interface** — the defaults stand until they prove wrong.
 - **Figures across items** — "6 of 7 reporting", "least free space anywhere": new fields of
   the core first.

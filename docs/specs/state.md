@@ -19,7 +19,8 @@
   [0034](../decisions/0034-a-series-without-a-sensor-still-ages.md),
   [0035](../decisions/0035-mission-control-is-rendered-by-the-hub.md),
   [0036](../decisions/0036-an-anomaly-is-a-value-outside-its-weeks-band.md),
-  [0042](../decisions/0042-an-anomalys-start-and-end-are-recorded.md)
+  [0042](../decisions/0042-an-anomalys-start-and-end-are-recorded.md),
+  [0053](../decisions/0053-a-computer-card-is-lines-on-a-shared-scale.md)
 
 ## Purpose
 
@@ -114,16 +115,17 @@ GET /api/v1/state
       "watched": true, "level": "warning", "since": "2026-09-18T22:10:00.000Z",
       "stale": false, "unit": "bytes", "value": 9000000000,
       "ts": "2026-09-19T09:45:00.000Z",
-      "anomaly": { "norm": 11000000000, "score": -0.9, "rank": null } },
+      "anomaly": { "norm": 11000000000, "low": 8800000000, "high": 12000000000,
+                   "score": -0.91, "rank": null } },
     { "node": "server-b", "metric": "disk.free_pct",
       "labels": { "mount": "/data", "fs": "ext4", "removable": "false" },
       "watched": false, "level": null, "since": null, "stale": false,
       "unit": "percent", "value": 12, "ts": "2026-09-19T09:45:00.000Z",
-      "anomaly": { "norm": 14, "score": -0.8, "rank": null } },
+      "anomaly": { "norm": 14, "low": 11.5, "high": 15, "score": -0.8, "rank": null } },
     { "node": "server-b", "metric": "load.avg_5m", "labels": {}, "watched": false,
       "level": null, "since": null, "stale": false, "unit": "number",
       "value": 3.1, "ts": "2026-09-19T09:55:00.000Z",
-      "anomaly": { "norm": 0.4, "score": 7.5, "rank": 1 } }
+      "anomaly": { "norm": 0.4, "low": 0.1, "high": 0.76, "score": 7.5, "rank": 1 } }
   ]
 }
 ```
