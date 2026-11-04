@@ -14,6 +14,8 @@ import (
 	"github.com/pravbeseda/monitor/internal/anomaly"
 	"github.com/pravbeseda/monitor/internal/evaluate"
 	"github.com/pravbeseda/monitor/internal/hub"
+	"github.com/pravbeseda/monitor/internal/i18n"
+	"github.com/pravbeseda/monitor/internal/names"
 	"github.com/pravbeseda/monitor/internal/state"
 	"github.com/pravbeseda/monitor/internal/storage"
 )
@@ -25,7 +27,7 @@ var (
 	dotPattern    = regexp.MustCompile(`<span class="dot([^"]*)" style="left: ([0-9.]+)%"></span>`)
 	bandPattern   = regexp.MustCompile(`<span class="band" style="left: ([0-9.]+)%; width: ([0-9.]+)%"></span><span class="norm" style="left: ([0-9.]+)%"></span>`)
 	tickPattern   = regexp.MustCompile(`<span class="tick (level-[a-z]+)" style="left: ([0-9.]+)%"></span>`)
-	whyPattern    = regexp.MustCompile(`<span class="line-why">([^<]*)</span>`)
+	whyPattern    = regexp.MustCompile(`<span class="line-why([^"]*)"(?: title="([^"]*)")?>([^<]*)(?:<span class="row-mark-word"> ([^<]*)</span>)?</span>`)
 	failedPattern = regexp.MustCompile(`<span class="card-failed([^"]*)"[^>]*>([^<]*)</span>`)
 	seenPattern   = regexp.MustCompile(`<span class="card-seen ?([^"]*)">last report [^<]*</span>`)
 )
@@ -88,11 +90,18 @@ func (l line) dot(t *testing.T) (class, left string) {
 	return strings.TrimSpace(found[1]), found[2]
 }
 
-func (l line) why() string {
-	if found := whyPattern.FindStringSubmatch(l.body); found != nil {
-		return found[1]
+func (l line) why() string { return l.whySaid().text }
+
+// whySaid is what a line says why it is marked: its text, its colour, what hover says and
+// what a screen reader is told beyond the text.
+type whySaid struct{ text, class, hover, reader string }
+
+func (l line) whySaid() whySaid {
+	found := whyPattern.FindStringSubmatch(l.body)
+	if found == nil {
+		return whySaid{}
 	}
-	return ""
+	return whySaid{text: found[3], class: strings.TrimSpace(found[1]), hover: found[2], reader: found[4]}
 }
 
 func (l line) empty() bool { return strings.Contains(l.class, "empty") }
@@ -125,6 +134,16 @@ func replaced(subjects []state.Subject, with state.Subject) []state.Subject {
 		out[i] = s
 	}
 	return out
+}
+
+// upserted is subjects with this one in place of the series it is, or added when none is.
+func upserted(subjects []state.Subject, with state.Subject) []state.Subject {
+	if slices.ContainsFunc(subjects, func(s state.Subject) bool {
+		return s.Metric == with.Metric && s.Node == with.Node && maps.Equal(s.Labels, with.Labels)
+	}) {
+		return replaced(subjects, with)
+	}
+	return append(slices.Clone(subjects), with)
 }
 
 func banded(s state.Subject, low, norm, high float64, rank int) state.Subject {
@@ -575,7 +594,13 @@ func TestComputerCardLayout(t *testing.T) {
 	if !regexp.MustCompile(`li\.line \{ display: grid; grid-template-columns: [0-9.]+rem minmax\([^)]*\) [0-9.]+rem;`).MatchString(body) {
 		t.Errorf("the values do not take a column of one width")
 	}
-	containsAll(t, "stylesheet", body, ".line-values { white-space: nowrap;", "li.line.faded .value:not(.marked)")
+	containsAll(t, "stylesheet", body, ".line-values { white-space: nowrap;", "li.line.faded .value:not(.marked)",
+		// A marked word or value keeps its mark's colour: the muted colour is for the unmarked.
+		`.value.muted:not([class*="level-"]) { color: var(--muted); }`, `.line-why:not([class*="level-"]) { color: var(--muted); }`,
+		`li.line.faded .line-why:not([class*="level-"])`)
+	if found := regexp.MustCompile(`\.(line-why|value\.muted) \{[^}]*color`).FindString(body); found != "" {
+		t.Errorf("%q gives every one the muted colour, over its mark's", found)
+	}
 }
 
 // spec: overview.md#computer-card — a site's card keeps its rows and their lines.
@@ -596,4 +621,187 @@ func overviewUnder(t *testing.T, current state.State, stored limits) string {
 		t.Fatalf("status = %d: %s", rec.Code, rec.Body)
 	}
 	return rec.Body.String()
+}
+
+func borg(node, metric, job string, value float64) state.Subject {
+	return reading(node, metric, map[string]string{"backup": "borg", "job": job}, value)
+}
+
+func refOf(s state.Subject) storage.SeriesRef {
+	return storage.SeriesRef{Node: s.Node, Metric: s.Metric, Labels: s.Labels}
+}
+
+// gathering is the computer the gathering rows assume: the linux server with the job
+// job-a of borg in place of its backup, the job's newest archive and failure flag besides.
+func gathering(node string) []state.Subject {
+	return append(without(linux(node), "backup.success_age_seconds"),
+		borg(node, "backup.success_age_seconds", "job-a", 3600),
+		borg(node, "backup.latest_archive_age_seconds", "job-a", 3600),
+		borg(node, "backup.failed", "job-a", 0))
+}
+
+var borgNames = names.Book{Metrics: map[string]names.Text{
+	"backup.failed":                     {i18n.English: "Failed {backup} {job}"},
+	"backup.latest_archive_age_seconds": {i18n.English: "Newest archive {backup} {job}"},
+	"backup.archives":                   {i18n.English: "Archives {backup} {job}"},
+}}
+
+// spec: overview.md#computer-card — the backup slot gathers the backup families.
+func TestComputerCardGathersTheBackup(t *testing.T) {
+	show := func(t *testing.T, stored limits, subjects []state.Subject, with ...state.Subject) string {
+		t.Helper()
+		for _, s := range with {
+			subjects = upserted(subjects, s)
+		}
+		current := stateOf(subjects...)
+		current.Names = borgNames
+		return computerCard(t, current, stored, "server-b")
+	}
+	backupOf := func(t *testing.T, body string) line {
+		t.Helper()
+		return lineCalled(t, body, "Backup")
+	}
+	saidOn := func(t *testing.T, stored limits, subjects []state.Subject, with ...state.Subject) whySaid {
+		t.Helper()
+		return backupOf(t, show(t, stored, subjects, with...)).whySaid()
+	}
+	is := func(t *testing.T, got, want whySaid) {
+		t.Helper()
+		if got != want {
+			t.Errorf("why %+v, want %+v", got, want)
+		}
+	}
+	archiveHint := "Newest archive borg job-a: usually 4.0 h"
+	unusualArchive := func(job string) state.Subject {
+		return banded(borg("server-b", "backup.latest_archive_age_seconds", job, 5*86400), 3600, 4*3600, 6*3600, 1)
+	}
+	failedAt := func(job string, level evaluate.Level) state.Subject {
+		return judgedAt(borg("server-b", "backup.failed", job, 1), level)
+	}
+	successOf := func() state.Subject {
+		return borg("server-b", "backup.success_age_seconds", "job-a", 3600)
+	}
+
+	t.Run("a gathered series unusual", func(t *testing.T) {
+		body := show(t, limits{}, gathering("server-b"), unusualArchive("job-a"))
+		equal(t, "lines", lineNames(body), slotNames)
+		backup := backupOf(t, body)
+		is(t, backup.whySaid(), whySaid{"unusual", "level-unusual", archiveHint, archiveHint})
+		if class, _ := backup.dot(t); class != "" {
+			t.Errorf("dot %q, want the text colour", class)
+		}
+		equal(t, "values", backup.values(), []string{"1.0 h"})
+	})
+	t.Run("many gathered, nothing else needing attention", func(t *testing.T) {
+		body := show(t, limits{}, gathering("server-b"), unusualArchive("job-a"), unusualArchive("job-b"),
+			banded(borg("server-b", "backup.archives", "job-a", 40), 9, 10, 11, 1))
+		equal(t, "lines", lineNames(body), slotNames)
+		if strings.Contains(body, "card-more") {
+			t.Errorf("the gathered series are counted: %s", body)
+		}
+	})
+	t.Run("gathered and other series needing attention", func(t *testing.T) {
+		body := show(t, limits{}, gathering("server-b"), unusualArchive("job-a"), unusualArchive("job-b"),
+			judgedAt(plain("server-b", "queue.a", 1), evaluate.Warning), judgedAt(plain("server-b", "queue.b", 1), evaluate.Warning),
+			judgedAt(plain("server-b", "queue.c", 1), evaluate.Warning))
+		equal(t, "lines", lineNames(body), append(slices.Clone(slotNames), "queue.a", "queue.b"))
+		containsAll(t, "card", body, `<span class="card-more">1 more</span>`)
+	})
+	t.Run("the most urgent mark speaks", func(t *testing.T) {
+		scale := banded(successOf(), 60, 120, 180, 1)
+		is(t, saidOn(t, limits{}, gathering("server-b"), scale, failedAt("job-a", evaluate.Critical)),
+			whySaid{"critical", "level-critical", "Failed borg job-a: critical", "Failed borg job-a: critical"})
+	})
+	t.Run("a readable threshold", func(t *testing.T) {
+		stored := limits{heldKey(refOf(failedAt("job-a", evaluate.Warning))): {Direction: storage.Above, Warning: f(0)}}
+		hint := "Failed borg job-a: threshold 0.00"
+		is(t, saidOn(t, stored, gathering("server-b"), failedAt("job-a", evaluate.Warning)), whySaid{"warning", "level-warning", hint, hint})
+	})
+	t.Run("an unreadable threshold", func(t *testing.T) {
+		hint := "Failed borg job-a: warning"
+		is(t, saidOn(t, limits{}, gathering("server-b"), failedAt("job-a", evaluate.Warning)), whySaid{"warning", "level-warning", hint, hint})
+	})
+	t.Run("the first in the page order among equals", func(t *testing.T) {
+		hint := "Failed borg job-a: critical"
+		is(t, saidOn(t, limits{}, gathering("server-b"), failedAt("job-b", evaluate.Critical), failedAt("job-a", evaluate.Critical)),
+			whySaid{"critical", "level-critical", hint, hint})
+	})
+	t.Run("the one on the scale more urgent", func(t *testing.T) {
+		scale := judgedAt(successOf(), evaluate.Critical)
+		stored := limits{heldKey(refOf(scale)): {Direction: storage.Above, Critical: f(1800)}}
+		is(t, saidOn(t, stored, gathering("server-b"), scale, failedAt("job-a", evaluate.Warning)), whySaid{text: "threshold 30.0 min"})
+	})
+	t.Run("the one on the scale first among equals", func(t *testing.T) {
+		scale := banded(successOf(), 60, 120, 180, 1)
+		is(t, saidOn(t, limits{}, gathering("server-b"), scale, unusualArchive("job-a")), whySaid{text: "usually 2.0 min"})
+	})
+	t.Run("a Time Machine destination on the scale, the job's success at warning", func(t *testing.T) {
+		subjects := append(gathering("server-b"), tmAge("server-b", "disk-a", 9*86400))
+		body := show(t, limits{}, subjects, judgedAt(successOf(), evaluate.Warning))
+		equal(t, "lines", lineNames(body), slotNames)
+		hint := "backup.success_age_seconds backup=borg job=job-a: warning"
+		is(t, backupOf(t, body).whySaid(), whySaid{"warning", "level-warning", hint, hint})
+	})
+	t.Run("watched and stale", func(t *testing.T) {
+		body := show(t, limits{}, gathering("server-b"), watchedOnly(staled(borg("server-b", "backup.latest_archive_age_seconds", "job-a", 3600))))
+		equal(t, "lines", lineNames(body), slotNames)
+		hint := "Newest archive borg job-a: no fresh data"
+		is(t, backupOf(t, body).whySaid(), whySaid{"no fresh data", "level-stale", hint, hint})
+	})
+	t.Run("stale and unwatched", func(t *testing.T) {
+		is(t, saidOn(t, limits{}, gathering("server-b"), staled(borg("server-b", "backup.latest_archive_age_seconds", "job-a", 3600))), whySaid{})
+	})
+	t.Run("a stale level is no level", func(t *testing.T) {
+		hint := "Failed borg job-a: no fresh data"
+		is(t, saidOn(t, limits{}, gathering("server-b"), staled(failedAt("job-a", evaluate.Critical))), whySaid{"no fresh data", "level-stale", hint, hint})
+	})
+	t.Run("the one on the scale stale, a gathered series watched and stale", func(t *testing.T) {
+		backup := backupOf(t, show(t, limits{}, gathering("server-b"), staled(successOf()),
+			watchedOnly(staled(borg("server-b", "backup.latest_archive_age_seconds", "job-a", 3600)))))
+		if !strings.Contains(backup.class, "faded") {
+			t.Errorf("line %q, want faded", backup.class)
+		}
+		is(t, backup.whySaid(), whySaid{})
+	})
+	t.Run("the one on the scale stale", func(t *testing.T) {
+		backup := backupOf(t, show(t, limits{}, gathering("server-b"), staled(successOf()), unusualArchive("job-a")))
+		if class, _ := backup.dot(t); !strings.Contains(backup.class, "faded") || class != "level-stale" {
+			t.Errorf("line %q, dot %q, want faded and hollow", backup.class, class)
+		}
+		is(t, backup.whySaid(), whySaid{"unusual", "level-unusual", archiveHint, archiveHint})
+	})
+	t.Run("no tick for a gathered threshold", func(t *testing.T) {
+		archive := borg("server-b", "backup.latest_archive_age_seconds", "job-a", 3600)
+		backup := backupOf(t, show(t, limits{heldKey(refOf(archive)): {Direction: storage.Above, Warning: f(1800)}}, gathering("server-b")))
+		if ticks := tickPattern.FindAllString(backup.body, -1); len(ticks) != 0 {
+			t.Errorf("ticks %q", ticks)
+		}
+	})
+	t.Run("the scale set by the ones on it", func(t *testing.T) {
+		backup := backupOf(t, show(t, limits{}, gathering("server-b"), borg("server-b", "backup.latest_archive_age_seconds", "job-a", 40*86400)))
+		if _, left := backup.dot(t); left != "90.9" {
+			t.Errorf("dot at %s%%, want the scale set by the success age alone", left)
+		}
+		equal(t, "values", backup.values(), []string{"1.0 h"})
+	})
+	t.Run("the card's state", func(t *testing.T) {
+		current := stateOf(append(upserted(gathering("server-b"), failedAt("job-a", evaluate.Critical)), linux("box-x")...)...)
+		current.Names = borgNames
+		body := overviewUnder(t, current, limits{})
+		if word := stateWord(t, body, "server-b"); word != "critical" {
+			t.Errorf("pill %q", word)
+		}
+		equal(t, "sections", flatten(sections(body)), []string{"Computers · 2 · 1 critical", "server-b", "box-x"})
+	})
+	t.Run("a backup slot reading a dash gathers none", func(t *testing.T) {
+		body := show(t, limits{}, without(gathering("server-b"), "backup.success_age_seconds"), failedAt("job-a", evaluate.Critical))
+		equal(t, "lines", lineNames(body), append(slices.Clone(slotNames), "Failed borg job-a"))
+		if !backupOf(t, body).empty() {
+			t.Errorf("the backup slot is not a dash")
+		}
+	})
+	t.Run("not a backup family", func(t *testing.T) {
+		body := show(t, limits{}, gathering("server-b"), banded(plain("server-b", "gdrive.free_pct", 40), 50, 60, 70, 1))
+		equal(t, "lines", lineNames(body), append(slices.Clone(slotNames), "gdrive.free_pct"))
+	})
 }

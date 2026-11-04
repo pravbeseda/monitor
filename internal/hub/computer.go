@@ -12,6 +12,7 @@ import (
 	"github.com/pravbeseda/monitor/internal/evaluate"
 	"github.com/pravbeseda/monitor/internal/history"
 	"github.com/pravbeseda/monitor/internal/i18n"
+	"github.com/pravbeseda/monitor/internal/names"
 	"github.com/pravbeseda/monitor/internal/state"
 )
 
@@ -28,29 +29,30 @@ const (
 )
 
 // slot is one of a computer card's fixed lines: the series on its scale and those beside
-// it, muted.
+// it, muted, and the families whose other series it gathers.
 type slot struct {
-	key  string
-	pick func(it overviewItem) (scale state.Subject, beside []state.Subject, found bool)
+	key     string
+	pick    func(it overviewItem) (scale state.Subject, beside []state.Subject, found bool)
+	gathers []string
 }
 
 var slots = []slot{
-	{"load", func(it overviewItem) (state.Subject, []state.Subject, bool) {
+	{key: "load", pick: func(it overviewItem) (state.Subject, []state.Subject, bool) {
 		scale, found := it.find("load.avg_15m", nil)
 		return scale, it.present([]string{"load.avg_1m", "load.avg_5m"}, nil), found
 	}},
-	{"memory", func(it overviewItem) (state.Subject, []state.Subject, bool) {
+	{key: "memory", pick: func(it overviewItem) (state.Subject, []state.Subject, bool) {
 		scale, found := it.find("memory.available_pct", nil)
 		return scale, it.present([]string{"memory.available_bytes"}, nil), found
 	}},
-	{"disk", func(it overviewItem) (state.Subject, []state.Subject, bool) {
+	{key: "disk", pick: func(it overviewItem) (state.Subject, []state.Subject, bool) {
 		scale, found := it.defaultOf("disk.free_pct")
 		return scale, it.present([]string{"disk.free_bytes"}, scale.Labels), found
 	}},
-	{"backup", func(it overviewItem) (state.Subject, []state.Subject, bool) {
+	{key: "backup", pick: func(it overviewItem) (state.Subject, []state.Subject, bool) {
 		scale, found := it.oldestBackup()
 		return scale, nil, found
-	}},
+	}, gathers: []string{"backup", "timemachine"}},
 }
 
 func (it overviewItem) find(metric string, labels map[string]string) (state.Subject, bool) {
@@ -109,12 +111,13 @@ type lineSeries struct {
 }
 
 // linePlan is one line before its scale is known: the series on the scale, nil for a slot
-// the computer has none for, and the muted ones beside it. key names a slot, and is empty
-// on an extra line.
+// the computer has none for, the muted ones beside it, and the gathered one that speaks
+// louder than them all. key names a slot, and is empty on an extra line.
 type linePlan struct {
 	key    string
 	scale  *lineSeries
 	beside []lineSeries
+	loud   *lineSeries
 }
 
 // computerPlan is what a computer's card shows, before the section's scales are known.
@@ -127,20 +130,21 @@ type computerPlan struct {
 
 // pickedLine is a line's series before their thresholds are read.
 type pickedLine struct {
-	key    string
-	scale  *state.Subject
-	beside []state.Subject
+	key      string
+	scale    *state.Subject
+	beside   []state.Subject
+	gathered []state.Subject
 }
 
 // computerLines pick a computer's lines: its slots, none when it has a series on no slot's
 // scale, then what needs attention that no line shows. shown are the series the card
-// shows already.
+// accounts for already.
 func (it overviewItem) computerLines(attention []item, shown []state.Subject) (slotted, extra []pickedLine, more int) {
 	for _, one := range slots {
 		line := pickedLine{key: one.key}
 		if scale, beside, found := one.pick(it); found {
-			line.scale, line.beside = &scale, beside
-			shown = append(append(shown, scale), beside...)
+			line.scale, line.beside, line.gathered = &scale, beside, it.gathered(one.gathers, scale)
+			shown = append(append(append(shown, scale), beside...), line.gathered...)
 		}
 		slotted = append(slotted, line)
 	}
@@ -169,6 +173,18 @@ func (it overviewItem) computerLines(attention []item, shown []state.Subject) (s
 		extra = append(extra, pickedLine{scale: &s})
 	}
 	return slotted, extra, more
+}
+
+// gathered are the item's series of these families but the one on the scale, in the page
+// order.
+func (it overviewItem) gathered(families []string, scale state.Subject) []state.Subject {
+	var out []state.Subject
+	for _, s := range it.series {
+		if slices.Contains(families, names.FamilyOf(s.Metric)) && !sameSeries(s, scale) {
+			out = append(out, s)
+		}
+	}
+	return out
 }
 
 // computerPlan is a computer's lines with the thresholds they draw, and its failed units.
@@ -210,6 +226,13 @@ func linePlans(ctx context.Context, store ThresholdReader, lines []pickedLine) (
 				}
 				plan.beside = append(plan.beside, muted)
 			}
+			if loud, found := loudest(append([]state.Subject{*line.scale}, line.beside...), line.gathered); found {
+				speaker, err := lineSeriesOf(ctx, store, loud)
+				if err != nil {
+					return nil, err
+				}
+				plan.loud = &speaker
+			}
 		}
 		out = append(out, plan)
 	}
@@ -219,6 +242,23 @@ func linePlans(ctx context.Context, store ThresholdReader, lines []pickedLine) (
 func lineSeriesOf(ctx context.Context, store ThresholdReader, s state.Subject) (lineSeries, error) {
 	_, _, levels, err := levelsOf(ctx, store, s)
 	return lineSeries{Subject: s, levels: levels}, err
+}
+
+// loudest is the first gathered series whose mark is louder than every shown one's and
+// than the gathered before it.
+func loudest(shown, gathered []state.Subject) (state.Subject, bool) {
+	bar := unmarked
+	for _, s := range shown {
+		bar = max(bar, markKindOf(s))
+	}
+	var out state.Subject
+	found := false
+	for _, s := range gathered {
+		if mark := gatheredMark(s); mark > bar {
+			out, bar, found = s, mark, true
+		}
+	}
+	return out, found
 }
 
 // reach is the largest a series asks of its scale: its value, its band's top and its
@@ -302,6 +342,10 @@ type lineView struct {
 	// Values are the muted ones first, then the one on the scale.
 	Values []valueView
 	Why    string
+	// WhyClass and WhyHint are set when a gathered series speaks: its mark's colour, and its
+	// name and reason, said on hover and to a screen reader.
+	WhyClass string
+	WhyHint  string
 	// Said is the scale in words, for a reader who cannot see it: the usual range and the
 	// threshold values its ticks mark.
 	Said string
@@ -364,7 +408,22 @@ func (it overviewItem) computerLine(printer *i18n.Printer, plan linePlan, name s
 	}
 	out.Values = append(out.Values, valueOf(printer, s.Subject, false))
 	out.Why = whyOf(printer, speaker)
+
+	if loud := plan.loud; loud != nil {
+		mark := markOf(printer, loud.Subject)
+		out.Why, out.WhyClass = mark.Word, mark.Class
+		out.WhyHint = fmt.Sprintf(printer.T("overview.reason_level"), it.rowName(printer, loud.Subject), cmp.Or(whyOf(printer, *loud), mark.Word))
+	}
 	return out
+}
+
+// gatheredMark is the mark a gathered series speaks by: its own, but for no fresh data,
+// which it speaks only while watched, as attention lists it.
+func gatheredMark(s state.Subject) markKind {
+	if mark := markKindOf(s); mark != markStale || s.Watched {
+		return mark
+	}
+	return unmarked
 }
 
 func valueOf(printer *i18n.Printer, s state.Subject, muted bool) valueView {

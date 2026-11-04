@@ -76,7 +76,8 @@ One decision per file, each stating what was rejected and why. New records start
 | [0050](decisions/0050-macos-means-apple-silicon.md) | A macOS node is an Apple Silicon Mac; Intel Macs are not supported | accepted |
 | [0051](decisions/0051-a-sensor-groups-its-family-by-a-label.md) | A sensor groups its family by a label; the skin draws each group as a panel | accepted |
 | [0052](decisions/0052-a-sensor-declares-default-thresholds-seeded-once.md) | A sensor declares default thresholds, and the hub seeds each series with them once; the form applies one threshold to every series of a metric | accepted |
-| [0053](decisions/0053-a-computer-card-is-lines-on-a-shared-scale.md) | A computer's card is a fixed set of lines on a scale its section shares: band, norm, thresholds and a dot for now | accepted |
+| [0053](decisions/0053-a-computer-card-is-lines-on-a-shared-scale.md) | A computer's card is a fixed set of lines on a scale its section shares: band, norm, thresholds and a dot for now | accepted, amended by [0054](decisions/0054-the-backup-line-gathers-the-backup-families.md) |
+| [0054](decisions/0054-the-backup-line-gathers-the-backup-families.md) | A computer card's backup line gathers the backup families' series and says their marks | accepted |
 
 ## Behaviour specs
 

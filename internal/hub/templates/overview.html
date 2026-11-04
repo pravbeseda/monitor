@@ -72,10 +72,12 @@
     .dot[class*="level-"] { box-shadow: 0 0 0 3px color-mix(in srgb, var(--tone) 28%, transparent); }
     .dot.level-stale { background: none; border: 2px solid var(--muted); box-shadow: none; }
     .line-values { white-space: nowrap; text-align: right; font-variant-numeric: tabular-nums; line-height: 1.15; overflow: hidden; }
-    .value.muted { color: var(--muted); font-size: 0.75rem; margin-right: 0.35rem; }
-    .line-why { display: block; font-size: 0.75rem; color: var(--muted); }
+    .value.muted { font-size: 0.75rem; margin-right: 0.35rem; }
+    .value.muted:not([class*="level-"]) { color: var(--muted); }
+    .line-why { display: block; font-size: 0.75rem; }
+    .line-why:not([class*="level-"]) { color: var(--muted); }
     li.line.empty .line-name, li.line.empty .line-values { color: var(--faint); }
-    li.line.faded .line-name, li.line.faded .scale, li.line.faded .value:not(.marked), li.line.faded .line-why { opacity: 0.45; }
+    li.line.faded .line-name, li.line.faded .scale, li.line.faded .value:not(.marked), li.line.faded .line-why:not([class*="level-"]) { opacity: 0.45; }
   </style>
 </head>
 <body>
@@ -99,7 +101,7 @@
                         {{- range .Ticks }}<span class="tick {{ .Class }}" style="left: {{ .Left }}%"></span>{{ end }}
                         {{- with .Dot }}<span class="dot{{ with .Class }} {{ . }}{{ end }}" style="left: {{ .Left }}%"></span>{{ end -}}
                       </span>{{ with .Said }}<span class="row-mark-word">{{ . }}</span>{{ end }}
-                      <span class="line-values">{{ if .Empty }}—{{ end }}{{ range .Values }}<span class="value{{ if .Muted }} muted{{ end }}{{ with .Class }} {{ . }}{{ end }}{{ if .Marked }} marked{{ end }}"{{ with .Word }} title="{{ . }}"{{ end }}>{{ .Text }}</span>{{ end }}{{ with .Why }}<span class="line-why">{{ . }}</span>{{ end }}</span></li>
+                      <span class="line-values">{{ if .Empty }}—{{ end }}{{ range .Values }}<span class="value{{ if .Muted }} muted{{ end }}{{ with .Class }} {{ . }}{{ end }}{{ if .Marked }} marked{{ end }}"{{ with .Word }} title="{{ . }}"{{ end }}>{{ .Text }}</span>{{ end }}{{ if .Why }}<span class="line-why{{ with .WhyClass }} {{ . }}{{ end }}"{{ with .WhyHint }} title="{{ . }}"{{ end }}>{{ .Why }}{{ with .WhyHint }}<span class="row-mark-word"> {{ . }}</span>{{ end }}</span>{{ end }}</span></li>
                   {{ end }}
                 </ul>
               {{ end }}

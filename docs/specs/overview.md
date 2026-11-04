@@ -23,7 +23,8 @@
   [0045](../decisions/0045-sites-are-a-node-their-hosts-report-for.md),
   [0046](../decisions/0046-an-overview-of-items-rendered-by-the-hub.md),
   [0051](../decisions/0051-a-sensor-groups-its-family-by-a-label.md),
-  [0053](../decisions/0053-a-computer-card-is-lines-on-a-shared-scale.md)
+  [0053](../decisions/0053-a-computer-card-is-lines-on-a-shared-scale.md),
+  [0054](../decisions/0054-the-backup-line-gathers-the-backup-families.md)
 
 ## Purpose
 
@@ -151,7 +152,15 @@ other computer card puts it, so one card reads against the next
   A slot with no series on its scale — a disk slot with no volume the default picks is
   named "Disk free" — reads a dash where its values stand, over an empty scale, so the lines
   below it keep their place; its muted series are not shown. A computer with no series on
-  any of the four scales has no slots;
+  any of the four scales has no slots.
+
+  The backup slot **gathers** every other series of the families `backup` and
+  `timemachine` the computer has
+  ([0054](../decisions/0054-the-backup-line-gathers-the-backup-families.md)): none of them
+  is a line, a value, a tick, or counted in "N more", and their marks speak on the backup
+  line, as a line says why it is marked below, so the backup's many series say one thing on
+  the card. Gathering changes where a series is shown, not the card's state. A backup slot
+  that reads a dash gathers none: they stay what they would be without it;
 - then its **extra lines**: the series its rows' first step takes — what needs attention —
   that no line shows, in that order, at most two, and "N more" when more qualify. A
   computer with no slot and no such series has the first two series its page charts as its
@@ -181,12 +190,20 @@ of the section, the scale taking what is left; they never wrap. The muted ones c
 in the slot's order, then the one on the scale, each formatted as `/debug` formats it and in
 the colour of its own mark — a muted one in the muted colour when it carries none. Under
 them the line says why it is marked, by the most urgent mark among its series — critical,
-warning, unusual, the one on the scale first among equals: "threshold X" when that series'
-threshold is readable and holds a value for its level, otherwise the level's word; "usually
-X" with its norm when it is unusual. A slot's line is named by its slot, an extra line by
-its row name; on hover, either names the series on its scale as a row names it. A screen
-reader is told the scale in words instead of the drawing: the band's range and the value of
-each tick, by its level's word.
+warning, unusual: "threshold X" when that series' threshold is readable and holds a value
+for its level, otherwise the level's word; "usually X" with its norm when it is unusual.
+Among equals the one on the scale comes first, then the muted ones, then those the slot
+gathers in the page order. A gathered series speaks by the same marks, and by one more below
+unusual: holding no fresh data while watched, as attention lists it
+([attention](attention.md#model)). Only the most urgent speaks; the others are on the
+item's page. One that speaks is said by its mark's word alone, in its mark's colour, never
+faded with its line, as no value of it stands beside the word to say whose it is; the dot
+and the values keep their own colours. On hover, and to a screen reader, the word names
+that series as a row names it and says why as above, "Newest archive borg job-a: usually
+4.0 h" — its mark's word when there is no more to say. A slot's line is named by its slot,
+an extra line by its row name; on hover, either names the series on its scale as a row
+names it. A screen reader is told the scale in words instead of the drawing: the band's
+range and the value of each tick, by its level's word.
 
 **A slot's scale** ends at the same place on every computer card of the section: a
 percentage's at 100; any other's at 1.1 times the largest, over those cards' series on that
@@ -354,6 +371,7 @@ An item's rows: what its page lists as numbers, and a site's or a service's card
 | a fresh removable volume at 3%, `/` at 40% | the default row is `disk.free_pct /`: a removable volume is never a default, plugged in or not |
 | every volume removable | no disk default row |
 | volumes `/a` and `/b`, both at 12.0% | the default row is `/a`'s, the first in the page order |
+| a computer whose `backup.latest_archive_age_seconds` is unusual | that series among the rows needing attention: the item's page lists what its card's backup line gathers |
 | a Mac with Time Machine destinations backed up 2 days and 9 days ago, both fresh | the 9-day one |
 | the 9-day destination stale, the 2-day one fresh | the 2-day one |
 | a server with backup jobs that last succeeded 2 days and 9 days ago, both fresh | the 9-day one |
@@ -412,7 +430,9 @@ filled. The rows after them follow in a run that wraps. A reason closes the card
 Unless a row says otherwise, the computer is a Linux server reporting `load`, `memory`,
 `disk` with the one volume `/`, `systemd.failed_units` 0 and a backup job, every series
 fresh, nothing needing attention, no threshold readable and no anomaly band. Values are as the English
-catalogue writes them.
+catalogue writes them. A row naming `job-a` or a gathered series has the backup job
+labelled `backup: borg`, `job: job-a`, reporting `backup.success_age_seconds`,
+`backup.latest_archive_age_seconds` and `backup.failed` 0.
 
 | State | The card |
 |---|---|
@@ -436,6 +456,26 @@ catalogue writes them.
 | a Time Machine destination backed up 2 days ago and a backup job that last succeeded 9 days ago, both fresh | "Backup" at the 9-day one |
 | a Time Machine destination and a backup job of the same age | "Backup" at the job: the first in the page order |
 | the 9-day job stale | "Backup" at the 2-day one |
+| `backup.latest_archive_age_seconds` unusual with norm 4 h, the backup on the scale unmarked | no extra line for it; "unusual" under the backup's value in the unusual colour, the dot and the value in the text colour; on hover and to a screen reader "Newest archive borg job-a: usually 4.0 h" |
+| `backup.latest_archive_age_seconds` of `job-a` and of a second job `job-b` of `borg`, and `backup.archives` of `job-a`, all unusual, nothing else needing attention | the four slots and nothing after them: no extra line, no "N more" |
+| three non-backup series needing attention and two gathered series unusual | two extra lines and "1 more" |
+| `backup.failed` 1 at `critical`, the backup on the scale unusual | "critical" under the backup's value in the critical colour: the most urgent mark speaks |
+| `backup.failed` 1 at `warning` under its readable `above` `warning` of 0 | "warning" under the backup's value in the warning colour, and on hover "Failed borg job-a: threshold 0.00" |
+| `backup.failed` 1 at `warning`, its threshold unreadable | "warning" under the backup's value, and on hover "Failed borg job-a: warning" |
+| `backup.failed` of `job-a` and of `job-b` both at `critical` | on hover "Failed borg job-a: critical": the first in the page order |
+| the backup on the scale at `critical` under a readable `critical`, a gathered series at `warning` | the on-scale threshold under the value; nothing names the gathered one |
+| the backup on the scale unusual, a gathered series unusual too | "usually X" with the norm of the one on the scale |
+| a Time Machine destination on the scale, the job's `backup.success_age_seconds` at `warning` | "warning" under the backup's value in the warning colour; no extra line |
+| `backup.latest_archive_age_seconds` watched and stale, the backup on the scale fresh and unmarked | "no fresh data" under the backup's value in the colour of no fresh data; no extra line for it |
+| `backup.latest_archive_age_seconds` stale and unwatched | nothing under the backup's value |
+| `backup.failed` 1 at `critical` and stale | "no fresh data" under the backup's value: a stale level is no level |
+| the backup on the scale stale, a gathered series watched and stale | the line faded; nothing under the values |
+| the backup on the scale stale, a gathered series unusual | the line faded and its dot hollow, but for "unusual" under the values, in the unusual colour |
+| a gathered series with a readable `warning` on the backup scale's range | no tick for it |
+| `backup.latest_archive_age_seconds` 40 days, every backup on the scale under 2 days | the backup scale set by the ones on the scale; nothing at 40 days |
+| `backup.failed` 1 at `critical`, everything else `ok` | the pill "critical", the card ordered as critical, the heading counting "1 critical" |
+| a job that never succeeded — `backup.failed` 1 at `critical`, no `backup.success_age_seconds` and no Time Machine series | "Backup" a dash; `backup.failed` an extra line |
+| `gdrive.free_pct` unusual | an extra line: `gdrive` is not a backup family |
 | `systemd.failed_units` 2, unwatched and usual | "failed units: 2" in the head before the state's word, in the muted colour; no line for it |
 | `systemd.failed_units` 2 at `critical` | "failed units: 2" in the critical colour; no extra line for it |
 | `systemd.failed_units` 0 | nothing in the head |
@@ -626,8 +666,9 @@ same for `vpn`, and its family `backup` is grouped by `backup`.
   most once.
 - A card in a state other than "ok" or "reporting, nothing watched" names its reason or its
   silence: a series at that level, unusual or with no fresh data heads a site's or a
-  service's rows, and is in a computer's head, on one of its slots in its mark's colour, or
-  its first extra line; or the card reads "No series yet".
+  service's rows, and is in a computer's head, on one of its slots in its mark's colour —
+  said there by its word when the slot gathers it — or its first extra line; or the card
+  reads "No series yet".
 
 ## Edge cases
 
@@ -636,7 +677,8 @@ same for `vpn`, and its family `backup` is grouped by `backup`.
   and its silence turns the card "silent" once past `silence_after`.
 - **A sensor switched off in the configuration** leaves a watched series stale; it is a row
   marked as holding no fresh data, first on its card — on a computer's, its slot's line faded in its
-  place or an extra line — for as long as its threshold is kept, as it is an item under "now".
+  place, said on the backup line when the slot gathers it and the line does not already say
+  it, faded or by a mark as loud, or an extra line — for as long as its threshold is kept, as it is an item under "now".
 - **A site removed from the file** loses its card at once. A threshold on its series keeps
   it under the timeline's "now" as no fresh data until the threshold is cleared; the
   overview shows the sites the file lists, and leaves that one to the timeline and `/debug`.
