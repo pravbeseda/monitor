@@ -154,11 +154,14 @@ func byName(a, b string) int {
 	return cmp.Or(strings.Compare(strings.ToLower(a), strings.ToLower(b)), strings.Compare(a, b))
 }
 
-// siteColumns are the table's columns in order, each its key and its header's catalogue key.
-var siteColumns = [][2]string{
-	{"site", "overview.site"}, {"requests", "overview.requests"}, {"day", "overview.day"},
-	{"views", "overview.views"}, {"errors", "overview.errors"}, {"latency", "overview.latency"},
-	{"also", "overview.also"},
+// siteColumns are the table's column keys in the order a row lays its cells out, taken from
+// siteSlots so the headers cannot drift from the cells beneath them.
+func siteColumns() []string {
+	out := []string{"site", siteSlots[0].key, "day"}
+	for _, one := range siteSlots[1:] {
+		out = append(out, one.key)
+	}
+	return append(out, "also")
 }
 
 // sitesHeaders are the table's headers, each that sorts linking to the sort it gives: its
@@ -166,12 +169,12 @@ var siteColumns = [][2]string{
 // sorted column reverses it.
 func sitesHeaders(printer *i18n.Printer, sorted siteSort, lang string) []headerView {
 	var out []headerView
-	for _, column := range siteColumns {
-		header := headerView{Column: column[0], Text: printer.T(column[1])}
-		if siteSortOf(column[0]).column != "" {
-			first := siteSort{column: column[0], descending: column[0] != "site"}
+	for _, column := range siteColumns() {
+		header := headerView{Column: column, Text: printer.T("overview." + column)}
+		if siteSortOf(column).column != "" {
+			first := siteSort{column: column, descending: column != "site"}
 			next := first
-			if sorted.column == column[0] {
+			if sorted.column == column {
 				next.descending = !sorted.descending
 				header.Sort, header.Arrow = "ascending", "▲"
 				if sorted.descending {

@@ -131,7 +131,7 @@
             {{ end }}
             {{ if .Computer }}
               {{ with .More }}<span class="card-more">{{ . }}</span>{{ end }}
-              {{ if .Computer.Seen }}<span class="card-seen{{ if .Computer.Late }} late{{ end }}">{{ .Computer.Seen }}</span>{{ end }}
+              <span class="card-seen{{ if .Computer.Late }} late{{ end }}">{{ .Computer.Seen }}</span>
             {{ else }}
             {{ with .Main }}
               <ul class="main{{ if eq (len .) 1 }} single{{ end }}">
