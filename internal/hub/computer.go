@@ -13,25 +13,25 @@ import (
 	"github.com/pravbeseda/monitor/internal/state"
 )
 
-// A computer's card puts each series where every other computer card puts it: four slots,
-// each a name and its values, then what needs attention beyond them
-// (docs/specs/overview.md#computer-card, ADR 0053, ADR 0055).
+// A computer's card and a site's put each series where every other card of their section
+// puts it: fixed slots, each a name and its values, then what needs attention beyond them
+// (docs/specs/overview.md#computer-card and #site-card, ADR 0053, ADR 0055, ADR 0057).
 
 const (
 	failedUnits = "systemd.failed_units"
-	// extraLines is how many extra lines a computer's card holds; the rest are counted.
+	// extraLines is how many extra lines a card of lines holds; the rest are counted.
 	extraLines = 2
 )
 
-// slot is one of a computer card's fixed lines: the series of its own value and those beside
-// it, muted, and the families whose other series it gathers.
+// slot is one of a card's fixed lines: the series of its own value and those beside it,
+// muted, and the families whose other series it gathers.
 type slot struct {
 	key     string
 	pick    func(it overviewItem) (own state.Subject, beside []state.Subject, found bool)
 	gathers []string
 }
 
-var slots = []slot{
+var computerSlots = []slot{
 	{key: "load", pick: func(it overviewItem) (state.Subject, []state.Subject, bool) {
 		own, found := it.find("load.avg_15m", nil)
 		return own, it.present([]string{"load.avg_1m", "load.avg_5m"}, nil), found
@@ -48,6 +48,18 @@ var slots = []slot{
 		own, found := it.oldestBackup()
 		return own, nil, found
 	}, gathers: []string{"backup", "timemachine"}},
+}
+
+// siteSlots lead with the traffic, which a site's card draws as its lead.
+var siteSlots = []slot{only("requests", "site.requests_per_min"), only("views", "site.pageviews_24h"),
+	only("errors", "site.server_error_pct"), only("latency", "site.response_p95_seconds")}
+
+// only is a slot holding one metric's series and nothing beside it.
+func only(key, metric string) slot {
+	return slot{key: key, pick: func(it overviewItem) (state.Subject, []state.Subject, bool) {
+		own, found := it.defaultOf(metric)
+		return own, nil, found
+	}}
 }
 
 func (it overviewItem) find(metric string, labels map[string]string) (state.Subject, bool) {
@@ -105,9 +117,9 @@ type lineSeries struct {
 	levels []threshold
 }
 
-// linePlan is one line: the series of its own value, nil for a slot the computer has none
-// for, the muted ones beside it, the one of them the line says why by, and the gathered one
-// that speaks louder than them all. key names a slot, and is empty on an extra line.
+// linePlan is one line: the series of its own value, nil for a slot the item has none for,
+// the muted ones beside it, the one of them the line says why by, and the gathered one that
+// speaks louder than them all. key names a slot, and is empty on an extra line.
 type linePlan struct {
 	key     string
 	own     *state.Subject
@@ -116,8 +128,8 @@ type linePlan struct {
 	loud    *lineSeries
 }
 
-// computerPlan is what a computer's card shows.
-type computerPlan struct {
+// linedPlan is what a card of lines shows.
+type linedPlan struct {
 	slots  []linePlan
 	extras []linePlan
 	more   int
@@ -132,10 +144,9 @@ type pickedLine struct {
 	gathered []state.Subject
 }
 
-// computerLines pick a computer's lines: its slots, none when it has no slot's own value,
-// then what needs attention that no line shows. shown are the series the card
-// accounts for already.
-func (it overviewItem) computerLines(attention []item, shown []state.Subject) (slotted, extra []pickedLine, more int) {
+// lines pick an item's lines: its slots, none when it has no slot's own value, then what
+// needs attention that no line shows. shown are the series the card accounts for already.
+func (it overviewItem) lines(slots []slot, attention []item, shown []state.Subject) (slotted, extra []pickedLine, more int) {
 	for _, one := range slots {
 		line := pickedLine{key: one.key}
 		if own, beside, found := one.pick(it); found {
@@ -182,15 +193,16 @@ func (it overviewItem) gathered(families []string, own state.Subject) []state.Su
 	return out
 }
 
-// computerPlan is a computer's lines with the thresholds they say, and its failed units.
-func (it overviewItem) computerPlan(ctx context.Context, store ThresholdReader, attention []item) (computerPlan, error) {
-	var out computerPlan
+// linedPlan is an item's lines in these slots with the thresholds they say, and its failed
+// units.
+func (it overviewItem) linedPlan(ctx context.Context, store ThresholdReader, attention []item, slots []slot) (linedPlan, error) {
+	var out linedPlan
 	var shown []state.Subject
 	failed, found := it.find(failedUnits, nil)
 	if found {
 		shown = append(shown, failed)
 	}
-	slotted, extra, more := it.computerLines(attention, shown)
+	slotted, extra, more := it.lines(slots, attention, shown)
 	out.more = more
 	// The head says the failed units when they are any, marked, or all the card has.
 	if found && (*failed.Value > 0 || markKindOf(failed) != unmarked || len(slotted)+len(extra) == 0) {
@@ -261,13 +273,16 @@ func loudest(shown, gathered []state.Subject) (state.Subject, bool) {
 	return out, found
 }
 
-// computerView is a computer's card. Seen, when it last reported, closes every one; Late
-// says it stopped: silent, or holding no fresh data.
-type computerView struct {
-	Failed *valueView
-	Lines  []lineView
-	Seen   string
-	Late   bool
+// linedView is a card of lines: a site's lead and the line of the day under it, then the
+// lines. Seen is when the item last reported, and Late says it stopped: silent, or holding no
+// fresh data.
+type linedView struct {
+	Failed   *valueView
+	Lead     *lineView
+	LeadLine *chart
+	Lines    []lineView
+	Seen     string
+	Late     bool
 }
 
 type lineView struct {
@@ -293,7 +308,7 @@ type valueView struct {
 	Marked bool
 }
 
-func (it overviewItem) computerLine(printer *i18n.Printer, plan linePlan, name string) lineView {
+func (it overviewItem) lineViewOf(printer *i18n.Printer, plan linePlan, name string) lineView {
 	out := lineView{Key: plan.key, Name: name}
 	if plan.own == nil {
 		out.Empty = true
@@ -361,10 +376,9 @@ func slotName(printer *i18n.Printer, plan linePlan) string {
 	return printer.T("overview." + plan.key)
 }
 
-// computerOf lays a computer's card out by its plan, and says how many extra lines it leaves
-// out.
-func (it overviewItem) computerOf(printer *i18n.Printer, plan computerPlan) (*computerView, string) {
-	out := &computerView{
+// linedOf lays a card of lines out by its plan, and says how many extra lines it leaves out.
+func (it overviewItem) linedOf(printer *i18n.Printer, plan linedPlan) (*linedView, string) {
+	out := &linedView{
 		Seen: it.lastReportText(printer),
 		Late: it.stopped(),
 	}
@@ -375,10 +389,10 @@ func (it overviewItem) computerOf(printer *i18n.Printer, plan computerPlan) (*co
 		}
 	}
 	for _, line := range plan.slots {
-		out.Lines = append(out.Lines, it.computerLine(printer, line, slotName(printer, line)))
+		out.Lines = append(out.Lines, it.lineViewOf(printer, line, slotName(printer, line)))
 	}
 	for _, line := range plan.extras {
-		out.Lines = append(out.Lines, it.computerLine(printer, line, it.rowName(printer, *line.own)))
+		out.Lines = append(out.Lines, it.lineViewOf(printer, line, it.rowName(printer, *line.own)))
 	}
 	more := ""
 	if plan.more > 0 {

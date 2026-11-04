@@ -366,9 +366,9 @@ type cardView struct {
 	More string
 	// Reason closes the card: why it holds its state (docs/specs/overview.md#card).
 	Reason string
-	// Computer lays a computer's card out in place of rows and a reason
-	// (docs/specs/overview.md#computer-card).
-	Computer *computerView
+	// Lined lays a computer's or a site's card out in place of rows and a reason
+	// (docs/specs/overview.md#computer-card, #site-card).
+	Lined *linedView
 }
 
 type cardRowView struct {
@@ -416,13 +416,19 @@ func overviewOf(ctx context.Context, printer *i18n.Printer, reader history.Reade
 			out.Sections = append(out.Sections, sectionView{section: it.section, counts: map[timeline.Cell]int{}, Key: sectionKeys[it.section].plural})
 		}
 		view := it.cardHead(printer, lang)
-		if it.section == sectionComputers {
-			plan, err := it.computerPlan(ctx, store, attention)
-			if err != nil {
-				return out, err
+		var err error
+		switch it.section {
+		case sectionComputers:
+			var plan linedPlan
+			if plan, err = it.linedPlan(ctx, store, attention, computerSlots); err == nil {
+				view.Lined, view.More = it.linedOf(printer, plan)
 			}
-			view.Computer, view.More = it.computerOf(printer, plan)
-		} else if err := cardOf(ctx, printer, reader, store, it, attention, &view); err != nil {
+		case sectionSites:
+			view.Lined, view.More, err = it.siteOf(ctx, printer, reader, store, attention)
+		default:
+			err = cardOf(ctx, printer, reader, store, it, attention, &view)
+		}
+		if err != nil {
 			return out, err
 		}
 		section := &out.Sections[len(out.Sections)-1]
@@ -462,7 +468,27 @@ func (it overviewItem) cardHead(printer *i18n.Printer, lang string) cardView {
 	return out
 }
 
-// cardOf lays a site's or a service's card out by its rows, under its head.
+// siteOf lays a site's card out: its traffic as the lead with its line of the day, then its
+// lines, and when it last reported only once it stopped.
+func (it overviewItem) siteOf(ctx context.Context, printer *i18n.Printer, reader history.Reader, store ThresholdReader, attention []item) (*linedView, string, error) {
+	plan, err := it.linedPlan(ctx, store, attention, siteSlots)
+	if err != nil {
+		return nil, "", err
+	}
+	out, more := it.linedOf(printer, plan)
+	if !out.Late {
+		out.Seen = ""
+	}
+	if len(plan.slots) > 0 {
+		out.Lead, out.Lines = &out.Lines[0], out.Lines[1:]
+		if own := plan.slots[0].own; own != nil {
+			out.LeadLine, err = lineOf(ctx, printer, reader, *own, history.DefaultWindow, sparkFrame)
+		}
+	}
+	return out, more, err
+}
+
+// cardOf lays a service's card out by its rows, under its head.
 func cardOf(ctx context.Context, printer *i18n.Printer, reader history.Reader, store ThresholdReader, it overviewItem, attention []item, out *cardView) error {
 	if out.None != "" {
 		out.Reason = it.lastReported(printer)

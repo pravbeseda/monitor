@@ -8,7 +8,7 @@
     section.section { margin-bottom: 2rem; }
     h2.section-heading { font-size: 1rem; font-weight: 600; margin: 0 0 0.8rem; padding-bottom: 0.4rem; border-bottom: 1px solid var(--rule); }
     .cards { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(100%, 20rem), 1fr)); gap: 1rem; }
-    section[data-section="overview.computers"] .cards { grid-template-columns: repeat(auto-fill, minmax(min(100%, 17rem), 1fr)); }
+    section[data-section="overview.computers"] .cards, section[data-section="overview.sites"] .cards { grid-template-columns: repeat(auto-fill, minmax(min(100%, 17rem), 1fr)); }
     a.card { --tone: var(--faint); display: flex; flex-direction: column; gap: 0.75rem; padding: 1rem 1.2rem 0.9rem; background: var(--grid); border: 1px solid var(--rule); border-left: 4px solid var(--tone); border-radius: 10px; color: var(--fg); text-decoration: none; }
     a.card:hover, a.card:focus-visible { border-color: var(--muted); border-left-color: var(--tone); }
     a.card.state-ok { --tone: var(--accent); }
@@ -65,6 +65,12 @@
     .value.muted:not([class*="level-"]) { color: var(--muted); }
     .line-why { display: block; font-size: 0.75rem; }
     .line-why:not([class*="level-"]) { color: var(--muted); }
+    .lead { display: flex; justify-content: space-between; align-items: baseline; gap: 0.6rem; }
+    .lead-values { font-size: 1.5rem; font-weight: 650; font-variant-numeric: tabular-nums; white-space: nowrap; }
+    .lead-name { min-width: 0; font-size: 0.8rem; color: var(--muted); text-align: right; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .lead + svg.spark { height: 2.4rem; margin-top: -0.3rem; }
+    .lead.empty .lead-values { color: var(--faint); }
+    .lead.faded .lead-name, .lead.faded .value:not(.marked), .lead.faded + svg.spark { opacity: 0.45; }
     li.line.empty .line-name, li.line.empty .line-values { color: var(--faint); }
     li.line.faded .line-name, li.line.faded .value:not(.marked), li.line.faded .line-why:not([class*="level-"]) { opacity: 0.45; }
   </style>
@@ -78,34 +84,30 @@
       <div class="cards">
         {{ range .Cards }}
           <a class="card state-{{ .Class }}" href="{{ .Link }}" data-item="{{ .Name }}">
-            <span class="card-top"><span class="card-name">{{ .Name }}</span> <span class="card-flags">{{ with .Computer }}{{ with .Failed }}<span class="card-failed{{ with .Class }} {{ . }}{{ end }}"{{ with .Word }} title="{{ . }}"{{ end }}>{{ .Text }}</span>{{ end }}{{ end }}<span class="card-state">{{ .Word }}</span></span></span>
+            <span class="card-top"><span class="card-name">{{ .Name }}</span> <span class="card-flags">{{ with .Lined }}{{ with .Failed }}<span class="card-failed{{ with .Class }} {{ . }}{{ end }}"{{ with .Word }} title="{{ . }}"{{ end }}>{{ .Text }}</span>{{ end }}{{ end }}<span class="card-state">{{ .Word }}</span></span></span>
             {{ with .None }}<span class="card-none">{{ . }}</span>{{ end }}
-            {{ if .Computer }}
-              {{ with .Computer.Lines }}
+            {{ with .Lined }}
+              {{ with .Lead }}<div class="lead{{ if .Empty }} empty{{ end }}{{ if .Faded }} faded{{ end }}"{{ with .Title }} title="{{ . }}"{{ end }}><span class="lead-values">{{ template "values" . }}</span><span class="lead-name">{{ .Name }}{{ template "why" . }}</span></div>{{ end }}
+              {{ with .LeadLine }}{{ template "spark" . }}{{ end }}
+              {{ with .Lines }}
                 <ul class="lines">
                   {{ range . }}
                     <li class="line{{ if .Empty }} empty{{ end }}{{ if .Faded }} faded{{ end }}"{{ with .Key }} data-line="{{ . }}"{{ end }}{{ with .Title }} title="{{ . }}"{{ end }}><span class="line-name">{{ .Name }}</span>
-                      <span class="line-values">{{ if .Empty }}—{{ end }}{{ range .Values }}<span class="value{{ if .Muted }} muted{{ end }}{{ with .Class }} {{ . }}{{ end }}{{ if .Marked }} marked{{ end }}"{{ with .Word }} title="{{ . }}"{{ end }}>{{ .Text }}</span>{{ end }}{{ if .Why }}<span class="line-why{{ with .WhyClass }} {{ . }}{{ end }}"{{ with .WhyHint }} title="{{ . }}"{{ end }}>{{ .Why }}{{ with .WhyHint }}<span class="row-mark-word"> {{ . }}</span>{{ end }}</span>{{ end }}</span></li>
+                      <span class="line-values">{{ template "values" . }}{{ template "why" . }}</span></li>
                   {{ end }}
                 </ul>
               {{ end }}
+            {{ end }}
+            {{ if .Lined }}
               {{ with .More }}<span class="card-more">{{ . }}</span>{{ end }}
-              <span class="card-seen{{ if .Computer.Late }} late{{ end }}">{{ .Computer.Seen }}</span>
+              {{ if .Lined.Seen }}<span class="card-seen{{ if .Lined.Late }} late{{ end }}">{{ .Lined.Seen }}</span>{{ end }}
             {{ else }}
             {{ with .Main }}
               <ul class="main{{ if eq (len .) 1 }} single{{ end }}">
                 {{ range . }}
                   <li class="row main" data-series="{{ .Name }}"><span class="row-name">{{ .Name }}</span>
                     <span class="row-value">{{ template "mark" .Mark }}{{ .Value }}</span>
-                    {{- with .Line }}
-                      <svg class="spark" viewBox="0 0 {{ .Width }} {{ .Height }}" preserveAspectRatio="none" aria-hidden="true">
-                        {{- range .Areas }}<polygon class="area" points="{{ . }}"></polygon>{{ end }}
-                        {{- $c := . }}
-                        {{- range .Levels }}<line class="threshold {{ .Class }}" x1="0" y1="{{ .Y }}" x2="{{ $c.Width }}" y2="{{ .Y }}"></line>{{ end }}
-                        {{- range .Lines }}<polyline points="{{ . }}"></polyline>{{ end }}
-                        {{- range .Dots }}<polyline class="point" points="{{ .X }},{{ .Y }} {{ .X }},{{ .Y }}"></polyline>{{ end -}}
-                      </svg>
-                    {{- end }}</li>
+                    {{- with .Line }}{{ template "spark" . }}{{ end }}</li>
                 {{ end }}
               </ul>
             {{ end }}
@@ -124,4 +126,13 @@
   {{ end }}
 </body>
 </html>
+{{ define "spark" }}<svg class="spark" viewBox="0 0 {{ .Width }} {{ .Height }}" preserveAspectRatio="none" aria-hidden="true">
+  {{- range .Areas }}<polygon class="area" points="{{ . }}"></polygon>{{ end }}
+  {{- $c := . }}
+  {{- range .Levels }}<line class="threshold {{ .Class }}" x1="0" y1="{{ .Y }}" x2="{{ $c.Width }}" y2="{{ .Y }}"></line>{{ end }}
+  {{- range .Lines }}<polyline points="{{ . }}"></polyline>{{ end }}
+  {{- range .Dots }}<polyline class="point" points="{{ .X }},{{ .Y }} {{ .X }},{{ .Y }}"></polyline>{{ end -}}
+</svg>{{ end }}
+{{ define "values" }}{{ if .Empty }}—{{ end }}{{ range .Values }}<span class="value{{ if .Muted }} muted{{ end }}{{ with .Class }} {{ . }}{{ end }}{{ if .Marked }} marked{{ end }}"{{ with .Word }} title="{{ . }}"{{ end }}>{{ .Text }}</span>{{ end }}{{ end }}
+{{ define "why" }}{{ if .Why }}<span class="line-why{{ with .WhyClass }} {{ . }}{{ end }}"{{ with .WhyHint }} title="{{ . }}"{{ end }}>{{ .Why }}{{ with .WhyHint }}<span class="row-mark-word"> {{ . }}</span>{{ end }}</span>{{ end }}{{ end }}
 {{ define "mark" }}{{ with . }} <span class="row-mark {{ .Class }}" title="{{ .Word }}"></span><span class="row-mark-word">{{ .Word }}</span> {{ end }}{{ end }}

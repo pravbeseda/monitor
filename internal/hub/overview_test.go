@@ -225,7 +225,7 @@ func neverReported(current state.State, node string) state.State {
 	return current
 }
 
-// itemRows are an item's rows as its page lists them: a computer's card shows lines instead.
+// itemRows are an item's rows as its page lists them: a computer's or a site's card shows lines instead.
 func itemRows(t *testing.T, current state.State, item string) []string {
 	t.Helper()
 	target := "/item?node=" + item
@@ -525,9 +525,10 @@ func TestOverviewRows(t *testing.T) {
 	})
 
 	t.Run("names", func(t *testing.T) {
-		body := overview(t, reading("gdrive-a", "queue.depth", map[string]string{"queue": "payments"}, 2), siteOf("blog-a", "site.requests_per_min", 4))
+		body := overview(t, reading("gdrive-a", "queue.depth", map[string]string{"queue": "payments"}, 2), siteOf("blog-a", "site.requests_per_min", 4),
+			judgedAt(siteOf("blog-a", "site.client_error_pct", 4), evaluate.Warning))
 		equal(t, "rows", cardRows(t, body, "gdrive-a"), []string{"queue.depth queue=payments"})
-		equal(t, "rows", cardRows(t, body, "blog-a"), []string{"site.requests_per_min"})
+		equal(t, "extra line", lineNames(card(t, body, "blog-a")), []string{"Views/day", "Server errors", "Response p95", "site.client_error_pct"})
 		equal(t, "rows", cardRows(t, overview(t, freePct("gdrive-a", "/srv", 40)), "gdrive-a"), []string{"disk.free_pct /srv"})
 	})
 
@@ -535,13 +536,15 @@ func TestOverviewRows(t *testing.T) {
 		containsAll(t, "card", card(t, overview(t, freePct("server-b", "/", 40)), "server-b"), "40.0%")
 	})
 
-	// spec: metric-names.md#where — a row is named by its metric's declared name, in the
-	// reader's language, and a site's row leaves its site out.
+	// spec: metric-names.md#where — a row, and a site's lead on hover, is named by its
+	// metric's declared name, in the reader's language, leaving the site out.
 	t.Run("declared names", func(t *testing.T) {
 		current := named(stateOf(freePct("gdrive-a", "/srv", 40), siteOf("blog-a", "site.requests_per_min", 4)))
 		body := showOverview(t, current, held{}, "/overview?lang=ru")
 		equal(t, "rows", cardRows(t, body, "gdrive-a"), []string{"Свободно /srv"})
-		equal(t, "rows", cardRows(t, body, "blog-a"), []string{"Запросов в минуту"})
+		if head, _ := leadOf(t, card(t, body, "blog-a")); head.title != "Запросов в минуту" {
+			t.Errorf("a site's lead names %q", head.title)
+		}
 	})
 
 	t.Run("a card links to its item", func(t *testing.T) {
