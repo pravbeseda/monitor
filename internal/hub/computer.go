@@ -7,11 +7,13 @@ import (
 	"math"
 	"slices"
 	"strconv"
+	"strings"
 
 	"github.com/pravbeseda/monitor/internal/evaluate"
 	"github.com/pravbeseda/monitor/internal/history"
 	"github.com/pravbeseda/monitor/internal/i18n"
 	"github.com/pravbeseda/monitor/internal/state"
+	"github.com/pravbeseda/monitor/internal/timeline"
 )
 
 // A computer's card puts each series where every other computer card puts it: four slots
@@ -250,9 +252,10 @@ func scaleEnd(metric string, series []lineSeries) float64 {
 }
 
 // sharedEnds are where each slot's scale ends on every computer card of the section, set
-// by the series on it that hold fresh data. A nil plan is a card that is not a computer's.
+// by the series on it that hold fresh data, or by all of them when none does. A nil plan is
+// a card that is not a computer's.
 func sharedEnds(plans []*computerPlan) map[string]float64 {
-	fresh := map[string][]lineSeries{}
+	fresh, all := map[string][]lineSeries{}, map[string][]lineSeries{}
 	metric := map[string]string{}
 	for _, plan := range plans {
 		if plan == nil {
@@ -263,6 +266,7 @@ func sharedEnds(plans []*computerPlan) map[string]float64 {
 				continue
 			}
 			metric[line.key] = line.scale.Metric
+			all[line.key] = append(all[line.key], *line.scale)
 			if !line.scale.Stale {
 				fresh[line.key] = append(fresh[line.key], *line.scale)
 			}
@@ -270,15 +274,21 @@ func sharedEnds(plans []*computerPlan) map[string]float64 {
 	}
 	out := map[string]float64{}
 	for key, m := range metric {
+		if len(fresh[key]) == 0 {
+			fresh[key] = all[key]
+		}
 		out[key] = scaleEnd(m, fresh[key])
 	}
 	return out
 }
 
+// computerView is a computer's card. Seen, when it last reported, closes every one; Late
+// says it stopped: silent, or holding no fresh data.
 type computerView struct {
 	Failed *valueView
-	Seen   string
 	Lines  []lineView
+	Seen   string
+	Late   bool
 }
 
 type lineView struct {
@@ -293,6 +303,9 @@ type lineView struct {
 	// Values are the muted ones first, then the one on the scale.
 	Values []valueView
 	Why    string
+	// Said is the scale in words, for a reader who cannot see it: the usual range and the
+	// threshold values its ticks mark.
+	Said string
 }
 
 type bandView struct{ Left, Width, Norm string }
@@ -325,15 +338,19 @@ func (it overviewItem) computerLine(printer *i18n.Printer, plan linePlan, name s
 	s := *plan.scale
 	out.Title = it.rowName(printer, s.Subject)
 	out.Faded = s.Stale
+	var said []string
 	if s.Anomaly != nil {
 		low, high := place(s.Anomaly.Low, end), place(s.Anomaly.High, end)
 		out.Band = &bandView{Left: percent(low), Width: percent(high - low), Norm: percent(place(s.Anomaly.Norm, end))}
+		said = append(said, fmt.Sprintf(printer.T("overview.usual_range"), format(printer, s.Metric, s.Anomaly.Low), format(printer, s.Metric, s.Anomaly.High)))
 	}
 	for _, level := range s.levels {
 		if level.value >= 0 && level.value <= end {
 			out.Ticks = append(out.Ticks, tickView{Class: "level-" + level.level.String(), Left: percent(place(level.value, end))})
+			said = append(said, fmt.Sprintf(printer.T("overview.tick"), printer.T("level."+level.level.String()), format(printer, s.Metric, level.value)))
 		}
 	}
+	out.Said = strings.Join(said, ", ")
 	out.Dot = &tickView{Left: percent(place(*s.Value, end))}
 	if mark := markOf(printer, s.Subject); mark != nil {
 		out.Dot.Class = mark.Class
@@ -390,7 +407,10 @@ func slotName(printer *i18n.Printer, plan linePlan) string {
 // computerOf lays a computer's card out by its plan on the section's scales, and says how
 // many extra lines it leaves out.
 func (it overviewItem) computerOf(printer *i18n.Printer, plan computerPlan, ends map[string]float64) (*computerView, string) {
-	out := &computerView{Seen: it.lastReported(printer)}
+	out := &computerView{
+		Seen: fmt.Sprintf(printer.T("overview.last_report"), printer.Time(it.lastReport)),
+		Late: it.cell == timeline.Silent || it.cell == timeline.NoFreshData,
+	}
 	if s := plan.failed; s != nil {
 		out.Failed = &valueView{Text: fmt.Sprintf(printer.T("overview.failed"), int64(math.Round(*s.Value)))}
 		if mark := markOf(printer, *s); mark != nil {

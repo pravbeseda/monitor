@@ -52,6 +52,10 @@ Within bullets, each question was settled in turn:
   and 15 minutes. The sensor reports 1, 5 and 15, so those were used. **Memory and disk**
   show their bytes muted beside the percent on the scale. The rule is the same as for load:
   the rightmost value is the dot.
+- **The last report closes every card.** It was first written under the head, and only on a
+  card that stopped. A review found that this pushed the lines of that card below its
+  neighbours' lines. Writing it into the state's pill truncated the name. Now it sits at
+  the foot of every card, small and muted, and brighter once the computer stops.
 - **Values never wrap.** The value column is fixed and the scale gives up the width. A
   column sized to its text would move each line's scale, and the dots would stop lining up.
 

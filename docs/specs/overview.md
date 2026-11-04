@@ -139,7 +139,6 @@ other computer card puts it, so one card reads against the next
   holds a value above zero, carries a mark, or is all the card would show, N a whole number,
   in the colour of that series' mark — the muted colour when it carries none. That series is
   never a line;
-- under its head, when it is silent or holds no fresh data, when it last reported;
 - its **slots**, each one **line**, in this order:
 
   | Slot | Name | On the scale | Beside it, muted |
@@ -156,7 +155,10 @@ other computer card puts it, so one card reads against the next
 - then its **extra lines**: the series its rows' first step takes — what needs attention —
   that no line shows, in that order, at most two, and "N more" when more qualify. A
   computer with no slot and no such series has the first two series its page charts as its
-  extra lines.
+  extra lines;
+- at its foot, small and to the right, when it last reported: muted, and brighter when it is
+  silent or holds no fresh data. It closes every computer card, so a card that stopped
+  reporting keeps its lines where its neighbours keep theirs.
 
 **A line** is a name, a **scale** and the values. On the scale, from zero to its end:
 
@@ -182,12 +184,14 @@ them the line says why it is marked, by the most urgent mark among its series �
 warning, unusual, the one on the scale first among equals: "threshold X" when that series'
 threshold is readable and holds a value for its level, otherwise the level's word; "usually
 X" with its norm when it is unusual. A slot's line is named by its slot, an extra line by
-its row name; on hover, either names the series on its scale as a row names it.
+its row name; on hover, either names the series on its scale as a row names it. A screen
+reader is told the scale in words instead of the drawing: the band's range and the value of
+each tick, by its level's word.
 
 **A slot's scale** ends at the same place on every computer card of the section: a
 percentage's at 100; any other's at 1.1 times the largest, over those cards' series on that
-scale that hold fresh data, of their values, their bands' `high` and their readable
-thresholds' values — at 1 when none of them is above zero. An extra line's scale is its
+scale that hold fresh data — over all of them when none does — of their values, their
+bands' `high` and their readable thresholds' values; at 1 when none of them is above zero. An extra line's scale is its
 own, by the same rule over its one series, fresh or not. The scale's end is layout, not a
 figure: no number on the page says it.
 
@@ -422,8 +426,9 @@ catalogue writes them.
 | `load.avg_5m` at `critical` and no `load.avg_15m` | "Load" a dash; `load.avg_5m` an extra line |
 | a computer reporting only `uptime.boot_seconds` and `queue.depth`, nothing needing attention | no slot; `queue.depth`, then `uptime.boot_seconds`, as its extra lines |
 | a computer with no series | "No series yet", no slot |
-| a silent computer | when it last reported, under its head |
-| a computer with no fresh data | when it last reported, under its head |
+| a computer reporting | when it last reported, at its foot, muted |
+| a silent computer | when it last reported, at its foot, brighter |
+| a computer with no fresh data | when it last reported, at its foot, brighter |
 | `load.avg_1m` 0.52, `load.avg_5m` 0.61, `load.avg_15m` 0.67 | "0.52 0.61 0.67" on the load line, the first two muted, the dot at 0.67 |
 | no `load.avg_1m` | "0.61 0.67" |
 | `memory.available_pct` 38.5, `memory.available_bytes` 2 GB | the memory line reading the bytes muted, then "38.5%", the dot at 38.5 |
@@ -443,6 +448,7 @@ catalogue writes them.
 | the same, one of them with a band reaching 6 | every load scale to 6.6 |
 | every `load.avg_15m` 0, no band, no threshold | every load scale to 1 |
 | `backup.success_age_seconds` of 40 days on a laptop whose series are stale, the other backups under 2 days | the backup scale set by the fresh ones; the laptop's dot at its end |
+| a section of one laptop whose series are all stale, its backup 40 days old | the backup scale set by the stale ones: its dot at 91% |
 | any `disk.free_pct` | its scale from 0 to 100, whatever the values |
 | a series on the scale whose anomaly has `low` 43, `norm` 46, `high` 52 | a band from 43 to 52, its norm marked at 46 |
 | a series on the scale carrying no anomaly | no band |
@@ -465,6 +471,7 @@ catalogue writes them.
 | three series needing attention that no slot shows | two extra lines and "1 more" |
 | `memory.available_bytes` unusual | no extra line: the memory line shows it |
 | a line's name on hover | the series on its scale, named as a row names it |
+| a line read by a screen reader, its series with a band from 38% to 42% under a `warning` of 10% and a `critical` of 5% | its name, its values, and in words "usually 38.0%–42.0%, warning at 10.0%, critical at 5.0%": the scale itself is not read |
 | a line's values on the narrowest card | on one line: the scale narrows, the values never wrap |
 | any line of one section | its values in a column of the same width on every card, so the scales are as wide and the dots line up |
 | a site's card, a service's card | as before: rows, the first two with a line of their day ([card](#card)) |

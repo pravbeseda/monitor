@@ -59,6 +59,8 @@ var catalogue = map[string]map[Locale]string{
 	"overview.backup":          {English: "Backup", Russian: "Бэкап"},
 	"overview.failed":          {English: "failed units: %d", Russian: "упавшие юниты: %d"},
 	"overview.threshold":       {English: "threshold %s", Russian: "порог %s"},
+	"overview.usual_range":     {English: "usually %s–%s", Russian: "обычно %s–%s"},
+	"overview.tick":            {English: "%s at %s", Russian: "%s при %s"},
 	"item.unknown":             {English: "No such item: its node or site is not on the overview", Russian: "Такого объекта нет: его узла или сайта нет в обзоре"},
 	"item.error.node":          {English: "An item's page needs one node", Russian: "Странице объекта нужен один узел"},
 	"item.error.site":          {English: "The sites are items one by one: name a site", Russian: "Сайты — отдельные объекты: укажите сайт"},

@@ -27,7 +27,7 @@ var (
 	tickPattern   = regexp.MustCompile(`<span class="tick (level-[a-z]+)" style="left: ([0-9.]+)%"></span>`)
 	whyPattern    = regexp.MustCompile(`<span class="line-why">([^<]*)</span>`)
 	failedPattern = regexp.MustCompile(`<span class="card-failed([^"]*)"[^>]*>([^<]*)</span>`)
-	seenPattern   = regexp.MustCompile(`<span class="card-seen">([^<]*)</span>`)
+	seenPattern   = regexp.MustCompile(`<span class="card-seen ?([^"]*)">last report [^<]*</span>`)
 )
 
 // line is one line of a computer's card as a reader sees it.
@@ -214,10 +214,25 @@ func TestComputerCardSlots(t *testing.T) {
 			t.Errorf("lines on a card with no series: %s", body)
 		}
 	})
+	// lastReport is the card's last report and its class, and whether it closes the card.
+	lastReport := func(t *testing.T, body string) (string, bool) {
+		t.Helper()
+		found := seenPattern.FindStringSubmatch(body)
+		if found == nil {
+			t.Fatalf("no last report: %s", body)
+		}
+		return strings.TrimSpace(found[1]), strings.Index(body, found[0]) > strings.LastIndex(body, `<li class="line`)
+	}
+	t.Run("a computer reporting", func(t *testing.T) {
+		class, atFoot := lastReport(t, computerCard(t, stateOf(linux("server-b")...), limits{}, "server-b"))
+		if class != "" || !atFoot {
+			t.Errorf("last report %q, at its foot %v; want muted, at its foot", class, atFoot)
+		}
+	})
 	t.Run("a silent computer", func(t *testing.T) {
 		body := computerCard(t, stateOf(append(linux("server-b"), silenceOf("server-b", evaluate.Critical))...), limits{}, "server-b")
-		if seenPattern.FindStringSubmatch(body) == nil {
-			t.Errorf("no last report under the head: %s", body)
+		if class, atFoot := lastReport(t, body); class != "late" || !atFoot {
+			t.Errorf("last report %q, at its foot %v; want brighter, at its foot", class, atFoot)
 		}
 	})
 	t.Run("no fresh data", func(t *testing.T) {
@@ -225,9 +240,8 @@ func TestComputerCardSlots(t *testing.T) {
 		for _, s := range linux("laptop-a") {
 			asleep = append(asleep, staled(s))
 		}
-		body := computerCard(t, stateOf(asleep...), limits{}, "laptop-a")
-		if seenPattern.FindStringSubmatch(body) == nil {
-			t.Errorf("no last report under the head: %s", body)
+		if class, atFoot := lastReport(t, computerCard(t, stateOf(asleep...), limits{}, "laptop-a")); class != "late" || !atFoot {
+			t.Errorf("last report %q, at its foot %v; want brighter, at its foot", class, atFoot)
 		}
 	})
 }
@@ -370,6 +384,15 @@ func TestComputerCardScale(t *testing.T) {
 			t.Errorf("the fresh backup at %s%%, want 90.9%%", left)
 		}
 	})
+	t.Run("stale series set the scale when none is fresh", func(t *testing.T) {
+		var asleep []state.Subject
+		for _, s := range replaced(linux("laptop-a"), jobAge("laptop-a", "a", 40*86400)) {
+			asleep = append(asleep, staled(s))
+		}
+		if _, left := lineCalled(t, computerCard(t, stateOf(asleep...), limits{}, "laptop-a"), "Backup").dot(t); left != "90.9" {
+			t.Errorf("the stale backup at %s%%, want 90.9%% of a scale it sets", left)
+		}
+	})
 }
 
 // spec: overview.md#computer-card
@@ -421,6 +444,11 @@ func TestComputerCardBandAndTicks(t *testing.T) {
 		}
 		return out
 	}
+	t.Run("the scale in words for a screen reader", func(t *testing.T) {
+		subjects := replaced(linux("server-b"), banded(freePct("server-b", "/", 40), 38, 40, 42, 0))
+		disk := lineCalled(t, computerCard(t, stateOf(subjects...), limits{heldKey(ref): below(f(10), f(5))}, "server-b"), "Disk / free")
+		containsAll(t, "line", disk.body, `<span class="row-mark-word">usually 38.0%–42.0%, warning at 10.0%, critical at 5.0%</span>`)
+	})
 	t.Run("ticks at the threshold's values", func(t *testing.T) {
 		equal(t, "ticks", ticks(t, below(f(10), f(5))), []string{"level-warning 10.0", "level-critical 5.0"})
 	})

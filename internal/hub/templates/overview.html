@@ -53,7 +53,8 @@
     .card-failed.level-unusual, .dot.level-unusual { --tone: var(--unusual); }
     .card-failed { font-size: 0.8rem; white-space: nowrap; padding: 0.05rem 0.55rem; border-radius: 999px; border: 1px solid var(--rule); color: var(--muted); }
     .card-failed[class*="level-"] { color: var(--tone); border-color: var(--tone); }
-    .card-seen { font-size: 0.85rem; color: var(--muted); margin-top: -0.4rem; }
+    .card-seen { font-size: 0.75rem; color: var(--muted); text-align: right; }
+    .card-seen.late { color: var(--fg); }
     ul.lines { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 0.35rem; }
     li.line { display: grid; grid-template-columns: 5.5rem minmax(2rem, 1fr) 8rem; align-items: center; gap: 0.6rem; font-size: 0.85rem; min-height: 1.9rem; }
     @media (max-width: 30rem) { li.line { grid-template-columns: 4.6rem minmax(2rem, 1fr) 7.4rem; gap: 0.45rem; } }
@@ -87,7 +88,6 @@
         {{ range .Cards }}
           <a class="card state-{{ .Class }}" href="{{ .Link }}" data-item="{{ .Name }}">
             <span class="card-top"><span class="card-name">{{ .Name }}</span> <span class="card-flags">{{ with .Computer }}{{ with .Failed }}<span class="card-failed{{ with .Class }} {{ . }}{{ end }}"{{ with .Word }} title="{{ . }}"{{ end }}>{{ .Text }}</span>{{ end }}{{ end }}<span class="card-state">{{ .Word }}</span></span></span>
-            {{ with .Computer }}{{ with .Seen }}<span class="card-seen">{{ . }}</span>{{ end }}{{ end }}
             {{ with .None }}<span class="card-none">{{ . }}</span>{{ end }}
             {{ if .Computer }}
               {{ with .Computer.Lines }}
@@ -98,12 +98,13 @@
                         {{- with .Band }}<span class="band" style="left: {{ .Left }}%; width: {{ .Width }}%"></span><span class="norm" style="left: {{ .Norm }}%"></span>{{ end }}
                         {{- range .Ticks }}<span class="tick {{ .Class }}" style="left: {{ .Left }}%"></span>{{ end }}
                         {{- with .Dot }}<span class="dot{{ with .Class }} {{ . }}{{ end }}" style="left: {{ .Left }}%"></span>{{ end -}}
-                      </span>
+                      </span>{{ with .Said }}<span class="row-mark-word">{{ . }}</span>{{ end }}
                       <span class="line-values">{{ if .Empty }}—{{ end }}{{ range .Values }}<span class="value{{ if .Muted }} muted{{ end }}{{ with .Class }} {{ . }}{{ end }}{{ if .Marked }} marked{{ end }}"{{ with .Word }} title="{{ . }}"{{ end }}>{{ .Text }}</span>{{ end }}{{ with .Why }}<span class="line-why">{{ . }}</span>{{ end }}</span></li>
                   {{ end }}
                 </ul>
               {{ end }}
               {{ with .More }}<span class="card-more">{{ . }}</span>{{ end }}
+              <span class="card-seen{{ if .Computer.Late }} late{{ end }}">{{ .Computer.Seen }}</span>
             {{ else }}
             {{ with .Main }}
               <ul class="main{{ if eq (len .) 1 }} single{{ end }}">
