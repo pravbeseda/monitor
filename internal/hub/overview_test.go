@@ -412,6 +412,8 @@ func TestOverviewRows(t *testing.T) {
 		{"a service", []state.Subject{reading("gdrive-a", "gdrive.free_pct", map[string]string{}, 75), reading("gdrive-a", "gdrive.free_bytes", map[string]string{}, 8e10)}, "gdrive-a", []string{"gdrive.free_pct"}},
 		{"the first two the page charts", []state.Subject{plain("box-x", "uptime.boot_seconds", 9), plain("box-x", "queue.depth", 2), plain("box-x", "net.rx_bytes", 1)}, "box-x",
 			[]string{"net.rx_bytes", "queue.depth"}},
+		{"a gathered backup series needing attention", []state.Subject{jobAge("server-b", "a", 3600), ranked(reading("server-b", "backup.latest_archive_age_seconds", map[string]string{"backup": "a", "job": "create"}, 7200), 1)}, "server-b",
+			[]string{"backup.latest_archive_age_seconds backup=a job=create", "backup.success_age_seconds backup=a job=create"}},
 		{"a series needing attention that is a default", []state.Subject{judgedAt(plain("server-b", "load.avg_15m", 9), evaluate.Warning), freePct("server-b", "/", 40)}, "server-b",
 			[]string{"load.avg_15m", "disk.free_pct /"}},
 	}
