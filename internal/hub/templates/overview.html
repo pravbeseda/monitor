@@ -8,14 +8,14 @@
     section.section { margin-bottom: 2rem; }
     h2.section-heading { font-size: 1rem; font-weight: 600; margin: 0 0 0.8rem; padding-bottom: 0.4rem; border-bottom: 1px solid var(--rule); }
     .cards { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(100%, 20rem), 1fr)); gap: 1rem; }
-    section[data-section="overview.computers"] .cards, section[data-section="overview.sites"] .cards { grid-template-columns: repeat(auto-fill, minmax(min(100%, 17rem), 1fr)); }
+    section[data-section="overview.computers"] .cards { grid-template-columns: repeat(auto-fill, minmax(min(100%, 17rem), 1fr)); }
     a.card { --tone: var(--faint); display: flex; flex-direction: column; gap: 0.75rem; padding: 1rem 1.2rem 0.9rem; background: var(--grid); border: 1px solid var(--rule); border-left: 4px solid var(--tone); border-radius: 10px; color: var(--fg); text-decoration: none; }
     a.card:hover, a.card:focus-visible { border-color: var(--muted); border-left-color: var(--tone); }
-    a.card.state-ok { --tone: var(--accent); }
-    a.card.state-warning { --tone: var(--warn); }
-    a.card.state-critical, a.card.state-silent { --tone: var(--bad); }
-    a.card.state-unusual { --tone: var(--unusual); }
-    a.card.state-reporting { --tone: var(--muted); }
+    :is(a.card, tr.site).state-ok { --tone: var(--accent); }
+    :is(a.card, tr.site).state-warning { --tone: var(--warn); }
+    :is(a.card, tr.site).state-critical, :is(a.card, tr.site).state-silent { --tone: var(--bad); }
+    :is(a.card, tr.site).state-unusual { --tone: var(--unusual); }
+    :is(a.card, tr.site).state-reporting { --tone: var(--muted); }
     a.card.state-no-data { --tone: var(--rule); opacity: 0.8; }
     .card-top { display: flex; justify-content: space-between; align-items: center; gap: 0.6rem; }
     .card-name { flex: none; max-width: 100%; font-weight: 600; font-size: 1.05rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
@@ -65,12 +65,27 @@
     .value.muted:not([class*="level-"]) { color: var(--muted); }
     .line-why { display: block; font-size: 0.75rem; }
     .line-why:not([class*="level-"]) { color: var(--muted); }
-    .lead { display: flex; justify-content: space-between; align-items: baseline; gap: 0.6rem; }
-    .lead-values { font-size: 1.5rem; font-weight: 650; font-variant-numeric: tabular-nums; white-space: nowrap; }
-    .lead-name { min-width: 0; font-size: 0.8rem; color: var(--muted); text-align: right; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-    .lead + svg.spark { height: 2.4rem; margin-top: -0.3rem; }
-    .lead.empty .lead-values { color: var(--faint); }
-    .lead.faded .lead-name, .lead.faded .value:not(.marked), .lead.faded + svg.spark { opacity: 0.45; }
+    .sites-scroll { overflow-x: auto; }
+    table.sites { width: 100%; border-collapse: collapse; font-size: 0.9rem; font-variant-numeric: tabular-nums; }
+    table.sites th, table.sites td { padding: 0.45rem 0.6rem; text-align: right; white-space: nowrap; vertical-align: middle; border-bottom: 1px solid color-mix(in srgb, var(--rule) 60%, transparent); }
+    table.sites thead th { font-size: 0.8rem; font-weight: 500; color: var(--muted); border-bottom-color: var(--rule); }
+    table.sites thead th[aria-sort] { color: var(--fg); }
+    table.sites thead a { color: inherit; text-decoration: none; }
+    table.sites thead a:hover { color: var(--fg); }
+    table.sites .site-name { position: sticky; left: 0; z-index: 1; background: var(--bg); text-align: left; font-weight: 600; }
+    table.sites th[data-column="site"] { position: sticky; left: 0; z-index: 2; background: var(--bg); text-align: left; }
+    table.sites .site-name a { color: var(--fg); text-decoration: none; }
+    table.sites tbody tr:hover > * { background: var(--grid); }
+    tr.site { --tone: var(--faint); }
+    tr.site.state-no-data { --tone: var(--rule); }
+    .site-name .dot { display: inline-block; width: 0.55rem; height: 0.55rem; border-radius: 50%; margin-right: 0.5rem; background: var(--tone); }
+    td.day { width: 9rem; min-width: 7rem; }
+    td.day svg.spark { display: block; height: 1.4rem; }
+    td.cell.empty { color: var(--faint); }
+    td.cell.faded .value:not(.marked), td.cell.faded .line-why:not([class*="level-"]), td.cell.faded + td.day svg { opacity: 0.45; }
+    td.also { text-align: left; font-size: 0.8rem; }
+    .also-item + .also-item::before { content: "·"; color: var(--faint); margin: 0 0.4rem; }
+    td.also .card-more, td.also .card-seen { margin-left: 0.4rem; }
     li.line.empty .line-name, li.line.empty .line-values { color: var(--faint); }
     li.line.faded .line-name, li.line.faded .value:not(.marked), li.line.faded .line-why:not([class*="level-"]) { opacity: 0.45; }
   </style>
@@ -81,14 +96,30 @@
   {{ range .Sections }}
     <section class="section" data-section="{{ .Key }}">
       <h2 class="section-heading">{{ .Heading }}</h2>
+      {{ with .Sites }}
+      <div class="sites-scroll">
+        <table class="sites">
+          <thead><tr>{{ range .Headers }}<th scope="col" data-column="{{ .Column }}"{{ with .Sort }} aria-sort="{{ . }}"{{ end }}>{{ if .Link }}<a href="{{ .Link }}">{{ .Text }}{{ with .Arrow }} <span class="sort-mark" aria-hidden="true">{{ . }}</span>{{ end }}</a>{{ else }}{{ .Text }}{{ end }}</th>{{ end }}</tr></thead>
+          <tbody>
+            {{ range .Rows }}
+              <tr class="site state-{{ .Class }}" data-item="{{ .Name }}">
+                <th scope="row" class="site-name"><span class="dot" title="{{ .Word }}" aria-hidden="true"></span><span class="site-state row-mark-word">{{ .Word }}</span><a href="{{ .Link }}">{{ .Name }}</a></th>
+                {{ template "cell" .Requests }}
+                <td class="day">{{ with .Day }}{{ template "spark" . }}{{ end }}</td>
+                {{ range .Rest }}{{ template "cell" . }}{{ end }}
+                <td class="also">{{ range .Also }}<span class="also-item">{{ .Name }} {{ template "value" .Value }}</span>{{ end }}{{ with .More }}<span class="card-more">{{ . }}</span>{{ end }}{{ with .Seen }}<span class="card-seen late">{{ . }}</span>{{ end }}</td>
+              </tr>
+            {{ end }}
+          </tbody>
+        </table>
+      </div>
+      {{ else }}
       <div class="cards">
         {{ range .Cards }}
           <a class="card state-{{ .Class }}" href="{{ .Link }}" data-item="{{ .Name }}">
-            <span class="card-top"><span class="card-name">{{ .Name }}</span> <span class="card-flags">{{ with .Lined }}{{ with .Failed }}<span class="card-failed{{ with .Class }} {{ . }}{{ end }}"{{ with .Word }} title="{{ . }}"{{ end }}>{{ .Text }}</span>{{ end }}{{ end }}<span class="card-state">{{ .Word }}</span></span></span>
+            <span class="card-top"><span class="card-name">{{ .Name }}</span> <span class="card-flags">{{ with .Computer }}{{ with .Failed }}<span class="card-failed{{ with .Class }} {{ . }}{{ end }}"{{ with .Word }} title="{{ . }}"{{ end }}>{{ .Text }}</span>{{ end }}{{ end }}<span class="card-state">{{ .Word }}</span></span></span>
             {{ with .None }}<span class="card-none">{{ . }}</span>{{ end }}
-            {{ with .Lined }}
-              {{ with .Lead }}<div class="lead{{ if .Empty }} empty{{ end }}{{ if .Faded }} faded{{ end }}"{{ with .Title }} title="{{ . }}"{{ end }}><span class="lead-values">{{ template "values" . }}</span><span class="lead-name">{{ .Name }}{{ template "why" . }}</span></div>{{ end }}
-              {{ with .LeadLine }}{{ template "spark" . }}{{ end }}
+            {{ with .Computer }}
               {{ with .Lines }}
                 <ul class="lines">
                   {{ range . }}
@@ -98,9 +129,9 @@
                 </ul>
               {{ end }}
             {{ end }}
-            {{ if .Lined }}
+            {{ if .Computer }}
               {{ with .More }}<span class="card-more">{{ . }}</span>{{ end }}
-              {{ if .Lined.Seen }}<span class="card-seen{{ if .Lined.Late }} late{{ end }}">{{ .Lined.Seen }}</span>{{ end }}
+              {{ if .Computer.Seen }}<span class="card-seen{{ if .Computer.Late }} late{{ end }}">{{ .Computer.Seen }}</span>{{ end }}
             {{ else }}
             {{ with .Main }}
               <ul class="main{{ if eq (len .) 1 }} single{{ end }}">
@@ -122,6 +153,7 @@
           </a>
         {{ end }}
       </div>
+      {{ end }}
     </section>
   {{ end }}
 </body>
@@ -133,6 +165,8 @@
   {{- range .Lines }}<polyline points="{{ . }}"></polyline>{{ end }}
   {{- range .Dots }}<polyline class="point" points="{{ .X }},{{ .Y }} {{ .X }},{{ .Y }}"></polyline>{{ end -}}
 </svg>{{ end }}
-{{ define "values" }}{{ if .Empty }}—{{ end }}{{ range .Values }}<span class="value{{ if .Muted }} muted{{ end }}{{ with .Class }} {{ . }}{{ end }}{{ if .Marked }} marked{{ end }}"{{ with .Word }} title="{{ . }}"{{ end }}>{{ .Text }}</span>{{ end }}{{ end }}
+{{ define "values" }}{{ if .Empty }}—{{ end }}{{ range .Values }}{{ template "value" . }}{{ end }}{{ end }}
+{{ define "value" }}<span class="value{{ if .Muted }} muted{{ end }}{{ with .Class }} {{ . }}{{ end }}{{ if .Marked }} marked{{ end }}"{{ with .Word }} title="{{ . }}"{{ end }}>{{ .Text }}</span>{{ end }}
+{{ define "cell" }}<td class="cell{{ if .Empty }} empty{{ end }}{{ if .Faded }} faded{{ end }}" data-column="{{ .Key }}"{{ with .Title }} title="{{ . }}"{{ end }}>{{ template "values" . }}{{ template "why" . }}</td>{{ end }}
 {{ define "why" }}{{ if .Why }}<span class="line-why{{ with .WhyClass }} {{ . }}{{ end }}"{{ with .WhyHint }} title="{{ . }}"{{ end }}>{{ .Why }}{{ with .WhyHint }}<span class="row-mark-word"> {{ . }}</span>{{ end }}</span>{{ end }}{{ end }}
 {{ define "mark" }}{{ with . }} <span class="row-mark {{ .Class }}" title="{{ .Word }}"></span><span class="row-mark-word">{{ .Word }}</span> {{ end }}{{ end }}

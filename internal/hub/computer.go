@@ -13,9 +13,9 @@ import (
 	"github.com/pravbeseda/monitor/internal/state"
 )
 
-// A computer's card and a site's put each series where every other card of their section
-// puts it: fixed slots, each a name and its values, then what needs attention beyond them
-// (docs/specs/overview.md#computer-card and #site-card, ADR 0053, ADR 0055, ADR 0057).
+// A computer's card and a site's row of the sites table put each series where every other
+// of their section puts it: fixed slots, each its values, then what needs attention beyond
+// them (docs/specs/overview.md#computer-card and #site-table, ADR 0053, ADR 0055, ADR 0057).
 
 const (
 	failedUnits = "systemd.failed_units"
@@ -50,7 +50,8 @@ var computerSlots = []slot{
 	}, gathers: []string{"backup", "timemachine"}},
 }
 
-// siteSlots lead with the traffic, which a site's card draws as its lead.
+// siteSlots are the sites table's value columns, the traffic first, which the table draws
+// with its line of the day.
 var siteSlots = []slot{only("requests", "site.requests_per_min"), only("views", "site.pageviews_24h"),
 	only("errors", "site.server_error_pct"), only("latency", "site.response_p95_seconds")}
 
@@ -128,7 +129,7 @@ type linePlan struct {
 	loud    *lineSeries
 }
 
-// linedPlan is what a card of lines shows.
+// linedPlan is what a computer's card or a site's row shows.
 type linedPlan struct {
 	slots  []linePlan
 	extras []linePlan
@@ -273,16 +274,13 @@ func loudest(shown, gathered []state.Subject) (state.Subject, bool) {
 	return out, found
 }
 
-// linedView is a card of lines: a site's lead and the line of the day under it, then the
-// lines. Seen is when the item last reported, and Late says it stopped: silent, or holding no
-// fresh data.
-type linedView struct {
-	Failed   *valueView
-	Lead     *lineView
-	LeadLine *chart
-	Lines    []lineView
-	Seen     string
-	Late     bool
+// computerView is a computer's card. Seen, when it last reported, closes every one; Late says
+// it stopped: silent, or holding no fresh data.
+type computerView struct {
+	Failed *valueView
+	Lines  []lineView
+	Seen   string
+	Late   bool
 }
 
 type lineView struct {
@@ -376,9 +374,10 @@ func slotName(printer *i18n.Printer, plan linePlan) string {
 	return printer.T("overview." + plan.key)
 }
 
-// linedOf lays a card of lines out by its plan, and says how many extra lines it leaves out.
-func (it overviewItem) linedOf(printer *i18n.Printer, plan linedPlan) (*linedView, string) {
-	out := &linedView{
+// computerOf lays a computer's card out by its plan, and says how many extra lines it leaves
+// out.
+func (it overviewItem) computerOf(printer *i18n.Printer, plan linedPlan) (*computerView, string) {
+	out := &computerView{
 		Seen: it.lastReportText(printer),
 		Late: it.stopped(),
 	}

@@ -124,15 +124,13 @@ func overviewItems(current state.State, layout Layout) []overviewItem {
 	}
 	sort.SliceStable(out, func(i, j int) bool {
 		a, b := out[i], out[j]
-		switch first, second := strings.ToLower(a.name), strings.ToLower(b.name); {
+		switch {
 		case a.section != b.section:
 			return a.section < b.section
 		case a.red() != b.red():
 			return a.red()
-		case first != second:
-			return first < second
 		}
-		return a.name < b.name
+		return byName(a.name, b.name) < 0
 	})
 	return out
 }
@@ -352,6 +350,8 @@ type sectionView struct {
 	Key     string
 	Heading string
 	Cards   []cardView
+	// Sites lays the sites out as a table in place of cards (docs/specs/overview.md#site-table).
+	Sites *sitesView
 }
 
 type cardView struct {
@@ -366,9 +366,9 @@ type cardView struct {
 	More string
 	// Reason closes the card: why it holds its state (docs/specs/overview.md#card).
 	Reason string
-	// Lined lays a computer's or a site's card out in place of rows and a reason
-	// (docs/specs/overview.md#computer-card, #site-card).
-	Lined *linedView
+	// Computer lays a computer's card out in place of rows and a reason
+	// (docs/specs/overview.md#computer-card).
+	Computer *computerView
 }
 
 type cardRowView struct {
@@ -378,8 +378,8 @@ type cardRowView struct {
 	Line  *chart
 }
 
-// Overview renders the overview skin: a card per item, grouped by who collects it
-// (docs/specs/overview.md).
+// Overview renders the overview skin: a card per computer and service and a row per site,
+// grouped by who collects them (docs/specs/overview.md).
 func Overview(read StateReader, reader history.Reader, store ThresholdReader, layout Layout) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		values := r.URL.Query()
@@ -391,7 +391,7 @@ func Overview(read StateReader, reader history.Reader, store ThresholdReader, la
 			storageFailure(w, printer, err)
 			return
 		}
-		view, err := overviewOf(r.Context(), printer, reader, store, current, layout, lang)
+		view, err := overviewOf(r.Context(), printer, reader, store, current, layout, lang, siteSortOf(values.Get("sort")))
 		if err != nil {
 			storageFailure(w, printer, err)
 			return
@@ -403,7 +403,7 @@ func Overview(read StateReader, reader history.Reader, store ThresholdReader, la
 	})
 }
 
-func overviewOf(ctx context.Context, printer *i18n.Printer, reader history.Reader, store ThresholdReader, current state.State, layout Layout, lang string) (overviewView, error) {
+func overviewOf(ctx context.Context, printer *i18n.Printer, reader history.Reader, store ThresholdReader, current state.State, layout Layout, lang string, sorted siteSort) (overviewView, error) {
 	out := overviewView{shell: shellOf(printer, "overview.title", "overview", lang)}
 	found := overviewItems(current, layout)
 	if len(found) == 0 {
@@ -415,27 +415,38 @@ func overviewOf(ctx context.Context, printer *i18n.Printer, reader history.Reade
 		if n := len(out.Sections); n == 0 || out.Sections[n-1].section != it.section {
 			out.Sections = append(out.Sections, sectionView{section: it.section, counts: map[timeline.Cell]int{}, Key: sectionKeys[it.section].plural})
 		}
+		section := &out.Sections[len(out.Sections)-1]
+		section.counts[it.cell]++
+		if it.section == sectionSites {
+			if section.Sites == nil {
+				section.Sites = &sitesView{Headers: sitesHeaders(printer, sorted, lang)}
+			}
+			row, err := it.siteRowOf(ctx, printer, reader, store, attention, lang)
+			if err != nil {
+				return out, err
+			}
+			section.Sites.Rows = append(section.Sites.Rows, row)
+			continue
+		}
 		view := it.cardHead(printer, lang)
 		var err error
-		switch it.section {
-		case sectionComputers:
+		if it.section == sectionComputers {
 			var plan linedPlan
 			if plan, err = it.linedPlan(ctx, store, attention, computerSlots); err == nil {
-				view.Lined, view.More = it.linedOf(printer, plan)
+				view.Computer, view.More = it.computerOf(printer, plan)
 			}
-		case sectionSites:
-			view.Lined, view.More, err = it.siteOf(ctx, printer, reader, store, attention)
-		default:
+		} else {
 			err = cardOf(ctx, printer, reader, store, it, attention, &view)
 		}
 		if err != nil {
 			return out, err
 		}
-		section := &out.Sections[len(out.Sections)-1]
 		section.Cards = append(section.Cards, view)
-		section.counts[it.cell]++
 	}
 	for i := range out.Sections {
+		if sites := out.Sections[i].Sites; sites != nil {
+			sorted.sortRows(sites.Rows)
+		}
 		out.Sections[i].Heading = headingOf(printer, out.Sections[i])
 	}
 	return out, nil
@@ -444,7 +455,11 @@ func overviewOf(ctx context.Context, printer *i18n.Printer, reader history.Reade
 // headingOf is a section's name, how many items it holds, and how many are in each state
 // its heading counts.
 func headingOf(printer *i18n.Printer, section sectionView) string {
-	parts := []string{printer.T(section.Key), fmt.Sprint(len(section.Cards))}
+	total := 0
+	for _, count := range section.counts {
+		total += count
+	}
+	parts := []string{printer.T(section.Key), fmt.Sprint(total)}
 	for _, cell := range headingOrder {
 		if count := section.counts[cell]; count > 0 {
 			parts = append(parts, fmt.Sprintf("%d %s", count, printer.T(cellNames[cell].word)))
@@ -466,26 +481,6 @@ func (it overviewItem) cardHead(printer *i18n.Printer, lang string) cardView {
 		out.None = printer.T("overview.no_series")
 	}
 	return out
-}
-
-// siteOf lays a site's card out: its traffic as the lead with its line of the day, then its
-// lines, and when it last reported only once it stopped.
-func (it overviewItem) siteOf(ctx context.Context, printer *i18n.Printer, reader history.Reader, store ThresholdReader, attention []item) (*linedView, string, error) {
-	plan, err := it.linedPlan(ctx, store, attention, siteSlots)
-	if err != nil {
-		return nil, "", err
-	}
-	out, more := it.linedOf(printer, plan)
-	if !out.Late {
-		out.Seen = ""
-	}
-	if len(plan.slots) > 0 {
-		out.Lead, out.Lines = &out.Lines[0], out.Lines[1:]
-		if own := plan.slots[0].own; own != nil {
-			out.LeadLine, err = lineOf(ctx, printer, reader, *own, history.DefaultWindow, sparkFrame)
-		}
-	}
-	return out, more, err
 }
 
 // cardOf lays a service's card out by its rows, under its head.

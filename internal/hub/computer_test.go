@@ -464,8 +464,8 @@ func TestComputerCardLayout(t *testing.T) {
 	}
 }
 
-// spec: overview.md#computer-card — at the page's full width, four computer or site cards
-// stand in a row and three service cards.
+// spec: overview.md#computer-card — at the page's full width, four computer cards stand in a
+// row and three service cards.
 func TestComputerCardsFourInARow(t *testing.T) {
 	body := overviewUnder(t, stateOf(linux("server-b")...), limits{})
 	rem := func(pattern string) float64 {
@@ -483,9 +483,8 @@ func TestComputerCardsFourInARow(t *testing.T) {
 	page := rem(`body \{[^}]*max-width: ([0-9.]+)rem;`) - 2*rem(`body \{[^}]*padding: 0 ([0-9.]+)rem;`)
 	gap := rem(`\.cards \{[^}]*gap: ([0-9.]+)rem;`)
 	perRow := func(card float64) int { return int((page + gap) / (card + gap)) }
-	narrow := `section\[data-section="overview\.computers"\] \.cards, section\[data-section="overview\.sites"\] \.cards \{ grid-template-columns: repeat\(auto-fill, minmax\(min\(100%, ([0-9.]+)rem\), 1fr\)\);`
-	if got := perRow(rem(narrow)); got != 4 {
-		t.Errorf("%d computer and site cards in a row, want 4", got)
+	if got := perRow(rem(`section\[data-section="overview\.computers"\] \.cards \{ grid-template-columns: repeat\(auto-fill, minmax\(min\(100%, ([0-9.]+)rem\), 1fr\)\);`)); got != 4 {
+		t.Errorf("%d computer cards in a row, want 4", got)
 	}
 	if got := perRow(rem(`\.cards \{ display: grid; grid-template-columns: repeat\(auto-fill, minmax\(min\(100%, ([0-9.]+)rem\), 1fr\)\);`)); got != 3 {
 		t.Errorf("%d service cards in a row, want 3", got)
