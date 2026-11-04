@@ -50,6 +50,8 @@ type subjectJSON struct {
 
 type anomalyJSON struct {
 	Norm  float64  `json:"norm"`
+	Low   float64  `json:"low"`
+	High  float64  `json:"high"`
 	Score *float64 `json:"score"`
 	Rank  *int     `json:"rank"`
 }
@@ -156,7 +158,7 @@ func encodeState(current state.State) stateJSON {
 			one.Unit, one.Value, one.TS = &unit, subject.Value, &at
 		}
 		if found := subject.Anomaly; found != nil {
-			one.Anomaly = &anomalyJSON{Norm: found.Norm, Score: found.Score}
+			one.Anomaly = &anomalyJSON{Norm: found.Norm, Low: found.Low, High: found.High, Score: found.Score}
 			if found.Rank > 0 {
 				one.Anomaly.Rank = &found.Rank
 			}

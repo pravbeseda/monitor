@@ -302,3 +302,30 @@ func TestTheBandIsWhatTheSeriesReported(t *testing.T) {
 		})
 	}
 }
+
+// spec: anomaly.md#band — an answer carries the band beside its norm, whatever the value,
+// even where the side its score is measured by is wider than the band.
+func TestAnAnswerCarriesItsBand(t *testing.T) {
+	for _, tc := range []struct {
+		name            string
+		values          []float64
+		newest          float64
+		norm, low, high float64
+		score           *float64
+	}{
+		{"one to a hundred", upTo(100), 1000, 50, 1, 99, num(19.39)},
+		{"idle but for two samples", joined(repeat(0, 2014), []float64{0.5, 0.6}), 0.5, 0, 0, 0, num(0.83)},
+		{"only zeros", repeat(0, 100), 1, 0, 0, 0, nil},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			norm, _ := anomaly.NormOf(week(tc.values...))
+			got := norm.Judge(tc.newest, false)
+			if got.Norm != tc.norm || got.Low != tc.low || got.High != tc.high {
+				t.Fatalf("norm, low, high = %v, %v, %v; want %v, %v, %v", got.Norm, got.Low, got.High, tc.norm, tc.low, tc.high)
+			}
+			if (got.Score == nil) != (tc.score == nil) || (got.Score != nil && *got.Score != *tc.score) {
+				t.Fatalf("score = %v, want %v", got.Score, tc.score)
+			}
+		})
+	}
+}
