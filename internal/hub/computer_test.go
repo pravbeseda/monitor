@@ -662,7 +662,7 @@ func TestComputerCardGathersTheBackup(t *testing.T) {
 		if word := stateWord(t, body, "server-b"); word != "critical" {
 			t.Errorf("pill %q", word)
 		}
-		equal(t, "sections", flatten(sections(body)), []string{"Computers · 2 · 1 critical", "box-x", "server-b"})
+		equal(t, "sections", flatten(sections(body)), []string{"Computers · 2 · 1 critical", "server-b", "box-x"})
 	})
 	t.Run("a backup slot reading a dash gathers none", func(t *testing.T) {
 		body := show(t, limits{}, without(gathering("server-b"), "backup.success_age_seconds"), failedAt("job-a", evaluate.Critical))

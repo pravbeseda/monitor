@@ -369,7 +369,19 @@ func TestOverviewOrder(t *testing.T) {
 		freePct("server-d", "/", 40),
 		judgedAt(freePct("server-e", "/", 40), evaluate.OK),
 	)
-	equal(t, "cards", sections(body)[0][1:], []string{"laptop-a", "server-a", "server-b", "server-c", "server-d", "server-e"})
+	equal(t, "cards", sections(body)[0][1:], []string{"server-b", "server-c", "laptop-a", "server-a", "server-d", "server-e"})
+
+	t.Run("silent and critical are one run", func(t *testing.T) {
+		body := overview(t, freePct("server-b", "/", 40), silenceOf("server-b", evaluate.Critical), judgedAt(freePct("server-a", "/", 1), evaluate.Critical))
+		equal(t, "cards", sections(body)[0][1:], []string{"server-a", "server-b"})
+		body = overview(t, freePct("server-a", "/", 40), silenceOf("server-a", evaluate.Critical), judgedAt(freePct("server-b", "/", 1), evaluate.Critical))
+		equal(t, "cards", sections(body)[0][1:], []string{"server-a", "server-b"})
+	})
+	t.Run("warning and unusual by name", func(t *testing.T) {
+		body := overview(t, judgedAt(freePct("server-a", "/", 40), evaluate.OK), judgedAt(freePct("server-b", "/", 9), evaluate.Warning),
+			ranked(freePct("server-c", "/", 40), 1), judgedAt(freePct("server-d", "/", 40), evaluate.OK))
+		equal(t, "cards", sections(body)[0][1:], []string{"server-a", "server-b", "server-c", "server-d"})
+	})
 
 	for _, tc := range []struct {
 		name  string
@@ -395,14 +407,20 @@ func TestOverviewOrder(t *testing.T) {
 		equal(t, "sections", flatten(sections(body)), []string{"Computers · 1", "server-b", "Sites · 1", "blog-a"})
 	})
 	t.Run("sites", func(t *testing.T) {
-		body := overview(t, judgedAt(siteOf("shop-c", "site.requests_per_min", 9), evaluate.Critical), siteOf("blog-a", "site.requests_per_min", 4))
+		body := overview(t, judgedAt(siteOf("shop-c", "site.requests_per_min", 9), evaluate.OK), siteOf("blog-a", "site.requests_per_min", 4))
 		equal(t, "cards", sections(body)[0][1:], []string{"blog-a", "shop-c"})
+		body = overview(t, judgedAt(siteOf("shop-c", "site.requests_per_min", 9), evaluate.Critical), siteOf("blog-a", "site.requests_per_min", 4))
+		equal(t, "cards", sections(body)[0][1:], []string{"shop-c", "blog-a"})
 	})
-	t.Run("a card keeps its place as its state changes", func(t *testing.T) {
-		for _, level := range []evaluate.Level{evaluate.OK, evaluate.Critical} {
-			body := overview(t, judgedAt(freePct("server-b", "/", 40), evaluate.OK), judgedAt(freePct("server-c", "/", 1), level))
+	t.Run("a card keeps its place as it turns unusual or warning", func(t *testing.T) {
+		for _, turned := range []state.Subject{ranked(freePct("server-c", "/", 1), 1), judgedAt(freePct("server-c", "/", 1), evaluate.Warning)} {
+			body := overview(t, judgedAt(freePct("server-b", "/", 40), evaluate.OK), turned)
 			equal(t, "cards", sections(body)[0][1:], []string{"server-b", "server-c"})
 		}
+	})
+	t.Run("a card turning critical moves to the red run", func(t *testing.T) {
+		body := overview(t, judgedAt(freePct("server-b", "/", 40), evaluate.OK), judgedAt(freePct("server-c", "/", 1), evaluate.Critical))
+		equal(t, "cards", sections(body)[0][1:], []string{"server-c", "server-b"})
 	})
 }
 

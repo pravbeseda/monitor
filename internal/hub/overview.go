@@ -90,8 +90,8 @@ type overviewItem struct {
 	names names.Book
 }
 
-// overviewItems are the items the state holds, by section and then by name, whatever their
-// state, so a card keeps its place (ADR 0056).
+// overviewItems are the items the state holds, by section, the red ones first, and then by
+// name, so a card keeps its place as it turns unusual or warning (ADR 0056).
 func overviewItems(current state.State, layout Layout) []overviewItem {
 	silent := silentNodes(current)
 	byNode := map[string][]state.Subject{}
@@ -127,12 +127,19 @@ func overviewItems(current state.State, layout Layout) []overviewItem {
 		switch first, second := strings.ToLower(a.name), strings.ToLower(b.name); {
 		case a.section != b.section:
 			return a.section < b.section
+		case a.red() != b.red():
+			return a.red()
 		case first != second:
 			return first < second
 		}
 		return a.name < b.name
 	})
 	return out
+}
+
+// red is a card in the bad colour: critical or silent.
+func (it overviewItem) red() bool {
+	return it.cell == timeline.Critical || it.cell == timeline.Silent
 }
 
 // siteItems split the sites node into its sites: each the file lists, holding a series.
