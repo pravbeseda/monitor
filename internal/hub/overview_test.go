@@ -235,18 +235,37 @@ func removable(s state.Subject) state.Subject {
 	return s
 }
 
+// onService is the state with node's series and node record moved to the service gdrive-a.
+func onService(current state.State, node string) state.State {
+	current.Subjects = slices.Clone(current.Subjects)
+	for i := range current.Subjects {
+		if current.Subjects[i].Node == node {
+			current.Subjects[i].Node = "gdrive-a"
+		}
+	}
+	current.Nodes = slices.Clone(current.Nodes)
+	for i := range current.Nodes {
+		if current.Nodes[i].Node == node {
+			current.Nodes[i].Node = "gdrive-a"
+		}
+	}
+	return current
+}
+
 func neverReported(current state.State, node string) state.State {
 	current.Nodes = append(current.Nodes, state.Node{Node: node, Configured: true, LastSeen: lastSeen})
 	return current
 }
 
-// itemRows are an item's rows as its page lists them: a computer's card shows lines instead,
-// and a site is a row of the sites table.
+// itemRows are an item's rows as a site's or a service's page lists them: a computer's
+// series are listed as the service gdrive-a's would be, its own page showing tiles instead.
 func itemRows(t *testing.T, current state.State, item string) []string {
 	t.Helper()
 	target := "/item?node=" + item
 	if _, site := hosts[item]; site {
 		target = "/item?node=sites&label.site=" + item
+	} else if classes[item] != "service" {
+		current, target = onService(current, item), "/item?node=gdrive-a"
 	}
 	return captured(numberPattern, itemPage(t, current, held{}, logbook{}, target))
 }

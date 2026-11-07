@@ -2,7 +2,9 @@ package hub
 
 import (
 	"maps"
+	"math"
 	"slices"
+	"strconv"
 	"time"
 
 	"github.com/pravbeseda/monitor/internal/i18n"
@@ -36,6 +38,8 @@ type figureView struct {
 	History string
 	Class   string
 	Hint    string
+	// Title names the figure's series on hover and to a screen reader, its Hint after.
+	Title string
 }
 
 // figureOf is a series of a panel shown as text, marked as a card's row would be.
@@ -145,6 +149,9 @@ func columnsOf(series []panelSeries, known map[string]bool) []column {
 	}
 	return out
 }
+
+// whole is a count: rounded half away from zero, not grouped.
+func whole(value float64) string { return strconv.FormatFloat(math.Round(value), 'f', 0, 64) }
 
 // formatting reads a value of metric as /debug formats it.
 func formatting(metric string) func(*i18n.Printer, float64) string {

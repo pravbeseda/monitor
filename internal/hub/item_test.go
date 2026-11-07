@@ -129,9 +129,11 @@ func ext4(mount string) map[string]string {
 
 // spec: overview.md#item-page
 func TestItemPage(t *testing.T) {
-	current := stateOf(judgedAt(freePct("server-b", "/", 9), evaluate.Warning), plain("server-b", "load.avg_15m", 1))
-	body := itemPage(t, current, held{}, logbook{}, "/item?node=server-b")
-	containsAll(t, "page", body, `<h1 class="item-name">server-b</h1>`, "Computer", "warning", "last report")
+	containsAll(t, "a computer's head", itemPage(t, stateOf(judgedAt(freePct("server-b", "/", 9), evaluate.Warning)), held{}, logbook{}, "/item?node=server-b"),
+		`<h1 class="item-name">server-b</h1>`, "Computer", "warning", "last report")
+	current := stateOf(judgedAt(freePct("gdrive-a", "/", 9), evaluate.Warning), plain("gdrive-a", "load.avg_15m", 1))
+	body := itemPage(t, current, held{}, logbook{}, "/item?node=gdrive-a")
+	containsAll(t, "page", body, `<h1 class="item-name">gdrive-a</h1>`, "Service", "warning", "last report")
 	if !strings.Contains(body, `data-skin="overview"`) || strings.Contains(body, `" aria-current="page">`) {
 		t.Errorf("the tabs are missing or one is marked")
 	}
@@ -143,7 +145,7 @@ func TestItemPage(t *testing.T) {
 	if strings.Contains(body, `class="spark"`) {
 		t.Errorf("the numbers carry lines")
 	}
-	inOrder(t, itemPage(t, grouped(stateOf(append(mirror(), freePct("server-b", "/", 40))...), byBackup), held{}, logbook{}, "/item?node=server-b"),
+	inOrder(t, itemPage(t, onService(grouped(stateOf(append(mirror(), freePct("server-b", "/", 40))...), byBackup), "server-b"), held{}, logbook{}, "/item?node=gdrive-a"),
 		`<ul class="numbers">`, `<article class="group`, `<figure class="chart"`)
 
 	t.Run("a site", func(t *testing.T) {
@@ -160,23 +162,23 @@ func TestItemPage(t *testing.T) {
 
 	t.Run("windows", func(t *testing.T) {
 		for target, want := range map[string]string{
-			"/item?node=server-b": "24h", "/item?node=server-b&window=7d": "7d",
-			"/item?node=server-b&window=168h": "7d", "/item?node=server-b&window=12h": "",
+			"/item?node=gdrive-a": "24h", "/item?node=gdrive-a&window=7d": "7d",
+			"/item?node=gdrive-a&window=168h": "7d", "/item?node=gdrive-a&window=12h": "",
 		} {
 			if got := marked(itemPage(t, current, held{}, logbook{}, target)); got != want {
 				t.Errorf("%s marks %q, want %q", target, got, want)
 			}
 		}
-		body := itemPage(t, current, held{}, logbook{}, "/item?node=server-b&lang=ru")
-		containsAll(t, "links", body, `href="/item?lang=ru&amp;node=server-b&amp;window=30d"`)
+		body := itemPage(t, current, held{}, logbook{}, "/item?node=gdrive-a&lang=ru")
+		containsAll(t, "links", body, `href="/item?lang=ru&amp;node=gdrive-a&amp;window=30d"`)
 	})
 
 	t.Run("families and their order", func(t *testing.T) {
 		body := itemPage(t, stateOf(
-			plain("server-b", "uptime.boot_seconds", 9), plain("server-b", "memory.available_pct", 50),
-			plain("server-b", "load.avg_5m", 1), plain("server-b", "load.avg_15m", 1), plain("server-b", "load.avg_1m", 1),
-			free("server-b", "/b", 9e9), freePct("server-b", "/b", 9), free("server-b", "/a", 9e9), freePct("server-b", "/a", 9),
-		), held{}, logbook{}, "/item?node=server-b")
+			plain("gdrive-a", "uptime.boot_seconds", 9), plain("gdrive-a", "memory.available_pct", 50),
+			plain("gdrive-a", "load.avg_5m", 1), plain("gdrive-a", "load.avg_15m", 1), plain("gdrive-a", "load.avg_1m", 1),
+			free("gdrive-a", "/b", 9e9), freePct("gdrive-a", "/b", 9), free("gdrive-a", "/a", 9e9), freePct("gdrive-a", "/a", 9),
+		), held{}, logbook{}, "/item?node=gdrive-a")
 		equal(t, "families", families(body), []string{"disk", "load", "memory", "uptime"})
 		got := charts(body)
 		equal(t, "charts", got[:7], []string{
@@ -188,8 +190,8 @@ func TestItemPage(t *testing.T) {
 	// spec: metric-names.md#where — charts, numbers and family headings say the declared
 	// names; a metric nobody named keeps its id.
 	t.Run("declared names", func(t *testing.T) {
-		body := itemPage(t, named(stateOf(freePct("server-b", "/srv", 40), plain("server-b", "load.avg_15m", 1), plain("server-b", "uptime.boot_seconds", 9))),
-			held{}, logbook{}, "/item?node=server-b&lang=ru")
+		body := itemPage(t, named(stateOf(freePct("gdrive-a", "/srv", 40), plain("gdrive-a", "load.avg_15m", 1), plain("gdrive-a", "uptime.boot_seconds", 9))),
+			held{}, logbook{}, "/item?node=gdrive-a&lang=ru")
 		equal(t, "families", families(body), []string{"Диск", "Нагрузка", "uptime"})
 		equal(t, "charts", charts(body), []string{"Свободно /srv · ext4", "Нагрузка 15 мин", "uptime.boot_seconds"})
 	})
@@ -197,23 +199,23 @@ func TestItemPage(t *testing.T) {
 	t.Run("sixty series", func(t *testing.T) {
 		var subjects []state.Subject
 		for i := range 60 {
-			subjects = append(subjects, reading("box-x", "queue.depth", map[string]string{"queue": "q" + strconv.Itoa(100+i)}, 1))
+			subjects = append(subjects, reading("gdrive-a", "queue.depth", map[string]string{"queue": "q" + strconv.Itoa(100+i)}, 1))
 		}
-		if got := charts(itemPage(t, stateOf(subjects...), held{}, logbook{}, "/item?node=box-x")); len(got) != 60 {
+		if got := charts(itemPage(t, stateOf(subjects...), held{}, logbook{}, "/item?node=gdrive-a")); len(got) != 60 {
 			t.Errorf("charts = %d, want 60", len(got))
 		}
 	})
 
 	t.Run("a stale removable volume", func(t *testing.T) {
-		body := itemPage(t, stateOf(staled(removable(freePct("server-b", "/usb", 3))), freePct("server-b", "/", 40)), held{}, logbook{}, "/item?node=server-b")
+		body := itemPage(t, stateOf(staled(removable(freePct("gdrive-a", "/usb", 3))), freePct("gdrive-a", "/", 40)), held{}, logbook{}, "/item?node=gdrive-a")
 		equal(t, "charts", charts(body), []string{"disk.free_pct / · ext4"})
 	})
 }
 
 // spec: overview.md#item-page
 func TestItemCharts(t *testing.T) {
-	root := storage.SeriesRef{Node: "server-b", Metric: "disk.free_bytes", Labels: ext4("/")}
-	load := storage.SeriesRef{Node: "server-b", Metric: "load.avg_15m", Labels: map[string]string{}}
+	root := storage.SeriesRef{Node: "gdrive-a", Metric: "disk.free_bytes", Labels: ext4("/")}
+	load := storage.SeriesRef{Node: "gdrive-a", Metric: "load.avg_15m", Labels: map[string]string{}}
 	ten, five, four := 10e9, 5e9, 4.0
 	points := held{
 		heldKey(root): {{TS: lastSeen.Add(-time.Hour), Value: 20e9}, {TS: lastSeen.Add(-55 * time.Minute), Value: 19e9}},
@@ -223,8 +225,8 @@ func TestItemCharts(t *testing.T) {
 		heldKey(root): {Series: root, Direction: storage.Below, Warning: &ten, Critical: &five},
 		heldKey(load): {Series: load, Direction: storage.Above, Warning: &four},
 	}}
-	current := stateOf(judgedAt(free("server-b", "/", 19e9), evaluate.OK), judgedAt(plain("server-b", "load.avg_15m", 0.6), evaluate.OK))
-	body := itemPage(t, current, points, book, "/item?node=server-b")
+	current := stateOf(judgedAt(free("gdrive-a", "/", 19e9), evaluate.OK), judgedAt(plain("gdrive-a", "load.avg_15m", 0.6), evaluate.OK))
+	body := itemPage(t, current, points, book, "/item?node=gdrive-a")
 
 	disk := chartOf(t, body, "disk.free_bytes / · ext4")
 	lines := levelLineY.FindAllStringSubmatch(disk, -1)
@@ -235,7 +237,7 @@ func TestItemCharts(t *testing.T) {
 		t.Errorf("10 GB at y %s should sit above 5 GB at y %s, inside the plot from %v", lines[0][2], lines[1][2], plot)
 	}
 	containsAll(t, "disk chart", disk, ">warning<", ">critical<",
-		`href="/history?label.fs=ext4&amp;label.mount=%2F&amp;label.removable=false&amp;metric=disk.free_bytes&amp;node=server-b&amp;window=24h"`,
+		`href="/history?label.fs=ext4&amp;label.mount=%2F&amp;label.removable=false&amp;metric=disk.free_bytes&amp;node=gdrive-a&amp;window=24h"`,
 		`href="/thresholds?`)
 
 	cpu := chartOf(t, body, "load.avg_15m")
@@ -250,33 +252,33 @@ func TestItemCharts(t *testing.T) {
 
 	t.Run("an unwatched series and an unreadable threshold", func(t *testing.T) {
 		odd := logbook{thresholds: map[string]storage.Threshold{heldKey(load): {Series: load, Direction: "sideways", Warning: &four}}}
-		body := itemPage(t, stateOf(free("server-b", "/", 19e9), plain("server-b", "load.avg_15m", 0.6)), points, odd, "/item?node=server-b")
+		body := itemPage(t, stateOf(free("gdrive-a", "/", 19e9), plain("gdrive-a", "load.avg_15m", 0.6)), points, odd, "/item?node=gdrive-a")
 		if strings.Contains(body, `class="threshold`) {
 			t.Errorf("a threshold line without a readable threshold")
 		}
 	})
 
 	t.Run("unusual, stale and empty", func(t *testing.T) {
-		body := itemPage(t, stateOf(ranked(free("server-b", "/", 19e9), 1), staled(plain("server-b", "load.avg_15m", 0.6)), plain("server-b", "memory.available_pct", 50)),
-			points, logbook{}, "/item?node=server-b")
+		body := itemPage(t, stateOf(ranked(free("gdrive-a", "/", 19e9), 1), staled(plain("gdrive-a", "load.avg_15m", 0.6)), plain("gdrive-a", "memory.available_pct", 50)),
+			points, logbook{}, "/item?node=gdrive-a")
 		containsAll(t, "unusual", chartOf(t, body, "disk.free_bytes / · ext4"), "usually 40.0 GB")
 		containsAll(t, "stale", chartOf(t, body, "load.avg_15m"), "no fresh data")
 		containsAll(t, "empty", chartOf(t, body, "memory.available_pct"), "No data for this window")
 	})
 
 	t.Run("in Russian", func(t *testing.T) {
-		body := itemPage(t, current, points, book, "/item?node=server-b&lang=ru")
-		containsAll(t, "page", body, "Компьютер", "последний отчёт")
+		body := itemPage(t, current, points, book, "/item?node=gdrive-a&lang=ru")
+		containsAll(t, "page", body, "Сервис", "последний отчёт")
 	})
 
 	t.Run("the state cannot be read", func(t *testing.T) {
 		rec := httptest.NewRecorder()
 		read := func(context.Context) (state.State, error) { return state.State{}, errFailed }
-		hub.Item(read, historyOf(held{}), logbook{}, layout(), untargeted).ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/item?node=server-b", nil))
+		hub.Item(read, historyOf(held{}), logbook{}, layout(), untargeted).ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/item?node=gdrive-a", nil))
 		if rec.Code != http.StatusInternalServerError {
 			t.Errorf("status = %d", rec.Code)
 		}
-		code, _ := showItem(t, current, points, logbook{err: errFailed}, http.MethodGet, "/item?node=server-b")
+		code, _ := showItem(t, current, points, logbook{err: errFailed}, http.MethodGet, "/item?node=gdrive-a")
 		if code != http.StatusInternalServerError {
 			t.Errorf("a failing log answers %d", code)
 		}
@@ -409,13 +411,13 @@ func (b broken) Points(context.Context, storage.SeriesRef, time.Time, time.Time)
 
 // spec: overview.md#item-page
 func TestItemPageMore(t *testing.T) {
-	root := storage.SeriesRef{Node: "server-b", Metric: "disk.free_bytes", Labels: ext4("/")}
+	root := storage.SeriesRef{Node: "gdrive-a", Metric: "disk.free_bytes", Labels: ext4("/")}
 	old := held{heldKey(root): {{TS: lastSeen.Add(-72 * time.Hour), Value: 20e9}, {TS: lastSeen.Add(-72*time.Hour + 5*time.Minute), Value: 19e9}}}
-	current := stateOf(staled(judgedAt(free("server-b", "/", 19e9), evaluate.OK)))
+	current := stateOf(staled(judgedAt(free("gdrive-a", "/", 19e9), evaluate.OK)))
 
 	t.Run("the window reaches the charts", func(t *testing.T) {
 		for target, drawn := range map[string]bool{
-			"/item?node=server-b&window=7d": true, "/item?node=server-b": false, "/item?node=server-b&window=12h": false,
+			"/item?node=gdrive-a&window=7d": true, "/item?node=gdrive-a": false, "/item?node=gdrive-a&window=12h": false,
 		} {
 			chart := chartOf(t, itemPage(t, current, old, logbook{}, target), "disk.free_bytes / · ext4")
 			if strings.Contains(chart, "<svg") != drawn || strings.Contains(chart, "No data for this window") == drawn {
@@ -425,14 +427,14 @@ func TestItemPageMore(t *testing.T) {
 	})
 
 	t.Run("a stale series is still drawn, its links carry the language", func(t *testing.T) {
-		chart := chartOf(t, itemPage(t, current, old, logbook{}, "/item?node=server-b&window=7d&lang=ru"), "disk.free_bytes / · ext4")
+		chart := chartOf(t, itemPage(t, current, old, logbook{}, "/item?node=gdrive-a&window=7d&lang=ru"), "disk.free_bytes / · ext4")
 		containsAll(t, "chart", chart, "<svg", "нет свежих данных", "lang=ru&amp;metric=disk.free_bytes", "window=7d", "/thresholds?")
 	})
 
 	t.Run("the page keeps itself current; a refusal does not", func(t *testing.T) {
 		live := `<meta name="monitor-live"`
-		containsAll(t, "page", itemPage(t, current, old, logbook{}, "/item?node=server-b"), live)
-		for _, target := range []string{"/item?node=server-b&x=1", "/item?node=server-z"} {
+		containsAll(t, "page", itemPage(t, current, old, logbook{}, "/item?node=gdrive-a"), live)
+		for _, target := range []string{"/item?node=gdrive-a&x=1", "/item?node=server-z"} {
 			if _, body := showItem(t, current, old, logbook{}, http.MethodGet, target); strings.Contains(body, live) {
 				t.Errorf("%s refreshes itself", target)
 			}
@@ -446,13 +448,13 @@ func TestItemPageMore(t *testing.T) {
 	})
 
 	t.Run("an item whose only series are unplugged volumes", func(t *testing.T) {
-		only := stateOf(staled(removable(freePct("server-b", "/usb", 3))))
-		containsAll(t, "page", itemPage(t, only, held{}, logbook{}, "/item?node=server-b"), "No series yet")
-		containsAll(t, "card", card(t, showOverview(t, only, held{}, "/overview"), "server-b"), "No series yet")
+		only := stateOf(staled(removable(freePct("gdrive-a", "/usb", 3))))
+		containsAll(t, "page", itemPage(t, only, held{}, logbook{}, "/item?node=gdrive-a"), "No series yet")
+		containsAll(t, "card", card(t, showOverview(t, only, held{}, "/overview"), "gdrive-a"), "No series yet")
 	})
 
 	t.Run("a family without a dot is its own", func(t *testing.T) {
-		body := itemPage(t, stateOf(plain("server-b", "disk", 1), freePct("server-b", "/", 40)), held{}, logbook{}, "/item?node=server-b")
+		body := itemPage(t, stateOf(plain("gdrive-a", "disk", 1), freePct("gdrive-a", "/", 40)), held{}, logbook{}, "/item?node=gdrive-a")
 		equal(t, "families", families(body), []string{"disk", "disk"})
 	})
 
@@ -464,13 +466,13 @@ func TestItemPageMore(t *testing.T) {
 	})
 
 	t.Run("the points or the log cannot be read", func(t *testing.T) {
-		if code, _ := showItem(t, current, held{}, logbook{logErr: errFailed}, http.MethodGet, "/item?node=server-b"); code != http.StatusInternalServerError {
+		if code, _ := showItem(t, current, held{}, logbook{logErr: errFailed}, http.MethodGet, "/item?node=gdrive-a"); code != http.StatusInternalServerError {
 			t.Errorf("a failing log answers %d", code)
 		}
 		recent := broken{held{heldKey(root): {{TS: lastSeen.Add(-time.Hour), Value: 20e9}}}}
 		rec := httptest.NewRecorder()
 		read := func(context.Context) (state.State, error) { return current, nil }
-		hub.Item(read, historyOf(recent), logbook{}, layout(), untargeted).ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/item?node=server-b", nil))
+		hub.Item(read, historyOf(recent), logbook{}, layout(), untargeted).ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/item?node=gdrive-a", nil))
 		if rec.Code != http.StatusInternalServerError {
 			t.Errorf("failing points answer %d on the item's page", rec.Code)
 		}
@@ -501,11 +503,11 @@ func TestOverviewRoutes(t *testing.T) {
 
 // spec: overview.md#item-page — a value below zero has no place on an axis from zero.
 func TestItemNegativeThreshold(t *testing.T) {
-	temp := storage.SeriesRef{Node: "box-x", Metric: "temp.celsius", Labels: map[string]string{}}
+	temp := storage.SeriesRef{Node: "gdrive-a", Metric: "temp.celsius", Labels: map[string]string{}}
 	minus := -5.0
 	points := held{heldKey(temp): {{TS: lastSeen.Add(-time.Hour), Value: 3}, {TS: lastSeen.Add(-55 * time.Minute), Value: 4}}}
 	book := logbook{thresholds: map[string]storage.Threshold{heldKey(temp): {Series: temp, Direction: storage.Below, Warning: &minus}}}
-	body := itemPage(t, stateOf(plain("box-x", "temp.celsius", 4)), points, book, "/item?node=box-x")
+	body := itemPage(t, stateOf(plain("gdrive-a", "temp.celsius", 4)), points, book, "/item?node=gdrive-a")
 	if strings.Contains(chartOf(t, body, "temp.celsius"), `class="threshold`) {
 		t.Errorf("a line drawn for a value below zero")
 	}

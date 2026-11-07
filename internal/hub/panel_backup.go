@@ -2,9 +2,7 @@ package hub
 
 import (
 	"fmt"
-	"math"
 	"slices"
-	"strconv"
 	"strings"
 
 	"github.com/pravbeseda/monitor/internal/i18n"
@@ -20,9 +18,7 @@ const failedMetric = "backup.failed"
 var backupColumns = []column{
 	{"backup.success_age_seconds", formatting("backup.success_age_seconds")},
 	{"backup.latest_archive_age_seconds", formatting("backup.latest_archive_age_seconds")},
-	{"backup.archives", func(_ *i18n.Printer, value float64) string {
-		return strconv.FormatFloat(math.Round(value), 'f', 0, 64)
-	}},
+	{"backup.archives", func(_ *i18n.Printer, value float64) string { return whole(value) }},
 	{"backup.stored_bytes", formatting("backup.stored_bytes")},
 	{"backup.latest_archive_original_bytes", formatting("backup.latest_archive_original_bytes")},
 }

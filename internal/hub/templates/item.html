@@ -5,6 +5,7 @@
   <style>
     body { font-family: system-ui, sans-serif; margin: 2rem auto; max-width: 76rem; padding: 0 1rem; }
     {{- template "changes-style" }}
+    {{- template "spark-style" }}
     h1.item-name { font-size: 1.5rem; margin: 0 0 0.2rem; }
     p.item-meta { color: var(--muted); margin: 0 0 1rem; font-size: 0.9rem; }
     span.item-state.state-ok { color: var(--accent); }
@@ -41,11 +42,12 @@
     text.level-warning { fill: var(--warn); }
     text.level-critical { fill: var(--bad); }
     .groups { display: flex; flex-wrap: wrap; gap: 0.8rem; margin-bottom: 0.8rem; }
-    article.group { flex: 1 1 auto; min-width: min(100%, 24rem); box-sizing: border-box; background: var(--grid); border: 1px solid var(--rule); border-left: 4px solid var(--faint); border-radius: 8px; padding: 0.6rem 0.8rem; }
-    article.group.state-ok { border-left-color: var(--accent); }
-    article.group.state-warning { border-left-color: var(--warn); }
-    article.group.state-critical { border-left-color: var(--bad); }
-    article.group.state-unusual { border-left-color: var(--unusual); }
+    :is(article.group, li.tile) { box-sizing: border-box; background: var(--grid); border: 1px solid var(--rule); border-left: 4px solid var(--faint); border-radius: 8px; }
+    :is(article.group, li.tile).state-ok { border-left-color: var(--accent); }
+    :is(article.group, li.tile).state-warning { border-left-color: var(--warn); }
+    :is(article.group, li.tile).state-critical { border-left-color: var(--bad); }
+    :is(article.group, li.tile).state-unusual { border-left-color: var(--unusual); }
+    article.group { flex: 0 1 auto; max-width: 100%; min-width: min(100%, 24rem); padding: 0.6rem 0.8rem; }
     .group-head { display: flex; justify-content: space-between; gap: 0.6rem; align-items: baseline; margin-bottom: 0.4rem; }
     .group-title { font-weight: 600; overflow-wrap: anywhere; }
     .group-head .item-state { font-size: 0.8rem; }
@@ -64,6 +66,22 @@
     table.group-table thead th { color: var(--muted); font-weight: 500; font-size: 0.72rem; white-space: normal; vertical-align: bottom; border-bottom: 1px solid var(--rule); }
     table.group-table tbody th { font-weight: 600; }
     table.group-table tbody tr + tr > * { border-top: 1px solid var(--rule); }
+    ul.tiles { list-style: none; padding: 0; margin: 0 0 1.4rem; display: grid; grid-template-columns: repeat(auto-fill, minmax(15rem, 1fr)); gap: 0.7rem; }
+    @media (max-width: 40rem) { ul.tiles { grid-template-columns: minmax(0, 1fr); } }
+    li.tile { min-width: 0; padding: 0.55rem 0.75rem; display: flex; flex-direction: column; gap: 0.3rem; }
+    .tile-head { font-size: 0.78rem; color: var(--muted); overflow-wrap: anywhere; }
+    .tile-more { color: var(--muted); font-size: 0.85rem; font-variant-numeric: tabular-nums; }
+    .tile-values { font-size: 1.3rem; font-variant-numeric: tabular-nums; line-height: 1.2; }
+    .tile-usual { color: var(--muted); font-size: 0.75rem; }
+    svg.bar { display: block; width: 100%; height: 0.6rem; overflow: visible; }
+    svg.bar .bar-track { fill: var(--rule); }
+    svg.bar .bar-fill { fill: var(--link); }
+    svg.bar .bar-fill.level-warning { fill: var(--warn); }
+    svg.bar .bar-fill.level-critical { fill: var(--bad); }
+    svg.bar .bar-tick.level-warning { stroke: var(--warn); }
+    svg.bar .bar-tick.level-critical { stroke: var(--bad); }
+    svg.bar .bar-tick { stroke-width: 2; vector-effect: non-scaling-stroke; }
+    li.tile svg.spark { height: 2.2rem; }
     section.panel { background: var(--grid); border: 1px solid var(--rule); border-radius: 10px; padding: 1rem; }
     section.panel h2 { font-size: 0.8rem; text-transform: uppercase; letter-spacing: 0.06em; color: var(--muted); font-weight: 600; margin: 0 0 0.8rem; }
   </style>
@@ -84,6 +102,11 @@
     <div class="columns">
       <div>
         {{ with .None }}<p class="quiet">{{ . }}</p>{{ end }}
+        {{ with .Tiles }}
+          <ul class="tiles">
+            {{ range . }}{{ template "tile" . }}{{ end }}
+          </ul>
+        {{ end }}
         {{ range .Families }}{{ if .Panels }}
           <section class="family">
             <h2 class="family-heading">{{ .Name }}</h2>
@@ -92,11 +115,13 @@
             </div>
           </section>
         {{ end }}{{ end }}
+        {{ if .Windows }}
         <nav class="windows">
           {{ .WindowLabel }}:
           {{ range .Windows }}{{ if .Current }}<strong class="window">{{ .Label }}</strong>{{ else }}<a href="{{ .URL }}">{{ .Label }}</a>{{ end }} {{ end }}
           <span class="zone">{{ .Zone }}</span>
         </nav>
+        {{ end }}
         {{ range .Families }}{{ if .Charts }}
           <section class="family">
             <h2 class="family-heading">{{ .Name }}</h2>
@@ -142,4 +167,13 @@
   </table></div>
 </article>
 {{ end }}
-{{ define "figure" }}{{ if .History }}<a class="figure{{ with .Class }} {{ . }}{{ end }}" href="{{ .History }}">{{ .Text }}{{ with .Hint }}<span class="row-mark-word"> {{ . }}</span>{{ end }}</a>{{ else }}{{ .Text }}{{ end }}{{ end }}
+{{ define "tile" }}<li class="tile state-{{ .Class }}" data-tile="{{ .Name }}">
+  <div class="tile-head"><span class="tile-name">{{ .Name }}</span>{{ with .Aside }} <span class="tile-aside">{{ . }}</span>{{ end }}<span class="row-mark-word"> <span class="tile-state">{{ .Word }}</span></span></div>
+  <span class="tile-values">{{ range $i, $v := .Values }}{{ if $i }} · {{ end }}{{ template "figure" $v }}{{ end }}</span>
+  {{- if or .Of .Share }}<span class="tile-more">{{ with .Of }}<span class="tile-of">{{ . }}</span> · {{ end }}{{ with .Share }}<span class="tile-share">{{ template "figure" . }}</span>{{ end }}</span>{{ end }}
+  {{- with .Bar }}<svg class="bar" viewBox="0 0 100 6" preserveAspectRatio="none" role="img" aria-label="{{ .Label }}"><rect class="bar-track" width="100" height="6"></rect><rect class="bar-fill{{ with .Class }} {{ . }}{{ end }}" width="{{ .Used }}" height="6"></rect>{{ range .Ticks }}<line class="bar-tick {{ .Class }}" x1="{{ .At }}" x2="{{ .At }}" y1="-2" y2="8"></line>{{ end }}</svg>{{ end }}
+  {{- with .Usual }}<span class="tile-usual">{{ . }}</span>{{ end }}
+  {{- with .Line }}{{ template "spark" . }}{{ end }}
+</li>
+{{ end }}
+{{ define "figure" }}{{ if .History }}<a class="figure{{ with .Class }} {{ . }}{{ end }}" href="{{ .History }}"{{ with .Title }} title="{{ . }}"{{ end }}>{{ .Text }}{{ with or .Title .Hint }}<span class="row-mark-word"> {{ . }}</span>{{ end }}</a>{{ else }}{{ .Text }}{{ end }}{{ end }}
