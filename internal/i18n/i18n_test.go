@@ -93,6 +93,32 @@ func TestBytesScalesToTheValue(t *testing.T) {
 	}
 }
 
+// A duration under a second keeps its digits in milliseconds instead of reading "0.0 s".
+func TestDurationScalesToTheValue(t *testing.T) {
+	tests := []struct {
+		locale  i18n.Locale
+		seconds float64
+		want    string
+	}{
+		{i18n.English, 0.03, "30 ms"},
+		{i18n.English, 0.049, "49 ms"},
+		{i18n.English, 0.125, "125 ms"},
+		{i18n.English, -0.2, "-200 ms"},
+		{i18n.English, 0.9996, "1.0 s"},
+		{i18n.English, 1, "1.0 s"},
+		{i18n.English, 90, "1.5 min"},
+		{i18n.English, 3 * 86400, "3.0 d"},
+		{i18n.Russian, 0.03, "30 мс"},
+		{i18n.Russian, 1.5, "1,5 с"},
+	}
+
+	for _, tc := range tests {
+		if got := i18n.For(tc.locale).Duration(tc.seconds); got != tc.want {
+			t.Errorf("%s Duration(%v) = %q, want %q", tc.locale, tc.seconds, got, tc.want)
+		}
+	}
+}
+
 // Parse reads a locale written by hand, where a regional tag is a mistake rather than a
 // browser's habit.
 func TestParse(t *testing.T) {

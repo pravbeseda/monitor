@@ -58,8 +58,12 @@ func (p *Printer) Percent(value float64) string {
 }
 
 // Duration renders a number of seconds in the largest whole unit that keeps it above
-// one, which is how an age reads to a person: 3 d, 5 h, 90 s.
+// one, which is how an age reads to a person: 3 d, 5 h, 90 s. Under a second it counts
+// whole milliseconds, as a response time is read: 30 ms, not 0.0 s.
 func (p *Printer) Duration(seconds float64) string {
+	if ms := seconds * 1000; math.Abs(math.Round(ms)) < 1000 {
+		return p.number(ms, 0) + " " + p.T("unit.milliseconds")
+	}
 	value, unit := seconds, "unit.seconds"
 	for _, step := range []struct {
 		factor float64
