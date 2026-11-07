@@ -170,10 +170,11 @@ var catalogue = map[string]map[Locale]string{
 	"unit.duration": {English: "seconds, or m (minutes), h, d, e.g. 36h", Russian: "секунды, или m (минуты), h, d, например 36h"},
 	"unit.number":   {English: "number", Russian: "число"},
 	// … and the suffixes a rendered duration is written with.
-	"unit.seconds": {English: "s", Russian: "с"},
-	"unit.minutes": {English: "min", Russian: "мин"},
-	"unit.hours":   {English: "h", Russian: "ч"},
-	"unit.days":    {English: "d", Russian: "д"},
+	"unit.milliseconds": {English: "ms", Russian: "мс"},
+	"unit.seconds":      {English: "s", Russian: "с"},
+	"unit.minutes":      {English: "min", Russian: "мин"},
+	"unit.hours":        {English: "h", Russian: "ч"},
+	"unit.days":         {English: "d", Russian: "д"},
 
 	"history.title":   {English: "History", Russian: "История"},
 	"history.window":  {English: "Window", Russian: "Окно"},

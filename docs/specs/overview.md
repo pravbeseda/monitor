@@ -611,7 +611,7 @@ English catalogue writes them.
 | State | The sites |
 |---|---|
 | any overview with sites | one table under the "Sites" heading, its headers "Site", "Requests/min", "Last 24 h", "Views/day", "Server errors", "Response p95", "Also"; no site card |
-| the sites above | rows `blog-a`, `shop-c`; `blog-a` reading "12.60", its line of the day, "88.00", "0.1%", "0.4 s" and nothing under "Also" |
+| the sites above | rows `blog-a`, `shop-c`; `blog-a` reading "12.60", its line of the day, "88.00", "0.1%", "400 ms" and nothing under "Also" |
 | `shop-c` with no `site.pageviews_24h` and no `site.response_p95_seconds` | a dash in those two cells |
 | `site.requests_per_min` with no point in its last day | its value, and an empty "Last 24 h" cell |
 | a site's row | its name a link to its page, carrying the language and not the sort; a dot in its state's colour, the word on hover and to a screen reader |

@@ -143,7 +143,7 @@ func TestSitesTable(t *testing.T) {
 		for _, column := range []string{"requests", "views", "errors", "latency"} {
 			values = append(values, strings.Join(siteCell(t, row, column).values(), " "))
 		}
-		equal(t, "values", values, []string{"12.60", "88.00", "0.1%", "0.4 s"})
+		equal(t, "values", values, []string{"12.60", "88.00", "0.1%", "400 ms"})
 		if day := dayPattern.FindStringSubmatch(row); day == nil || !strings.Contains(day[1], `<svg class="spark"`) || strings.Contains(day[1], `class="threshold`) {
 			t.Errorf("no line of the day, or one with a threshold: %s", row)
 		}
