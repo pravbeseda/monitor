@@ -227,6 +227,8 @@ Each line is an index into the ADR that owns it.
   side as tabs, and `/` opens the one last clicked. → 0035, 0037, 0041, 0046
 - **An item is a node, and the sites node is one item per site**; the overview groups items
   by who collects them. → 0045, 0046
+- **A computer's page is tiles**: a volume's free bytes and share on one, a line only where a
+  trend says something — a volume over 10 days, the rest over a day. → 0058
 - The versioned API prefix (`/api/v1/...`) is deliberate — keep it on every new endpoint.
 - The project's value is the normalization and prioritization layer, not storage or
   charting; weigh new low-level work against what off-the-shelf tools already do.
