@@ -188,6 +188,11 @@ page or message is written in:
 | the item page's numbers | the series' name |
 | the item page's small chart | the series' name with filesystem and removable |
 | the item page's family heading | the family's name |
+| a computer page's tile of a volume | its labels as a panel's generic row names them, filesystem and removable included; the family's name when it has none |
+| a computer page's tile of the memory or the load | the family's name |
+| a computer page's tile of the uptime or the failed units | the series' name |
+| a computer page's generic tile | the series' name with filesystem and removable |
+| a value on a computer page's tile, on hover | the series' name |
 | the history page's heading | `node · ` the series' name with filesystem and removable |
 | the history page's list of several series | `node · ` the series' name with filesystem and removable |
 | `/debug`'s table of unlabelled series | the series' name; the metric id on hover |

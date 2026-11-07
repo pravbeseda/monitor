@@ -69,7 +69,7 @@ One decision per file, each stating what was rejected and why. New records start
 | [0043](decisions/0043-the-hub-hosts-backup-belongs-to-its-provisioning.md) | The hub host's backup belongs to its provisioning; the repository states what it must keep | accepted |
 | [0044](decisions/0044-a-sensor-takes-its-parameters-from-the-hub.md) | A sensor takes its parameters from the hub, in its entry of the configuration | accepted |
 | [0045](decisions/0045-sites-are-a-node-their-hosts-report-for.md) | Sites are a node of their own, which the agent of each site's host reports for | accepted |
-| [0046](decisions/0046-an-overview-of-items-rendered-by-the-hub.md) | An overview of items, rendered by the hub, opens a page per item | accepted, amended by [0053](decisions/0053-a-computer-card-is-lines-on-a-shared-scale.md), [0056](decisions/0056-cards-in-a-section-are-ordered-by-name.md), [0057](decisions/0057-sites-are-a-sortable-table.md) |
+| [0046](decisions/0046-an-overview-of-items-rendered-by-the-hub.md) | An overview of items, rendered by the hub, opens a page per item | accepted, amended by [0053](decisions/0053-a-computer-card-is-lines-on-a-shared-scale.md), [0056](decisions/0056-cards-in-a-section-are-ordered-by-name.md), [0057](decisions/0057-sites-are-a-sortable-table.md), [0058](decisions/0058-a-computers-page-is-tiles.md) |
 | [0047](decisions/0047-a-pull-request-opens-without-a-gate.md) | A pull request opens without a gate; only the merge waits | accepted |
 | [0048](decisions/0048-a-sensor-names-its-metrics.md) | A sensor names its metrics; the hub shows the name wherever a person reads one | accepted, amended by [0053](decisions/0053-a-computer-card-is-lines-on-a-shared-scale.md) |
 | [0049](decisions/0049-a-backup-job-reports-through-a-status-file.md) | A backup job reports through a status file the agent reads | accepted |
@@ -81,6 +81,7 @@ One decision per file, each stating what was rejected and why. New records start
 | [0055](decisions/0055-a-computer-card-line-is-its-values.md) | A computer card's line is its name and its values, nothing drawn between; four cards to a row | accepted, amended by [0057](decisions/0057-sites-are-a-sortable-table.md) |
 | [0056](decisions/0056-cards-in-a-section-are-ordered-by-name.md) | An overview section's cards are ordered by name, the red ones (critical, silent) first | accepted |
 | [0057](decisions/0057-sites-are-a-sortable-table.md) | The sites are one table, a row per site, sortable by any of its figures on the server | accepted |
+| [0058](decisions/0058-a-computers-page-is-tiles.md) | A computer's page is tiles, a line only where a trend says something: a volume over 10 days, the rest over a day | accepted |
 
 ## Behaviour specs
 
@@ -107,7 +108,7 @@ can see ([ADR 0017](decisions/0017-one-spec-and-decision-gates.md)). New specs s
 | [anomaly.md](specs/anomaly.md) | Each series' norm, how far its newest value lies from it, the anomaly rank, and the record of when a series became unusual and came back | approved |
 | [attention.md](specs/attention.md) | What needs attention now, in what order, under what headline — the timeline's "Now" | approved |
 | [timeline.md](specs/timeline.md) | `/timeline`: what needs attention now, each node's last 24 hours, and the levels and anomalies that changed | approved |
-| [overview.md](specs/overview.md) | `/overview` and `/item`: a card per server and service with its telling numbers, the sites as one sortable table, and a page per item with every series charted or gathered in its group's panel beside its changes | approved |
+| [overview.md](specs/overview.md) | `/overview` and `/item`: a card per server and service with its telling numbers, the sites as one sortable table, and a page per item with every series on a tile for a computer, charted for a site or a service, or gathered in its group's panel, beside its changes | approved |
 | [metric-names.md](specs/metric-names.md) | What a sensor declares its metrics and their families are called and the label each family is grouped by, and how every page and message names a series by it | approved |
 | [thresholds.md](specs/thresholds.md) | The page that sets what a series is judged by — what may be stored as a threshold, whether it may be shown as unusual, the defaults a sensor declares and how they are seeded, and applying one threshold to every series of a metric | approved |
 | [release.md](specs/release.md) | How a merge tags itself, what a tag publishes, how a release is signed, and how an artifact is checked | approved |

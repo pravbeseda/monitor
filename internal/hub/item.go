@@ -72,6 +72,7 @@ type itemPageView struct {
 	Word         string
 	LastReport   string
 	Numbers      []cardRowView
+	Tiles        []tileView
 	WindowLabel  string
 	Windows      []windowLink
 	Zone         string
@@ -212,15 +213,20 @@ func itemPageOf(ctx context.Context, printer *i18n.Printer, reader history.Reade
 		NoChanges:    printer.T("timeline.no_changes"),
 	}
 	out.Title = it.name
-	marked, _ := offeredFor(window)
-	for _, offer := range offered {
-		out.Windows = append(out.Windows, windowLink{Label: offer, URL: it.link(lang, offer), Current: offer == marked})
+	// A computer's page lays its series out as tiles, each over its own window
+	// (docs/specs/overview.md#computer-page).
+	computer := it.section == sectionComputers
+	if !computer {
+		marked, _ := offeredFor(window)
+		for _, offer := range offered {
+			out.Windows = append(out.Windows, windowLink{Label: offer, URL: it.link(lang, offer), Current: offer == marked})
+		}
 	}
 
 	shown := it.shownSeries()
 	if len(shown) == 0 {
 		out.None = printer.T("overview.no_series")
-	} else {
+	} else if !computer {
 		rows, _ := it.cardSeries(itemsOf(current))
 		for _, s := range rows {
 			out.Numbers = append(out.Numbers, cardRowView{Name: it.rowName(printer, s), Value: format(printer, s.Metric, *s.Value), Mark: markOf(printer, s)})
@@ -228,6 +234,7 @@ func itemPageOf(ctx context.Context, printer *i18n.Printer, reader history.Reade
 	}
 	// The series each family's panels gather, in the page order, by the family's index.
 	var grouped [][]state.Subject
+	var tiled []state.Subject
 	for _, s := range shown {
 		if n := len(out.Families); n == 0 || out.Families[n-1].key != familyKey(s.Metric) {
 			family, _ := familyOf(s.Metric)
@@ -239,6 +246,10 @@ func itemPageOf(ctx context.Context, printer *i18n.Printer, reader history.Reade
 			grouped[len(grouped)-1] = append(grouped[len(grouped)-1], s)
 			continue
 		}
+		if computer {
+			tiled = append(tiled, s)
+			continue
+		}
 		view, err := smallChartOf(ctx, printer, reader, store, it, s, window, lang)
 		if err != nil {
 			return out, err
@@ -247,6 +258,10 @@ func itemPageOf(ctx context.Context, printer *i18n.Printer, reader history.Reade
 	}
 	for i := range out.Families {
 		out.Families[i].Panels = panelsOf(printer, it, grouped[i], window, lang)
+	}
+	var err error
+	if out.Tiles, err = (tiler{printer: printer, reader: reader, store: store, it: it, lang: lang}).tiles(ctx, tiled); err != nil {
+		return out, err
 	}
 
 	changes, anomalies, err := changesOf(ctx, store, it)

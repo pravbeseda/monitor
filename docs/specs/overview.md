@@ -3,9 +3,8 @@
 - **Status:** approved
 - **Owns:** the pages `GET /overview` and `GET /item` in `internal/hub` — the overview skin:
   a card per computer and service with a few numbers, a sortable table of the sites, and a
-  page per item with
-  every series of it charted or gathered in its group's panel, and the changes it went
-  through. What a level, a staleness or a
+  page per item with every series of it — on a tile for a computer, charted for a site or
+  a service — or gathered in its group's panel, and the changes it went through. What a level, a staleness or a
   silence *is* stays with [evaluation](evaluation.md) and [state](state.md), what an anomaly
   is with [anomaly](anomaly.md), and what needs attention with [attention](attention.md); the
   points, the windows and the chart's axes are [history](history.md)'s; a threshold is
@@ -28,7 +27,8 @@
   [0054](../decisions/0054-the-backup-line-gathers-the-backup-families.md),
   [0055](../decisions/0055-a-computer-card-line-is-its-values.md),
   [0056](../decisions/0056-cards-in-a-section-are-ordered-by-name.md),
-  [0057](../decisions/0057-sites-are-a-sortable-table.md)
+  [0057](../decisions/0057-sites-are-a-sortable-table.md),
+  [0058](../decisions/0058-a-computers-page-is-tiles.md)
 
 ## Purpose
 
@@ -36,9 +36,11 @@ The overview answers "how do things stand, in numbers": every computer and servi
 card with the few figures that say most about it — a computer's in the places every
 computer card keeps them, so one reads against the next; a service's with how it moved over
 the last day. The sites, many and alike, are one table that sorts by any of its figures. A
-card or a site's row opens the item's page, where every series of it is charted over a chosen window, or
-gathered with its group in a panel, beside what changed. It judges nothing: a card's colour is a level evaluation stored, an anomaly, a
-silence or data that is or is not fresh, and every number is one the hub holds.
+card or a site's row opens the item's page, where every series of it is on a tile for a
+computer, charted over a chosen window for a site or a service, or gathered with its group
+in a panel, beside what changed. It judges nothing: a card's colour is a level evaluation stored, an anomaly, a
+silence or data that is or is not fresh, and every number is one the hub holds or, on a
+computer's tile, the arithmetic of two it holds.
 
 ## Model
 
@@ -91,7 +93,7 @@ small one in any alphabet and a digit as a character, not as part of a number; n
 but for case by their bytes.
 A site's name is its `site` label; a node's is the node.
 
-**The page order of an item's series** — the order its page charts them in — is by family,
+**The page order of an item's series** — the order its page shows them in — is by family,
 the part of a metric id before its first dot as on `/debug` ([history](history.md#page));
 inside a family, the series without labels first, by metric id, then the labelled ones as
 `/debug` orders the rows of a matrix and its columns.
@@ -111,7 +113,7 @@ warning; unusual. The rows are taken in this order, a series at most once:
    that list's kinds — a level, an anomaly, no fresh data ([attention](attention.md#model))
    — in that list's order, without its cap of five anomalies;
 2. the item's **default series**, in the order of the table below;
-3. when neither gives a row, the first two series the item's page charts.
+3. when neither gives a row, the first two series in the page order.
 
 When more series qualify by the first two steps than six rows hold, a service's card ends
 with "N more", N being how many of them are not shown. On a service's card the first two
@@ -174,7 +176,7 @@ other computer card puts it, so one card reads against the next
   that reads a dash gathers none: they stay what they would be without it;
 - then its **extra lines**: the series its rows' first step takes — what needs attention —
   that no line shows, in that order, at most two, and "N more" when more qualify. A
-  computer with no slot and no such series has the first two series its page charts as its
+  computer with no slot and no such series has the first two series in the page order as its
   extra lines;
 - at its foot, small and to the right, when it last reported: muted, and brighter when it is
   silent or holds no fresh data. It closes every computer card, so a card that stopped
@@ -250,20 +252,72 @@ the sites table scrolls sideways, the site column staying in view.
 
 - the item's name, its section's singular ("Computer", "Site", "Service"), its state's word,
   and when it last reported, whatever its state;
-- the item's rows, as numbers, without lines;
-- every series of the item that `/debug` would show — a removable volume that is stale left
-  out ([history](history.md#page)) — under its family's name: in its group's panel, below,
-  when its family has a group label and the series carries it, otherwise as a small chart
-  over the window; "No series yet" when there is none. The panels of every family come
-  first, then the window links 24h / 7d / 30d, as the history page offers them and marks
-  the open one ([history](history.md#page)), shown whatever the page holds, then the charts
-  of every family; the panels and the charts each in the page order. A panel shows the
-  newest values, so the window does not change them. A family with both is headed above
-  its panels and again above its charts;
+- on a computer's page, its [tiles](#computer-page), then its panels; on a site's or a
+  service's page, these two:
+  - the item's rows, as numbers, without lines;
+  - every series of the item that `/debug` would show — a removable volume that is stale left
+    out ([history](history.md#page)) — under its family's name: in its group's panel, below,
+    when its family has a group label and the series carries it, otherwise as a small chart
+    over the window; "No series yet" when there is none. The panels of every family come
+    first, then the window links 24h / 7d / 30d, as the history page offers them and marks
+    the open one ([history](history.md#page)), shown whatever the page holds, then the charts
+    of every family; the panels and the charts each in the page order. A panel shows the
+    newest values, so the window does not change them. A family with both is headed above
+    its panels and again above its charts;
 - the changes of the item: the newest 20 of its series' transitions and anomaly starts and
   ends, and the silence transitions of its node — for a site, of the `sites` node and of its
   host — written and grouped by day as the timeline writes them
   ([timeline](timeline.md#changes)).
+
+**A computer's page** — the page of an item under "Computers" — takes every series of the
+item that `/debug` would show, a removable volume that is stale left out, and lays them out
+as **tiles**, then the panels as every item's page draws them, each family's under its name ([0058](../decisions/0058-a-computers-page-is-tiles.md)). It has no rows as numbers,
+no small chart and no window links; a `window` in its address is accepted and reaches the
+panels' links alone. A series a panel gathers is on no tile; every other one is on exactly
+one; "No series yet" when there is none. The tiles stand under no
+family heading, in the page order of their first series, as many to a row as the page's
+width holds, one to a row on a narrow screen.
+
+| Tile | One for | Its name | Its values | Its bar | Its line, and its window |
+|---|---|---|---|---|---|
+| volume | each set of labels the item's `disk.free_bytes` and `disk.free_pct` series carry | the labels as a panel's generic row names them, filesystem and removable included — "/srv · ext4" — or the family's name when there are none | `disk.free_bytes`; then, muted, "of *total*" and `disk.free_pct` | the share used | `disk.free_pct`, 10 days |
+| memory | the unlabelled `memory.available_bytes` and `memory.available_pct` | the family's name | as a volume's | as a volume's | `memory.available_pct`, 24 hours |
+| load | the unlabelled `load.avg_1m`, `load.avg_5m` and `load.avg_15m` | the family's name, then, muted, the minutes of the averages it has — "1 · 5 · 15 min" | those averages, in that order, parted by " · " | — | `load.avg_15m`, 24 hours |
+| uptime | the unlabelled `uptime.boot_seconds` | its series' name | its value | — | none, 24 hours |
+| failed units | the unlabelled `systemd.failed_units` | its series' name | its value as a whole number | — | none, 24 hours |
+| generic | each other series, a labelled one of the memory, load, uptime or failed-units metrics among them | its small chart's name | its value | — | the series, 24 hours |
+
+A tile shows the series of its kind the item has, and no more: what a missing series would
+show is left out. A volume or the memory without its free bytes leads with its free share,
+not muted.
+
+- **A value** is its series' newest value formatted as `/debug` formats it — the failed
+  units as a whole number — coloured and underlined by its mark as a panel's figure is. On
+  hover and to a screen reader it names its series as a row names it, and its mark's word
+  after. It links to its series' history page over its tile's window, in the page's
+  language, whether or not a line is drawn. The tile's name, the total and the parting
+  words are plain text.
+- **The total** is the free bytes divided by the free share, formatted as the free bytes
+  are; it is shown when the tile has both and the share is from 1% to 100%, as a share
+  rounded to two decimals says too little of a fuller volume.
+- **The bar** is a track filled to the share used, `100 − free %`, drawn when the free share
+  is from 0% to 100%: in the colour of the free share's mark when that mark is `warning`
+  or `critical`, neutral otherwise; a tick across it, in its level's colour, at
+  `100 − value` for each value the free share's readable threshold holds, a value outside
+  0 to 100 drawing none. A screen reader is told "used" and the share used, formatted as a
+  percentage is: "used 76.0%".
+- **The line** is drawn as a service card's line is — no axes, broken across a gap, a lone
+  point on its own, its series' readable threshold dashed across it — over its window
+  ending now; it is not a link, and a screen reader skips it, as its values link to the
+  same page. A window holding no point of it draws none.
+- **The state of a tile** is its series' as a panel's state is, by the rules of an item's
+  state — never "silent" — shown as the colour of the tile's edge, as a panel's edge shows
+  it, faint for no fresh data and for reporting with nothing watched, and said by its word
+  to a screen reader.
+- **A fresh unusual series** of a tile says its usual value under the values, as "now"
+  writes it: the first of them in the order of its values, when several are.
+- A tile shows no time of its own and no link to the thresholds' form: the page's head says
+  when the item last reported, and its history page links to the form.
 
 **A small chart** is the history page's chart of one series over the window — a time axis,
 a value axis from zero — reduced in size, under the series' name, its newest value with its
@@ -276,7 +330,8 @@ as "now" does. A stale series' value is marked as holding no fresh data. The cha
 the series' history page with the same window, and carries the link to the page that sets
 what the series is judged by ([thresholds](thresholds.md)).
 
-**A panel** is one group of the item: its series of one family whose group label is
+**A panel** is as wide as its table needs, never stretched across its row. It is one group
+of the item: its series of one family whose group label is
 declared ([metric names](metric-names.md#groups)) that hold one value of that label
 ([0051](../decisions/0051-a-sensor-groups-its-family-by-a-label.md)). A family's panels are
 ordered by that value, byte by byte. A panel shows:
@@ -403,26 +458,28 @@ English catalogue's; every one of them has its Russian. `sites` is the node of c
 
 ### Rows {#rows}
 
-An item's rows: what its page lists as numbers, and a service's card shows.
+An item's rows: what a site's or a service's page lists as numbers and a service's card
+shows; a computer card's extra lines take their first step. The item below is a service,
+whatever series it reports, unless the row names another kind.
 
 | State | Rows of the item |
 |---|---|
-| a Linux computer with `disk`, `memory`, `load` and `systemd` series, `/` its least-free volume, nothing needing attention | `disk.free_pct /`, `memory.available_pct`, `load.avg_15m`, `systemd.failed_units` |
-| the same computer, `load.avg_15m` unusual | `load.avg_15m`, `disk.free_pct /`, `memory.available_pct`, `systemd.failed_units` |
+| an item with `disk`, `memory`, `load` and `systemd` series, `/` its least-free volume, nothing needing attention | `disk.free_pct /`, `memory.available_pct`, `load.avg_15m`, `systemd.failed_units` |
+| the same item, `load.avg_15m` unusual | `load.avg_15m`, `disk.free_pct /`, `memory.available_pct`, `systemd.failed_units` |
 | volumes `/` at 40% free and `/srv` at 12%, the threshold on `disk.free_bytes` of `/` at `warning` | `disk.free_bytes /` first, then `disk.free_pct /srv` among the defaults |
 | volumes `/` at 40% and `/srv` at 12%, both fresh | the default row is `disk.free_pct /srv` |
 | a fresh removable volume at 3%, `/` at 40% | the default row is `disk.free_pct /`: a removable volume is never a default, plugged in or not |
 | every volume removable | no disk default row |
 | volumes `/a` and `/b`, both at 12.0% | the default row is `/a`'s, the first in the page order |
-| a computer whose `backup.latest_archive_age_seconds` is unusual | that series among the rows needing attention: the item's page lists what its card's backup line gathers |
-| a Mac with Time Machine destinations backed up 2 days and 9 days ago, both fresh | the 9-day one |
+| an item whose `backup.latest_archive_age_seconds` is unusual | that series among the rows needing attention |
+| Time Machine destinations backed up 2 days and 9 days ago, both fresh | the 9-day one |
 | the 9-day destination stale, the 2-day one fresh | the 2-day one |
-| a server with backup jobs that last succeeded 2 days and 9 days ago, both fresh | the 9-day one |
+| backup jobs that last succeeded 2 days and 9 days ago, both fresh | the 9-day one |
 | the 9-day job stale, the 2-day one fresh | the 2-day one |
 | a site | `site.requests_per_min`, `site.server_error_pct`, `site.response_p95_seconds` |
 | a Google Drive service node | `gdrive.free_pct` |
-| a Mac with no `systemd` series | no `systemd.failed_units` row |
-| a node of a class the file introduces, reporting `uptime.boot_seconds`, `queue.depth` and `net.rx_bytes`, nothing needing attention | `net.rx_bytes`, then `queue.depth`: the first two in the page order |
+| an item with no `systemd` series | no `systemd.failed_units` row |
+| an item reporting `uptime.boot_seconds`, `queue.depth` and `net.rx_bytes`, nothing needing attention | `net.rx_bytes`, then `queue.depth`: the first two in the page order |
 | an item whose only ranking series is sixth by rank on the hub | that series as its first row |
 | exactly six series qualifying | six rows, no "more" line |
 | four series needing attention and four defaults besides them | six rows and "2 more" |
@@ -607,12 +664,15 @@ English catalogue writes them.
 
 ### The item's page {#item-page}
 
+Rows of numbers, charts and window links are of a site's or a service's page — `gdrive-a`
+below is a service; a computer's page is [its own](#computer-page).
+
 | Request | What the reader sees |
 |---|---|
 | `/item?node=server-b` | `server-b`'s page: its name, "Computer", its state's word and when it last reported |
 | `/item?node=sites&label.site=blog-a` | `blog-a`'s page: its name, "Site", and the time of its newest point |
 | `/item?node=gdrive-a`, a `service` node that has stored nothing | its page, "Service", "no fresh data", last reported at the time the hub recorded it, "No series yet" and the window links |
-| any item's page | the item's rows as numbers, without lines, above the panels and the charts |
+| a site's or a service's page | the item's rows as numbers, without lines, above the panels and the charts |
 | a family `q` grouped by `queue` with a panel `a`, beside `disk.free_pct /` | the panel `a`, then the window links, then the disk's chart: every panel comes before every chart, whatever the families' order |
 | a page with panels and no chart | the window links below the panels |
 | a page with charts and no panel | the window links above the charts |
@@ -622,7 +682,7 @@ English catalogue writes them.
 | `&window=168h` | the same as `7d`, "7d" marked: the window is marked whatever the query spelled it as |
 | `&window=12h` | every chart over 12 hours, no window link marked |
 | any window link | the same item, that window and the language |
-| a computer with `disk.free_pct /`, `load.avg_1m`, `memory.available_pct` and `uptime.boot_seconds` | four families headed by their names — "Disk", "Load", "Memory", "Uptime" in English — in the order of their ids `disk`, `load`, `memory`, `uptime` |
+| a service with `disk.free_pct /`, `load.avg_1m`, `memory.available_pct` and `uptime.boot_seconds` | four families headed by their names — "Disk", "Load", "Memory", "Uptime" in English — in the order of their ids `disk`, `load`, `memory`, `uptime` |
 | two volumes, each with `free_bytes` and `free_pct` | four charts under the family `disk`: `/a`'s two, then `/b`'s two |
 | `load.avg_1m`, `load.avg_15m` and `load.avg_5m` | under the family `load` in metric id order: `avg_15m`, `avg_1m`, `avg_5m` |
 | 60 `queue.depth` series of one node | 60 charts |
@@ -638,10 +698,68 @@ English catalogue writes them.
 | a series with no point in the window | its chart saying there is no data for this window |
 | a chart | a link to the series' history page with the same window and the language, and a link to the page that sets what the series is judged by |
 | any value, time or axis label | formatted as the history page formats it, in the reader's zone |
-| `/item?node=server-b&lang=ru` | every word in Russian |
+| `/item?node=gdrive-a&lang=ru` | every word in Russian |
 | a new value while the page is open | on the page within 30 seconds without a reload, the window kept |
 | the state, the stored points, the thresholds or the event log cannot be read | the same failure `/debug` answers with |
 | a `disk.free_pct` chart of `/srv` on `ext4` | named as the history page names it, `ext4` included |
+
+### A computer's page {#computer-page}
+
+`server-b` is a computer. Words are the English catalogue's.
+
+| State | What the reader sees |
+|---|---|
+| a volume `/srv` on `ext4` with 180 GB and 9.0% free | one tile, "/srv · ext4", reading "180.0 GB", then, muted, "of 2.0 TB" and "9.0%" |
+| the same, in Russian | "180,0 ГБ", "из 2,0 ТБ", "9,0 %" |
+| a tile's name | plain text, not a link |
+| a volume with no labels | a tile named "Disk" |
+| a fresh removable volume `/usb` on `exfat` | a tile "/usb · exfat · removable" |
+| a stale removable volume | no tile for it |
+| a volume with `disk.free_bytes` alone | "180.0 GB", no total, no bar, no line; the value linking with `window=10d` |
+| a volume with `disk.free_pct` alone | "9.0%" leading, not muted; no total; its bar and its line |
+| a volume at 0.5% free | no total |
+| a volume at 105% free | no total and no bar |
+| a volume at 24.0% free under `below`, `warning: 10`, `critical: 5` on its `disk.free_pct` | its bar filled to 76%, a warning tick at 90% and a critical tick at 95% |
+| a threshold on `disk.free_bytes` alone | no tick |
+| `disk.free_pct` unwatched, or its threshold unreadable | no tick |
+| a `warning: 120` on `disk.free_pct` | no tick for it |
+| the bar at 24.0% free, read by a screen reader | "used 76.0%"; in Russian "занято 76,0 %" |
+| `disk.free_pct` at `warning` | "9.0%" in the warning colour, underlined; the bar in the warning colour; the tile's edge in the warning colour |
+| `disk.free_pct` at `critical` and stale | the bar neutral; "9.0%" in the colour of no fresh data |
+| `disk.free_pct` unusual | the bar neutral |
+| a volume with points over the last 12 days | its line: the points of `disk.free_pct` in the 10 days ending now, none older |
+| a volume with no point of `disk.free_pct` in 10 days | no line |
+| a volume's value | a link to its series' history page with `window=10d` and the language |
+| a tile's line | not a link, hidden from a screen reader |
+| `memory.available_bytes` 5.2 GB, `memory.available_pct` 32.5% | a tile "Memory": "5.2 GB", "of 16.0 GB", "32.5%"; its bar filled to 67.5%; its line of `memory.available_pct` over the 24 hours ending now |
+| load averages 0.42, 0.38 and 0.30 over 1, 5 and 15 min | a tile "Load", muted "1 · 5 · 15 min", reading "0.42 · 0.38 · 0.30"; its line of `load.avg_15m` over 24 hours |
+| the load's 0.38, hovered | "Load 5 min" |
+| `load.avg_15m` under `above`, `warning: 4` | its threshold dashed across the load tile's line |
+| `load.avg_1m` and `load.avg_15m` | muted "1 · 15 min", reading "0.42 · 0.30" |
+| `load.avg_1m` alone | muted "1 min", reading "0.42", no line |
+| `uptime.boot_seconds` | a tile "Uptime" with its value, no line, the value linking with `window=24h` |
+| `systemd.failed_units` at 2 | a tile "Failed units" reading "2", no line |
+| `memory.available_pct` labelled `{zone: a}` | a generic tile of its own, not the memory tile |
+| `timemachine.backup_age_seconds` of one destination | a generic tile named as its small chart would be, its value, its line over 24 hours |
+| `memory.available_pct` unusual, norm 50.0% | "usually 50.0%" on the memory tile |
+| `memory.available_pct` unusual and stale | no "usually" |
+| `load.avg_1m` and `load.avg_15m` both unusual | the 1 min's usual value |
+| a stale value | in the colour of no fresh data |
+| a tile, read by a screen reader | its state's word: "warning" |
+| `disk.free_pct` at `critical` and stale, `disk.free_bytes` fresh at `ok` | the tile's edge "ok": a stale level does not raise a tile |
+| every series of a tile stale | the faint edge, "no fresh data" for a screen reader |
+| a tile's series fresh and unwatched | the faint edge, "reporting, nothing watched" for a screen reader |
+| the computer silent | no tile "silent"; each as its series say |
+| a stale tile | no time of its own, no link to the thresholds' form |
+| volumes `/b` and `/a`, the load, the memory and the uptime | the tiles `/a`, `/b`, "Load", "Memory", "Uptime", under no family heading |
+| the family `backup` grouped by `backup`, and a volume `/` | the tile `/`, then the panels `vpn` and `web` under "Backups"; no tile of a backup series |
+| a computer's page | no rows as numbers, no small chart, no window links |
+| `/item?node=server-b&window=7d` | the tiles as without it; a panel's figures linking with `window=7d` |
+| a computer with no series | "No series yet", no window links |
+| `/item?node=server-b&lang=ru` | every word in Russian: "Память", "Нагрузка", "из", "1 · 5 · 15 мин" |
+| a narrow screen | one tile to a row |
+| a new value while the page is open | on the page within 30 seconds without a reload |
+| the state, the stored points, the thresholds or the event log cannot be read | the same failure `/debug` answers with |
 
 ### Panels {#panels}
 
@@ -650,16 +768,17 @@ same for `vpn`, and its family `backup` is grouped by `backup`.
 
 | State | What the reader sees |
 |---|---|
-| the family `backup` grouped by `backup` | under "Backups", a panel `vpn`, then a panel `web`, and no chart of a backup series |
+| the family `backup` grouped by `backup` | under "Backups", a panel `vpn`, then a panel `web`, and no tile of a backup series |
 | `server-b` declared that grouping; `server-c`, an older agent, reports backup series and no `groups` | panels on `server-c`'s page too: a group label belongs to the family |
 | a group `backup: ""` beside `web` | a panel titled `""`, first |
 | a group `backup: "my repo"` | a panel titled `"my repo"` |
 | a group `backup: <b>x</b>`, its job `<b>y</b>` | both shown as those characters |
 | `disk` grouped by `mount`, one group whose only series are of a stale removable volume | no panel for that group |
-| the same family, no group label declared | a chart of each series, as before |
-| `disk` with no group label beside the grouped `backup` | the disk's charts, as before |
-| a family `q` grouped by `queue`, two series carrying `queue` and one without it | the panels first, then the window links, then the chart of the one without it; `q` headed above the panels and above the chart |
-| a family grouped by a label none of its series carry | a chart of each series |
+| the same family, no group label declared | no panel: each series on a tile |
+| `disk` with no group label beside the grouped `backup` | the disk's tiles |
+| on `gdrive-a`'s page, a family `q` grouped by `queue`, two series carrying `queue` and one without it | the panels first, then the window links, then the chart of the one without it; `q` headed above the panels and above the chart |
+| a family grouped by a label none of its series carry | no panel: each series on a tile |
+| a lone panel on a wide page | as wide as its table, not stretched across the row |
 | every series of `web` fresh, none watched | `web` "reporting, nothing watched" |
 | `web` / `copy`'s success age at `critical`, fresh | `web` "critical"; `vpn` as its own series say |
 | `web` / `copy`'s success age at `critical` but stale, the rest of `web` fresh at `ok` | `web` "ok": a stale level does not raise a panel, as it does not raise an item |
@@ -739,7 +858,9 @@ same for `vpn`, and its family `backup` is grouped by `backup`.
 
 - The overview and the item's pages show nothing the [State API](state.md), the history
   endpoint, the stored thresholds and the event log would not return at the same instant: no
-  level, staleness, value, anomaly or change of their own.
+  level, staleness, value, anomaly or change of their own — but for a computer tile's
+  total and used share, arithmetic on two values they do return
+  ([0058](../decisions/0058-a-computers-page-is-tiles.md)).
 - Every item is on the overview exactly once, and every series of an item is on its page at
   most once.
 - A card or a site's row in a state other than "ok" or "reporting, nothing watched" names

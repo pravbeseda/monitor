@@ -154,40 +154,48 @@ func serverB(t *testing.T, current state.State, query string) string {
 	return itemPage(t, current, held{}, logbook{}, "/item?node=server-b"+query)
 }
 
+// service is server-b's series on the page of the service gdrive-a, which charts them.
+func service(t *testing.T, current state.State) string {
+	t.Helper()
+	return itemPage(t, onService(current, "server-b"), held{}, logbook{}, "/item?node=gdrive-a")
+}
+
 // spec: overview.md#panels
 func TestPanelsReplaceChartsOfAGroupedFamily(t *testing.T) {
 	body := serverB(t, grouped(stateOf(append(mirror(), freePct("server-b", "/", 40))...), byBackup), "")
 	equal(t, "panels", titles(body), []string{"vpn", "web"})
-	equal(t, "charts", charts(body), []string{"disk.free_pct / · ext4"})
-	equal(t, "families", families(body), []string{"Backups", "disk"})
+	equal(t, "tiles", tileNames(body), []string{"/ · ext4"})
+	equal(t, "families", families(body), []string{"Backups"})
 	// spec: overview.md#item-page — every panel, then the window links, then every chart.
-	inOrder(t, serverB(t, grouped(stateOf(reading("server-b", "q.depth", map[string]string{"queue": "a"}, 1), freePct("server-b", "/", 40)),
-		map[string]string{"q": "queue"}), ""), `data-group="a"`, `<nav class="windows">`, `<figure class="chart" data-series="disk.free_pct / · ext4"`)
-	inOrder(t, serverB(t, grouped(stateOf(mirror()...), byBackup), ""), `data-group="web"`, `<nav class="windows">`)
-	inOrder(t, serverB(t, stateOf(freePct("server-b", "/", 40)), ""), `<nav class="windows">`, `<figure class="chart"`)
+	inOrder(t, service(t, grouped(stateOf(reading("server-b", "q.depth", map[string]string{"queue": "a"}, 1), freePct("server-b", "/", 40)),
+		map[string]string{"q": "queue"})), `data-group="a"`, `<nav class="windows">`, `<figure class="chart" data-series="disk.free_pct / · ext4"`)
+	inOrder(t, service(t, grouped(stateOf(mirror()...), byBackup)), `data-group="web"`, `<nav class="windows">`)
+	inOrder(t, service(t, stateOf(freePct("server-b", "/", 40))), `<nav class="windows">`, `<figure class="chart"`)
 	// The page refreshes by fetching its own address, its panels with it (web.md#live).
 	containsAll(t, "page", body, `name="monitor-live"`)
+	// A lone panel is as wide as its table, not stretched across the row.
+	containsAll(t, "page", body, "article.group { flex: 0 1 auto; max-width: 100%;")
 
 	t.Run("no group label declared", func(t *testing.T) {
 		body := serverB(t, grouped(stateOf(mirror()...), nil), "")
-		if len(titles(body)) != 0 || len(charts(body)) != len(mirror()) {
-			t.Errorf("panels %v, %d charts: want a chart of each series", titles(body), len(charts(body)))
+		if len(titles(body)) != 0 || len(tileNames(body)) != len(mirror()) {
+			t.Errorf("panels %v, %d tiles: want a tile of each series", titles(body), len(tileNames(body)))
 		}
 	})
 
 	t.Run("a label none of the series carry", func(t *testing.T) {
 		body := serverB(t, grouped(stateOf(mirror()...), map[string]string{"backup": "repository"}), "")
-		if len(titles(body)) != 0 || len(charts(body)) != len(mirror()) {
-			t.Errorf("panels %v, %d charts: want a chart of each series", titles(body), len(charts(body)))
+		if len(titles(body)) != 0 || len(tileNames(body)) != len(mirror()) {
+			t.Errorf("panels %v, %d tiles: want a tile of each series", titles(body), len(tileNames(body)))
 		}
 	})
 
 	t.Run("panels first, then the window links, then the series without the label", func(t *testing.T) {
-		body := serverB(t, grouped(stateOf(
+		body := service(t, grouped(stateOf(
 			reading("server-b", "q.depth", map[string]string{"queue": "b"}, 1),
 			reading("server-b", "q.depth", map[string]string{"queue": "a"}, 1),
 			plain("server-b", "q.total", 2),
-		), map[string]string{"q": "queue"}), "")
+		), map[string]string{"q": "queue"}))
 		equal(t, "panels", titles(body), []string{"a", "b"})
 		equal(t, "charts", charts(body), []string{"q.total"})
 		equal(t, "families", families(body), []string{"q", "q"})

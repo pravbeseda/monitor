@@ -6,7 +6,9 @@
   on a scale its section shares, without a line of the day; amended by
   [0056](0056-cards-in-a-section-are-ordered-by-name.md) — a section's cards are ordered by
   name, the red ones first; amended by [0057](0057-sites-are-a-sortable-table.md) —
-  the sites are a sortable table, not cards
+  the sites are a sortable table, not cards; amended by
+  [0058](0058-a-computers-page-is-tiles.md) — a computer's page lays its series out as tiles,
+  not small charts
 - **Date:** 2026-10-25
 - **Source:** [overview spec](../specs/overview.md),
   [design notes](../log/2026-10-25-overview.md)

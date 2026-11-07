@@ -24,7 +24,7 @@ import (
 	"github.com/pravbeseda/monitor/internal/timeline"
 )
 
-var overviewTemplate = template.Must(template.ParseFS(templates, "templates/overview.html", "templates/shell.html"))
+var overviewTemplate = template.Must(template.ParseFS(templates, "templates/overview.html", "templates/chart.html", "templates/shell.html"))
 
 const (
 	// cardRowsShown is how many rows a card holds; the rest are counted.
