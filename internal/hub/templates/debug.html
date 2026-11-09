@@ -33,8 +33,8 @@
     th, td { padding: 0 0.6rem; height: 1.95rem; white-space: nowrap; text-align: right; border-bottom: 1px solid var(--grid); }
     th { font-weight: 500; font-size: 0.83rem; color: var(--muted); border-bottom-color: var(--rule); }
     th:first-child, td:first-child { text-align: left; }
-    table.own tbody tr, td.cell { position: relative; }
-    table.own tbody tr:hover, td.cell:hover { background: #1b2129; }
+    td.cell { position: relative; }
+    table.own tbody tr:hover, table.matrix td.cell:hover { background: #1b2129; }
     a.fill { color: inherit; text-decoration: none; }
     a.fill::after { content: ""; position: absolute; inset: 0; }
     a.fill:focus-visible { outline: none; }
@@ -70,9 +70,8 @@
       {{ range .Tree }}
         <h3>{{ if .URL }}<a href="{{ .URL }}"{{ if .Current }} aria-current="true"{{ end }}>{{ .Name }}</a>{{ else }}{{ .Name }}{{ end }}</h3>
         {{ with .Groups }}<ul>
-          {{- range . }}<li><a href="{{ .URL }}"{{ if .Current }} aria-current="true"{{ end }}><span>{{ .Label }}</span>{{ if or .Problems .Unusual }}<span class="counts">
-            {{- with .Problems }}<span><i class="mark {{ .Class }}" aria-hidden="true">{{ .Glyph }}</i>{{ .Count }}</span>{{ end }}
-            {{- with .Unusual }}<span><i class="mark level-unusual" aria-hidden="true">◆</i>{{ . }}</span>{{ end -}}
+          {{- range . }}<li><a href="{{ .URL }}"{{ if .Current }} aria-current="true"{{ end }}><span>{{ .Label }}</span>{{ with .Counts }}<span class="counts">
+            {{- range . }}<span><i class="mark {{ .Class }}" aria-hidden="true">{{ .Glyph }}</i>{{ .Count }}<span class="row-mark-word"> {{ .Word }}</span></span>{{ end -}}
           </span>{{ end }}</a></li>{{ end }}
         </ul>{{ end }}
       {{ end }}
@@ -92,9 +91,9 @@
                 <tbody>
                   {{ range .Rows }}
                     <tr>
-                      <td title="{{ .Metric }}"><a class="fill" href="{{ .Thresholds }}">{{ .Name }}</a></td>
-                      <td title="{{ .Hover }}"{{ if .Dim }} class="dim"{{ end }}>{{ template "value" . }}</td>
-                      <td class="judged">{{ .Judged }}</td>
+                      <td class="cell" title="{{ .Metric }}"><a class="fill" href="{{ .Thresholds }}">{{ .Name }}</a></td>
+                      <td class="cell" title="{{ .Hover }}"><a class="fill" href="{{ .Thresholds }}" tabindex="-1">{{ template "value" . }}</a></td>
+                      <td class="cell judged"><a class="fill" href="{{ .Thresholds }}" tabindex="-1">{{ .Judged }}</a></td>
                     </tr>
                   {{ end }}
                 </tbody>

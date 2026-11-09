@@ -395,7 +395,7 @@ entered again nothing alerts. Do it in this order:
    sudo journalctl -u monitor-hub.service -n 20
    ```
 
-6. **Give every volume its levels again**, from the chart each value on the hub's `/debug` page
+6. **Give every volume its levels again**, from the settings each value on the hub's `/debug` page
    opens ([specs/thresholds.md](specs/thresholds.md)). A volume is **two** series — one in
    bytes, `disk.free_bytes`, one in percent, `disk.free_pct` — configured separately, each
    with a direction (`below`, for free space) and a warning and a critical value; either

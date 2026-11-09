@@ -179,6 +179,7 @@ func showForm(ctx context.Context, w http.ResponseWriter, store ThresholdStore, 
 		// Something is stored that nothing judges by, so the form says so and offers
 		// blank fields rather than a configuration the hub is not honouring.
 		view.Unreadable = printer.T("threshold.unreadable")
+		th = storage.Threshold{}
 	default:
 		view.Below = th.Direction != storage.Above
 		view.Warning, view.Critical = typed(ref.Metric, th.Warning), typed(ref.Metric, th.Critical)
@@ -385,10 +386,7 @@ func unitsJSON(unit history.Unit) string {
 	for _, written := range writtenUnits[unit] {
 		scales[strings.ToLower(written.suffix)] = written.scale
 	}
-	encoded, err := json.Marshal(scales)
-	if err != nil {
-		return "{}"
-	}
+	encoded, _ := json.Marshal(scales) // a map of finite constants cannot fail
 	return string(encoded)
 }
 

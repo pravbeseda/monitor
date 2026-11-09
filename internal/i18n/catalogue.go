@@ -132,7 +132,7 @@ var catalogue = map[string]map[Locale]string{
 	"threshold.cancel":           {English: "Cancel", Russian: "Отмена"},
 	"threshold.close":            {English: "Close", Russian: "Закрыть"},
 	"threshold.saved":            {English: "Saved. It applies from the next check.", Russian: "Сохранено. Применится при следующей проверке."},
-	"threshold.blank_hint":       {English: "Two blank fields remove the threshold.", Russian: "Два пустых поля снимают порог."},
+	"threshold.blank_hint":       {English: "Two blank fields remove the threshold.", Russian: "Если оставить оба поля пустыми, порог будет снят."},
 	"threshold.unsaved":          {English: "Changes are not saved.", Russian: "Изменения не сохранены."},
 	"threshold.discard":          {English: "Close without saving", Russian: "Закрыть без сохранения"},
 	"threshold.stay":             {English: "Back to the form", Russian: "Вернуться к форме"},
@@ -180,7 +180,6 @@ var catalogue = map[string]map[Locale]string{
 	"unit.bytes":    {English: "bytes, e.g. 10GB", Russian: "байты, например 10GB"},
 	"unit.percent":  {English: "percent", Russian: "проценты"},
 	"unit.duration": {English: "seconds, or m (minutes), h, d, e.g. 36h", Russian: "секунды, или m (минуты), h, d, например 36h"},
-	"unit.number":   {English: "number", Russian: "число"},
 	// … and the suffixes a rendered duration is written with.
 	"unit.milliseconds": {English: "ms", Russian: "мс"},
 	"unit.seconds":      {English: "s", Russian: "с"},

@@ -135,13 +135,18 @@ func TestDebugShowsAnEmptyNodesReason(t *testing.T) {
 	if !ok {
 		t.Fatalf("no link to the empty node")
 	}
-	containsAll(t, "reason", pickedDebug(t, store, link), "<h2>server-c", "No measurements yet")
+	reason := pickedDebug(t, store, link)
+	containsAll(t, "reason", reason, "<h2>server-c", "No measurements yet")
+	containsAll(t, "its entry", treePane.FindString(reason), `aria-current="true">server-c`)
 
 	empty := stored{states: []storage.NodeState{{Node: "server-c", LastSeen: lastSeen}}}
 	containsAll(t, "only reason", pickedDebug(t, empty, "/debug"), "<h2>server-c", "No measurements yet")
 
 	nobody := pickedDebug(t, stored{}, "/debug")
 	containsAll(t, "empty hub", nobody, "No node has reported yet", "All<b>0</b>")
+	if strings.Contains(treePane.FindString(nobody), "<a ") {
+		t.Errorf("left pane = %s, want it empty", treePane.FindString(nobody))
+	}
 }
 
 // spec: history.md#table — an entry counts its problems under the worst mark, and its
@@ -159,6 +164,91 @@ func TestDebugEntriesCountTheirTrouble(t *testing.T) {
 	if clean := treePane.FindString(pickedDebug(t, fleet(), "/debug")); strings.Contains(clean, "■") || strings.Contains(clean, "◆") {
 		t.Errorf("left pane = %s, want no counts", clean)
 	}
+}
+
+// spec: history.md#table — the worst mark speaks for an entry: critical, then warning, then
+// no fresh data; the count is of every problem in the group.
+func TestDebugEntriesShowTheWorstMark(t *testing.T) {
+	th := func(mount string) storage.Threshold { return watched("server-b", "disk.free_bytes", mounted(mount)) }
+	values := append(pair(mounted("/"), lastSeen), pair(mounted("/data"), lastSeen)...)
+	store := stored{
+		states:     []storage.NodeState{{Node: "server-b", LastSeen: lastSeen, Values: values}},
+		thresholds: []storage.Threshold{th("/"), th("/data")},
+		levels:     []storage.State{level("server-b", "disk.free_bytes", mounted("/"), "warning"), level("server-b", "disk.free_bytes", mounted("/data"), "critical")},
+	}
+	if pane := treePane.FindString(pickedDebug(t, store, "/debug")); !regexp.MustCompile(`■</i>\s*2`).MatchString(pane) || strings.Contains(pane, "▲") {
+		t.Errorf("left pane = %s, want two problems under the critical mark", pane)
+	}
+	store.levels = store.levels[:1]
+	if pane := treePane.FindString(pickedDebug(t, store, "/debug")); !strings.Contains(pane, "▲") {
+		t.Errorf("left pane = %s, want the warning mark", pane)
+	}
+	store.levels = nil
+	store.states[0].Values[0].TS = lastSeen.Add(-24 * time.Hour)
+	if pane := treePane.FindString(pickedDebug(t, store, "/debug")); !strings.Contains(pane, "◌") {
+		t.Errorf("left pane = %s, want the no-fresh-data mark", pane)
+	}
+}
+
+// spec: history.md#table — "Without a threshold" counts a node the file no longer names.
+func TestDebugFiltersCountADetachedNode(t *testing.T) {
+	store := fleet()
+	store.states = append(store.states, storage.NodeState{Node: "server-z", LastSeen: lastSeen, Values: []storage.Value{
+		{Metric: "load.avg_5m", Sensor: "load", Value: 1, TS: lastSeen},
+	}})
+	rec := httptest.NewRecorder()
+	routesWith(t, store, func() time.Time { return lastSeen }).ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/debug", nil))
+	containsAll(t, "page", rec.Body.String(), "Without a threshold<b>7</b>")
+}
+
+// spec: history.md#table — a search looks at one field at a time, and a label set is not one
+// field.
+func TestDebugSearchLooksAtEachFieldAlone(t *testing.T) {
+	if body := pickedDebug(t, fleet(), "/debug?q=laptop-a+load"); !strings.Contains(body, "Nothing matches") {
+		t.Errorf("a search matched across fields: %s", body)
+	}
+}
+
+// spec: history.md#table — "Problems" with a search narrows a silent node's line too.
+func TestDebugSearchNarrowsASilentNode(t *testing.T) {
+	store := fleet()
+	store.states[0].LastSeen = lastSeen.Add(-24 * time.Hour)
+	store.levels = []storage.State{silenceLevel("laptop-a", "critical")}
+	containsAll(t, "page", pickedDebug(t, store, "/debug?show=problems&q=nothing-here"), "Nothing matches")
+}
+
+// spec: history.md#table — two series whose labels would read alike unescaped stay two, and
+// a label key holding a comma stays its own group.
+func TestDebugKeepsAwkwardLabelsApart(t *testing.T) {
+	values := []storage.Value{
+		{Metric: "job.lag", Sensor: "disk", Labels: map[string]string{"a": "b,c=d"}, Value: 1, TS: lastSeen},
+		{Metric: "job.lag", Sensor: "disk", Labels: map[string]string{"a": "b", "c": "d"}, Value: 2, TS: lastSeen},
+		{Metric: "job.lag", Sensor: "disk", Labels: map[string]string{"k,l": "m"}, Value: 3, TS: lastSeen},
+		{Metric: "job.lag", Sensor: "disk", Labels: map[string]string{"k": "m", "l": "n"}, Value: 4, TS: lastSeen},
+	}
+	store := stored{states: []storage.NodeState{{Node: "server-b", LastSeen: lastSeen, Values: values}}}
+	store.thresholds = []storage.Threshold{watched("server-b", "job.lag", map[string]string{"a": "b,c=d"})}
+	store.levels = []storage.State{level("server-b", "job.lag", map[string]string{"a": "b,c=d"}, "critical")}
+	containsAll(t, "page", pickedDebug(t, store, "/debug"), "Problems<b>1</b>")
+
+	links := treeLinks(t, pickedDebug(t, store, "/debug"))
+	first, second := links["job (k,l)"], links["job (k, l)"]
+	if first == "" || second == "" || first == second {
+		t.Errorf("entries = %v, want the two key sets apart", links)
+	}
+}
+
+// spec: state.md#page — a matrix cell says on hover what it is judged by, or that what is
+// stored cannot be read.
+func TestDebugCellSaysWhatJudgesIt(t *testing.T) {
+	warning := 20e9
+	store := fleet()
+	series := storage.SeriesRef{Node: "laptop-a", Metric: "disk.free_bytes", Labels: mounted("/")}
+	store.thresholds = []storage.Threshold{{Series: series, Direction: storage.Below, Warning: &warning}}
+	cell := func() string { return cellOf(t, showDebug(t, store, "/debug?q=laptop-a"), "disk.free_bytes", "/") }
+	containsAll(t, "set", cell(), "&lt; 20.0 GB")
+	store.thresholds[0].Direction = "sideways"
+	containsAll(t, "unreadable", cell(), "cannot be read")
 }
 
 // spec: history.md#table — a group is told apart by what it holds: two matrices of one

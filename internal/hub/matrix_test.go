@@ -339,7 +339,7 @@ func TestDebugSaysTheDeclaredNames(t *testing.T) {
 	body := showDebug(t, stored{states: []storage.NodeState{{Node: "laptop-a", LastSeen: lastSeen, Values: values}}, names: book}, "/debug?lang=ru")
 
 	own := ownRows(t, body)
-	if len(own) != 1 || !strings.Contains(own[0], `<td title="load.avg_15m">`) || !strings.Contains(own[0], ">Нагрузка 15 мин</a>") {
+	if len(own) != 1 || !strings.Contains(own[0], `title="load.avg_15m"`) || !strings.Contains(own[0], ">Нагрузка 15 мин</a>") {
 		t.Errorf("rows above the matrix = %q, want the load row by its name", own)
 	}
 	got := matrices(t, body)

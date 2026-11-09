@@ -75,7 +75,7 @@ func sortedKeys(labels map[string]string) []string { return slices.Sorted(maps.K
 
 // matrixKey addresses a matrix: its family, its dot kept, and its label keys.
 func matrixKey(family string, keys []string) string {
-	return family + "|" + strings.Join(keys, ",")
+	return family + "|" + strings.Join(keys, "\x00")
 }
 
 // matrixGroup is the series one matrix gathers: one family — its dot kept, so that an id

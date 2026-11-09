@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"html/template"
 	"log/slog"
+	"maps"
 	"net/http"
 	"net/url"
 	"slices"
@@ -77,14 +78,14 @@ type treeNode struct {
 
 // treeGroup is one group's entry in the left pane.
 type treeGroup struct {
-	Label    string
-	URL      string
-	Current  bool
-	Problems *problemCount
-	Unusual  int
+	Label   string
+	URL     string
+	Current bool
+	Counts  []markCount
 }
 
-type problemCount struct {
+// markCount is how many series of a group carry a mark.
+type markCount struct {
 	Count int
 	markView
 }
@@ -317,15 +318,16 @@ func groupsOf(printer *i18n.Printer, book names.Book, node string, shown []serie
 		}
 		groups = append(groups, debugGroup{key: m.key, label: label, matrix: m})
 	}
+	at := make(map[string]int, len(groups))
+	for i, group := range groups {
+		at[group.key] = i
+	}
 	for _, row := range shown {
 		key := generalGroup
 		if len(row.labels) > 0 {
 			key = matrixKey(familyKey(row.metric), sortedKeys(row.labels))
 		}
-		at := slices.IndexFunc(groups, func(g debugGroup) bool { return g.key == key })
-		if at < 0 {
-			continue
-		}
+		at := at[key]
 		if row.problem != nil {
 			if groups[at].problems == 0 || *row.problem < groups[at].worst {
 				groups[at].worst = *row.problem
@@ -389,7 +391,6 @@ func treeGroupOf(printer *i18n.Printer, node string, group debugGroup, lang stri
 		Label:   group.label,
 		URL:     debugLink(lang, url.Values{"node": {node}, "group": {group.key}}),
 		Current: current,
-		Unusual: group.unusual,
 	}
 	if group.problems > 0 {
 		mark := staleMark(printer)
@@ -399,7 +400,10 @@ func treeGroupOf(printer *i18n.Printer, node string, group debugGroup, lang stri
 		case itemWarning:
 			mark = warningMark(printer)
 		}
-		out.Problems = &problemCount{Count: group.problems, markView: mark}
+		out.Counts = append(out.Counts, markCount{Count: group.problems, markView: mark})
+	}
+	if group.unusual > 0 {
+		out.Counts = append(out.Counts, markCount{Count: group.unusual, markView: unusualMark(printer.T("timeline.unusual"))})
 	}
 	return out
 }
@@ -457,10 +461,11 @@ func filteredPanes(printer *i18n.Printer, book names.Book, nodes []debugNode, qu
 		})
 		pane.Rows, pane.Matrices = layOut(printer, book, pane.Name, matched, query.lang)
 		everything := query.show == showAll && query.search == ""
-		if len(matched) == 0 && !everything && (query.show != showProblems || !silent[pane.Name]) {
+		silentLine := query.show == showProblems && query.search == "" && silent[pane.Name]
+		if len(matched) == 0 && !everything && !silentLine {
 			continue
 		}
-		if len(matched) > 0 || !everything {
+		if !everything {
 			pane.Empty = ""
 		}
 		panes = append(panes, pane)
@@ -486,18 +491,17 @@ func (q debugQuery) matches(printer *i18n.Printer, book names.Book, node string,
 	if q.search == "" {
 		return true
 	}
-	text := []string{node, notify.Heading(printer, book.Metrics[row.metric], row.metric, row.labels), row.metric}
-	for _, value := range row.labels {
-		text = append(text, value)
-	}
-	return strings.Contains(strings.ToLower(strings.Join(text, " ")), strings.ToLower(q.search))
+	fields := append([]string{node, notify.Heading(printer, book.Metrics[row.metric], row.metric, row.labels), row.metric},
+		slices.Collect(maps.Values(row.labels))...)
+	wanted := strings.ToLower(q.search)
+	return slices.ContainsFunc(fields, func(field string) bool { return strings.Contains(strings.ToLower(field), wanted) })
 }
 
 // matching keeps the series that match, and their neighbours in a matrix row, dimmed: a row
 // reads whole or not at all.
 func matching(rows []seriesRow, keep func(seriesRow) bool) []seriesRow {
 	sets := map[string]bool{}
-	setOf := func(row seriesRow) string { return familyKey(row.metric) + "\x00" + storage.LabelKey(row.labels) }
+	setOf := func(row seriesRow) string { return state.SeriesKey("", familyKey(row.metric), row.labels) }
 	for _, row := range rows {
 		if keep(row) {
 			sets[setOf(row)] = true
@@ -542,7 +546,7 @@ func rowOf(printer *i18n.Printer, node string, row seriesRow, lang string) rowVi
 		out.Marks = append(out.Marks, unusualMark(words))
 		hover = append(hover, words)
 	}
-	if row.threshold != nil {
+	if row.watched {
 		hover = append(hover, out.Judged)
 	}
 	out.Hover = strings.Join(append(hover, printer.Time(row.ts)), " · ")
@@ -617,7 +621,7 @@ func rowsByNode(current state.State) map[string][]seriesRow {
 	problems := map[string]itemKind{}
 	for _, one := range itemsOf(current) {
 		if one.kind != itemAnomalous && !one.silence() {
-			problems[seriesID(one.subject)] = one.kind
+			problems[state.SeriesKey(one.subject.Node, one.subject.Metric, one.subject.Labels)] = one.kind
 		}
 	}
 	rows := map[string][]seriesRow{}
@@ -636,7 +640,7 @@ func rowsByNode(current state.State) map[string][]seriesRow {
 			watched:   subject.Watched,
 			threshold: subject.Threshold,
 		}
-		if kind, found := problems[seriesID(subject)]; found {
+		if kind, found := problems[state.SeriesKey(subject.Node, subject.Metric, subject.Labels)]; found {
 			row.problem = &kind
 		}
 		rows[subject.Node] = append(rows[subject.Node], row)
@@ -647,10 +651,6 @@ func rowsByNode(current state.State) map[string][]seriesRow {
 		})
 	}
 	return rows
-}
-
-func seriesID(s state.Subject) string {
-	return s.Node + "\x00" + s.Metric + "\x00" + storage.LabelKey(s.Labels)
 }
 
 // seriesBefore orders the series of one node the way every page lists them: by what their

@@ -228,17 +228,19 @@
       // dialog and its notice hang off <html>: a refresh replaces <body>.
       var settings = 'a[href^="/thresholds?"]';
       var patience = 15000;
+      // Opening waits as long as a credential prompt may stay up: an abort would dismiss it.
+      var openingPatience = 120000;
       var latest = 0;
       var open = null;
 
       document.addEventListener("click", function (event) {
         var link = event.target.closest && event.target.closest(settings);
-        if (!link || event.button !== 0 || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return;
+        if (!link || newTab(event)) return;
         if (!window.fetch || !window.DOMParser || !window.HTMLDialogElement || !window.AbortController) return;
         event.preventDefault();
         var mine = ++latest;
         var href = link.getAttribute("href");
-        ask(href).then(function (reply) {
+        ask(href, null, openingPatience).then(function (reply) {
           if (mine !== latest || reply.answer.status === 401) return;
           var content = reply.page.querySelector("#series-settings");
           if (!reply.answer.ok || !content) throw reply.answer.status;
@@ -248,14 +250,20 @@
         });
       });
 
+      window.addEventListener("beforeunload", function () { latest++; });
+
+      function newTab(event) {
+        return event.button !== 0 || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey;
+      }
+
       document.addEventListener("DOMContentLoaded", function () {
         var page = document.querySelector("#series-settings");
         if (page) followTyping(page);
       });
 
-      function ask(address, options) {
+      function ask(address, options, wait) {
         var abort = new AbortController();
-        var late = setTimeout(function () { abort.abort(); }, patience);
+        var late = setTimeout(function () { abort.abort(); }, wait || patience);
         var request = Object.assign({ cache: "no-store", credentials: "same-origin", signal: abort.signal }, options);
         return fetch(address, request).then(function (answer) {
           return answer.text().then(function (html) {
@@ -274,20 +282,31 @@
         open.opened = fields();
         var pressed = null;
         element.addEventListener("mousedown", function (event) { pressed = event.target; });
+        // Escape is taken here: a second one would reach the dialog as a close it cannot refuse.
+        element.addEventListener("keydown", function (event) {
+          if (event.key !== "Escape") return;
+          event.preventDefault();
+          leave(null);
+        });
         element.addEventListener("cancel", function (event) {
           event.preventDefault();
           leave(null);
+        });
+        element.addEventListener("close", function () {
+          if (open && open.element === element) close();
         });
         element.addEventListener("click", function (event) {
           var on = event.target.closest.bind(event.target);
           var link = on("[data-leave]");
           if (link) {
+            if (newTab(event)) return;
             event.preventDefault();
             leave(link.href);
           } else if (on("[data-dismiss]")) {
             event.preventDefault();
             leave(null);
           } else if (on("[data-discard]")) {
+            if (open.busy) return;
             if (open.then) location.href = open.then;
             else close();
           } else if (on("[data-stay]")) {
@@ -329,9 +348,10 @@
 
       function close() {
         var href = open.href;
-        open.element.close();
-        open.element.remove();
+        var element = open.element;
         open = null;
+        element.close();
+        element.remove();
         var link = Array.prototype.find.call(document.querySelectorAll(settings), function (one) {
           return one.getAttribute("href") === href;
         });
@@ -343,11 +363,17 @@
         if (open.busy) return;
         var body = new URLSearchParams(new FormData(form()));
         if (event.submitter && event.submitter.name) body.append(event.submitter.name, event.submitter.value);
-        open.busy = true;
-        var unsent = open.element.querySelector(".settings-unsent");
+        var mine = open;
+        var sending = form();
+        mine.busy = true;
+        guard().hidden = true;
+        sending.inert = true;
+        var unsent = mine.element.querySelector(".settings-unsent");
         unsent.hidden = true;
-        ask(form().getAttribute("action"), { method: "POST", body: body }).then(function (reply) {
-          open.busy = false;
+        ask(sending.getAttribute("action"), { method: "POST", body: body }).then(function (reply) {
+          mine.busy = false;
+          sending.inert = false;
+          if (open !== mine) return;
           var saved = reply.page.querySelector("[data-saved]");
           var content = reply.page.querySelector("#series-settings");
           if (reply.answer.redirected && saved) {
@@ -364,7 +390,8 @@
             unsent.hidden = false;
           }
         }).catch(function () {
-          open.busy = false;
+          mine.busy = false;
+          sending.inert = false;
           unsent.hidden = false;
         });
       }

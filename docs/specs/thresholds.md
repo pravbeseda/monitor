@@ -62,7 +62,7 @@ threshold belongs to one series and not to a family of them.
 **The unit is the series' own**, derived from the metric id as everywhere else
 ([history.md](history.md#wire-format)): a `_bytes` metric takes a size, a `_pct` metric a
 percentage number, a `_seconds` metric a duration in seconds, anything else a plain number.
-The form says which it is asking for. A size may be written with a decimal unit — `10GB` is
+The form says which it is asking for, and names no unit for a plain number. A size may be written with a decimal unit — `10GB` is
 10 000 000 000, as sizes are written everywhere in this project — and a duration with one of
 `s`, `m` (minutes), `h` or `d` — `36h` is 129 600; everything else is a plain number. A size
 unit or a duration unit is read regardless of case and of a space before it, and is written
@@ -214,7 +214,7 @@ own address.
 
 | Request | Result |
 |---|---|
-| the form of any series | beside "Save", a button "Apply to every series of this metric" |
+| the form of any series | below "Save", a button "Apply to every series of this metric" |
 | that button, with consistent values | the form again, with the values typed, and above "Confirm" the four series by node, then by name (`node · ` the series' name, [metric names](metric-names.md#naming)), each with its current threshold or "none", and a line saying their thresholds will be replaced and the switch is this series' only; nothing stored |
 | that button, both values blank | the same, saying their thresholds will be removed |
 | that button, a value refused by a save | the form, refused as a save is; nothing stored |

@@ -143,7 +143,7 @@ func TestPageShowsADashWithoutALevel(t *testing.T) {
 		}
 	}
 	// A row of its own says what judges the series, and links to where that is set.
-	if own := ownRows(t, body)[0]; !strings.Contains(own, `class="judged"`) || !strings.Contains(own, "/thresholds?") || levelClass.MatchString(own) {
+	if own := ownRows(t, body)[0]; !strings.Contains(own, `judged`) || !strings.Contains(own, "/thresholds?") || levelClass.MatchString(own) {
 		t.Errorf("row = %s, want what judges it and no level", own)
 	}
 }

@@ -139,7 +139,7 @@ A link to a series' settings opens them over the page the reader is on, from any
 | the same with a modifier key held, or the middle button | the settings page in a new tab, as any link |
 | a click on another settings link while one is loading | the last one clicked opens; never two dialogs |
 | a dialog closed and the same link clicked again | the form as now stored, nothing typed before kept |
-| the settings answering with something that is not the form, or not within 15 seconds | the browser goes to the settings page, which says what is wrong |
+| the settings answering with something that is not the form, or not within two minutes, the time a credential prompt may stay up | the browser goes to the settings page, which says what is wrong |
 | opening the settings when the proxy no longer accepts the reader's credentials | the browser asks for them; given, the dialog opens; refused, no dialog and the page as it was |
 | a save the form accepts | the dialog closes, a notice says it was saved and leaves after five seconds or when dismissed, and the page behind is fetched at once, whatever a refresh already under way brings: what the series is judged by is shown straight away, its level from the next check, and a series a filter no longer matches leaves the page |
 | the dialog closes | the focus on the link to the same series; where that link has left the page, on the page itself |
@@ -147,11 +147,13 @@ A link to a series' settings opens them over the page the reader is on, from any
 | "Apply to every series of this metric" | the list in the same dialog, "Confirm" as on the page; no second dialog |
 | "Confirm" | as a save the form accepts |
 | a save answered by anything but the form or the form saying it was saved, a save not answered within 15 seconds, or a credential prompt cancelled | the dialog stays, with what was typed and a line saying it was not saved |
-| "Save" or "Confirm" pressed again, or the dialog asked to close, while a save is unanswered | nothing until the answer: one save |
+| "Save" or "Confirm" pressed again, a field edited, or the dialog asked to close, while a save is unanswered | nothing until the answer: one save, of what was on the screen |
 | Escape, the close button, "Cancel" or a click outside, every field as it was opened | the dialog closes and the page is as it was |
 | any of those with a field changed, a direction or the switch among them, or after a refused save or the list | the dialog stays and asks: close without saving, or go back to the form |
 | Escape while the dialog asks | back to the form, what was typed kept |
 | a press inside the dialog released outside it | not a click outside |
+| the reader leaving the page while the settings are loading | the page they chose, not the settings |
+| a modifier key held on "History of this series" | that page in a new tab, the dialog as it was |
 | "History of this series" with every field as it was opened | the browser goes to that page |
 | "History of this series" with a field changed | the dialog stays and asks; closing without saving goes on to that page |
 | the page in Russian | the form, its close button, the question on closing, the "not saved" line and the notice all in Russian, the line with no answer from the hub needed |

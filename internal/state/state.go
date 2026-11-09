@@ -91,19 +91,19 @@ func Build(targets func(node string) (evaluate.Target, bool), snap storage.Snaps
 	// configured this" (docs/specs/state.md#listing).
 	set := make(map[string]storage.Threshold, len(snap.Thresholds))
 	for _, threshold := range snap.Thresholds {
-		set[seriesKey(threshold.Series.Node, threshold.Series.Metric, threshold.Series.Labels)] = threshold
+		set[SeriesKey(threshold.Series.Node, threshold.Series.Metric, threshold.Series.Labels)] = threshold
 	}
 
 	excluded := make(map[string]struct{}, len(snap.Excluded))
 	for _, ref := range snap.Excluded {
-		excluded[seriesKey(ref.Node, ref.Metric, ref.Labels)] = struct{}{}
+		excluded[SeriesKey(ref.Node, ref.Metric, ref.Labels)] = struct{}{}
 	}
 
 	// An anomaly the record holds open keeps its series unusual until it comes back, by
 	// the rule the tick records it by (ADR 0042).
 	held := make(map[string]bool, len(snap.Unusual))
 	for _, record := range snap.Unusual {
-		held[seriesKey(record.Node, record.Metric, record.Labels)] = true
+		held[SeriesKey(record.Node, record.Metric, record.Labels)] = true
 	}
 
 	// Evaluation's own subjects, so the state lists and freezes exactly what a tick would.
@@ -122,7 +122,7 @@ func Build(targets func(node string) (evaluate.Target, bool), snap storage.Snaps
 		}
 		// The silence subject reads hub receipt time, which is never stale.
 		one.Stale = subject.Metric != evaluate.SilenceMetric && subject.Frozen
-		watched[seriesKey(subject.Node, subject.Metric, subject.Labels)] = one
+		watched[SeriesKey(subject.Node, subject.Metric, subject.Labels)] = one
 	}
 
 	for _, reported := range snap.Nodes {
@@ -134,7 +134,7 @@ func Build(targets func(node string) (evaluate.Target, bool), snap storage.Snaps
 			LastSeen:     reported.LastSeen,
 		}
 
-		if silence, judged := watched[seriesKey(reported.Node, evaluate.SilenceMetric, nil)]; judged {
+		if silence, judged := watched[SeriesKey(reported.Node, evaluate.SilenceMetric, nil)]; judged {
 			// Silence is judged without a threshold, so it counts as neither watched nor
 			// unwatched: the counts are of the series somebody has to configure, and a
 			// hub where they are zero is watching nothing (docs/specs/state.md#model).
@@ -142,7 +142,7 @@ func Build(targets func(node string) (evaluate.Target, bool), snap storage.Snaps
 			out.Subjects = append(out.Subjects, silence)
 		}
 		for _, value := range reported.Values {
-			key := seriesKey(reported.Node, value.Metric, value.Labels)
+			key := SeriesKey(reported.Node, value.Metric, value.Labels)
 			one, judged := watched[key]
 			threshold, isWatched := set[key]
 			if !judged {
@@ -210,9 +210,9 @@ func staleOf(target evaluate.Target, configured bool, lastSeen time.Time, value 
 	return target.Frozen(value.Sensor, lastSeen, value.TS, now)
 }
 
-// seriesKey identifies a series by the encoding evaluation keys a subject on, so the two
+// SeriesKey identifies a series by the encoding evaluation keys a subject on, so the two
 // cannot drift apart.
-func seriesKey(node, metric string, labels map[string]string) string {
+func SeriesKey(node, metric string, labels map[string]string) string {
 	key, err := storage.Subject{Node: node, Metric: metric, Labels: labels}.Key()
 	if err != nil {
 		slog.Error("identify a series", "node", node, "metric", metric, "error", err)

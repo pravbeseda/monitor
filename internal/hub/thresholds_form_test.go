@@ -82,6 +82,17 @@ func TestThresholdFormStandsWithoutItsChart(t *testing.T) {
 	}
 }
 
+// spec: thresholds.md#form — what cannot be read is drawn nowhere, the chart included.
+func TestThresholdFormDrawsNoUnreadableLine(t *testing.T) {
+	store := withPoints(holding(dataSeries))
+	warning := 20e9
+	store.held[key(dataSeries)] = storage.Threshold{Series: dataSeries, Direction: "sideways", Warning: &warning}
+	_, body := openForm(t, store, dataAddress)
+	if strings.Contains(body, `class="threshold level-warning"`) {
+		t.Errorf("page = %s, want no line for what cannot be read", body)
+	}
+}
+
 // spec: thresholds.md#form — off, the switch still says something: a hidden value after the
 // box, so the box wins when it is on.
 func TestThresholdFormSwitchSaysExcludeWhenOff(t *testing.T) {
