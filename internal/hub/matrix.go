@@ -89,7 +89,8 @@ type matrixGroup struct {
 // compareMetrics orders metric ids as a reader counts: a number inside one compares by
 // value, so load.avg_5m comes before load.avg_15m.
 func compareMetrics(a, b string) int {
-	for i, j := 0, 0; i < len(a) && j < len(b); {
+	i, j := 0, 0
+	for i < len(a) && j < len(b) {
 		endA, endB := digitsEnd(a, i), digitsEnd(b, j)
 		if endA == i || endB == j {
 			if a[i] != b[j] {
@@ -104,7 +105,7 @@ func compareMetrics(a, b string) int {
 		}
 		i, j = endA, endB
 	}
-	return cmp.Compare(a, b)
+	return cmp.Or(cmp.Compare(len(a)-i, len(b)-j), cmp.Compare(a, b))
 }
 
 // digitsEnd is where the run of digits starting at from ends; from itself when there is none.

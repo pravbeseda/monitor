@@ -509,3 +509,20 @@ func TestDebugCountsTheNumbersInAMetricID(t *testing.T) {
 		t.Errorf("columns = %v, want 2 before 10", heads)
 	}
 }
+
+// spec: history.md#page — an id that runs out comes first even when its number is spelled
+// with a leading zero elsewhere, so columns keep one order whatever order they arrive in.
+func TestDebugKeepsColumnsInOneOrder(t *testing.T) {
+	labelled := func(metric string) storage.Value {
+		return storage.Value{Metric: metric, Sensor: "disk", Labels: map[string]string{"queue": "a"}, Value: 1, TS: lastSeen}
+	}
+	store := stored{states: []storage.NodeState{{Node: "laptop-a", LastSeen: lastSeen, Values: []storage.Value{
+		labelled("q.a01b"), labelled("q.a1"), labelled("q.a1a"),
+	}}}}
+	want := "q.a1,q.a1a,q.a01b"
+	for range 20 {
+		if got := strings.Join(matrices(t, showDebug(t, store, "/debug"))[0].metrics, ","); got != want {
+			t.Fatalf("columns = %s, want %s", got, want)
+		}
+	}
+}

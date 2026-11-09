@@ -464,6 +464,11 @@ func TestGenericPanel(t *testing.T) {
 		_, metrics := columns(g)
 		equal(t, "column hover", metrics, []string{"q.age_seconds", "q.depth"})
 	})
+	t.Run("columns count the numbers in their ids", func(t *testing.T) {
+		g := page(t, queue("q.depth_10", map[string]string{"queue": "a"}), queue("q.depth_2", map[string]string{"queue": "a"}))
+		_, metrics := columns(g)
+		equal(t, "column hover", metrics, []string{"q.depth_2", "q.depth_10"})
+	})
 	t.Run("a cell at critical", func(t *testing.T) {
 		g := page(t, judgedAt(queue("q.depth", map[string]string{"queue": "a"}), evaluate.Critical))
 		equal(t, "rows", panelRows(g), []string{"1"})
