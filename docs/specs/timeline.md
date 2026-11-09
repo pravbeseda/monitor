@@ -175,7 +175,7 @@ fresh at every moment.
 | an anomaly withdrawn by excluding its series | its start listed; no end |
 | an anomaly still open | its start listed; no end yet |
 | a transition of a series, or an anomaly's start or end | a link to that series' history page, carrying the node, the metric, every label and the language |
-| a transition of a node's silence | a link to `/debug` |
+| a transition of a node's silence | a link to that node on `/debug` ([table](history.md#table)) |
 | transitions yesterday and today | today's under "Today", yesterday's under "Yesterday", as the reader's zone counts days |
 | a transition three days ago, in Russian | under its day and month, "21 сентября" |
 | 60 transitions of nodes that take part | the newest 50 |

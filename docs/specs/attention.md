@@ -18,7 +18,7 @@
 The list answers the first two questions of the [concept](../concept.md): is everything
 fine, and if not, where to look. It is empty while all is well, and what needs attention
 surfaces on it by itself, most urgent first. Everything else — every series and its value —
-is one click away on `/debug`, and its threshold one more, from its row or its chart.
+is a click or two away on `/debug`, and its threshold one more, from its row, its cell or its chart.
 
 It began as a skin of its own, mission control, and was folded into the timeline when the
 timeline turned out to show all of it
@@ -97,7 +97,7 @@ the English catalogue's; every one of them has its Russian.
 | State | What the reader sees |
 |---|---|
 | every watched series `ok`, no anomaly, no node silent | no item |
-| `server-b`'s silence subject `critical` | an item naming `server-b` as silent, with the time it was last seen, linking to `/debug` |
+| `server-b`'s silence subject `critical` | an item naming `server-b` as silent, with the time it was last seen, linking to that node on `/debug` ([table](history.md#table)) |
 | the same node's series, stale because of the silence | no item of their own |
 | a laptop asleep inside its `silence_after`, every series stale | no item |
 | a node still reporting whose every series is stale — its sensors all failing | no item; `/debug` marks each series |
@@ -124,7 +124,7 @@ the English catalogue's; every one of them has its Russian.
 | two volumes of one node at `critical`, `/b` on `ext4` and `/a` on `zfs` | `/a` first: by what the labels name, not by the filesystem |
 | anomalies ranked 1, 2 and 3 on three nodes | in rank order, whatever their nodes |
 | five series ranking | all five, and no line after them |
-| six series ranking | ranks 1 to 5, then "more unusual series: 1", linking to `/debug` |
+| six series ranking | ranks 1 to 5, then "more unusual series: 1", linking to the unusual series on `/debug` ([table](history.md#table)) |
 | seven series ranking, ranks 1 and 2 at `critical` | ranks 1 and 2 as level items; ranks 3 to 7 as anomaly items; no line |
 | a `warning` and an anomaly on the same node | the warning first |
 | a series with no fresh data and an anomaly elsewhere | the anomaly first |

@@ -4,7 +4,8 @@
 - **Owns:** `internal/history` (series: selection, window, reduction, gaps) and its consumers
   in `internal/hub` — `GET /api/v1/series`, `GET /api/v1/history` and the drill-down page
   `GET /history`, whose chart the item pages of the [overview](overview.md) reuse, plus the
-  link the debug view `/debug` grows to reach it and which series `/debug`
+  way the debug view `/debug` leads to it, through a series' settings, the table of every
+  series on `/debug`, and which series `/debug`
   hides or marks as no longer arriving, by the staleness [state](state.md#staleness) reports.
   Reading stored points stays with `internal/storage`; the expected interval of a series
   comes from the resolved configuration `internal/config` already computes; every
@@ -15,7 +16,8 @@
   [0008](../decisions/0008-english-repo-bilingual-ui.md),
   [0018](../decisions/0018-history-through-the-api.md),
   [0026](../decisions/0026-reader-time-zone-from-the-browser.md),
-  [0034](../decisions/0034-a-series-without-a-sensor-still-ages.md)
+  [0034](../decisions/0034-a-series-without-a-sensor-still-ages.md),
+  [0059](../decisions/0059-all-series-is-two-panes-and-settings-a-dialog.md)
 
 ## Purpose
 
@@ -211,34 +213,80 @@ staleness still has an answer — the node's longest sensor interval
 | a series with one point in the window | that point drawn on its own, no line |
 | a series with a two-day silence inside a seven-day window | the line broken across the gap, not drawn straight through it |
 | a query the endpoint refuses, or a read that fails | the same status the endpoint answers, as a translated page |
-| a value on `/debug` | a link to the history page of its series, carrying the node, the metric and every label |
+| a value on `/debug` | its whole row, or its whole cell in a matrix, a link to the settings of its series ([thresholds.md](thresholds.md)), carrying the node, the metric and every label; the settings link on to its chart |
 | any link drawn for a series one of whose labels is empty — on `/debug`, the timeline's changes, the charts, panels and tiles of an item page, the per-series links of a page selecting several series, a chart's window and threshold links | a history link leads to that series' chart, a threshold link to its form; none answers `400` |
-| a series on `/debug` without labels | one row of its own: its series' name ([metric names](metric-names.md#where)), its newest value and the time it was collected, in one table above the node's matrices, ordered by metric id |
-| the labelled series of one node | matrices, one per label key set and family — the part of the metric id before its first dot, all of it when the id has no dot: a row per label set, named by what its labels name, and a column per metric that a series shown in it carries, each cell holding the newest value of that series, linked to its chart. One volume's two series make a matrix of one row, two sites' five series one of two rows |
+| a series on `/debug` without labels | one row of its own: its series' name ([metric names](metric-names.md#where)), its newest value and what it is judged by — a direction sign and its values, "none", or that what is stored cannot be read — in one group of the node, ordered by metric id |
+| the labelled series of one node | matrices, one per label key set and family — the part of the metric id before its first dot, all of it when the id has no dot: a row per label set, named by what its labels name, and a column per metric that a series shown in it carries, each cell holding the newest value of that series. One volume's two series make a matrix of one row, two sites' five series one of two rows |
 | a label set without a metric its matrix carries, or whose series of that metric is left out | a dash in that cell |
 | a label set whose every series is left out | no row; a matrix left with no row is not shown |
 | a matrix | its family's name in the corner above its rows' names, and its columns ordered by metric id, each headed by its metric's name ([metric names](metric-names.md#where)); the whole id on hover. An id with no dot is a family of its own |
 | the matrices of one node | ordered by family, then by label keys; the rows of each by what their labels name in a [message](evaluation.md#messages) — a volume's filesystem not counted, and never their metric's name — then by their labels as [state](state.md#ordering) compares them; the grouping and the order are the page's own, since the State API privileges no label |
-| what the labels name, on `/debug` and in a series' name ([metric names](metric-names.md#naming)) | the name a [message](evaluation.md#messages) gives the labels — a mount point as itself, any other label as `key=value`, quoted when it carries a space or an `=` — then a volume's filesystem and, if it is removable, that it is. Two sites, `site=blog-a` and `site=shop-c`, never read alike |
-| a row of its own | a link to the page that sets what that series is judged by ([thresholds.md](thresholds.md)) |
-| a cell of a matrix | no such link: the chart its value links to carries one, and the line shown when nothing is watched ([state](state.md#page)) says to open a series |
+| what the labels name in a series' name ([metric names](metric-names.md#naming)) | the name a [message](evaluation.md#messages) gives the labels — a mount point as itself, any other label as `key=value`, quoted when it carries a space or an `=` — then a volume's filesystem and, if it is removable, that it is. Two sites, `site=blog-a` and `site=shop-c`, never read alike |
+| what names a matrix row on `/debug` | a volume as in a series' name; any other label set by its values alone, in the order of their keys and joined by a comma, since the matrix is all one key set — `vpn, copy` — a value that is empty or holds a comma in quotes, with the names above on hover |
 | a chart of one series | a link to the page that sets what that series is judged by, in the reader's language |
-| a row of a matrix | the newest time among the series it shows; each cell's own time on hover |
+| a time on `/debug` | the node's last report once, beside its name; each series' own time on hover, no column of times |
 | the series of one volume collected at different times | each left out or marked by its own age: no series is aged by another series' newest point |
 | a series on `/debug` that the [state](state.md#staleness) calls stale when the page is read — its newest point older than three times the interval its series is aged by, or its node silent past its `silence_after` — and that carries `removable: "true"` | not shown: an unplugged drive or an ejected disk image is not a reading |
-| the same, without `removable: "true"` | shown, its collected time marked, in the reader's language, as holding no fresh data |
-| the same, in a matrix | its cell marked, in the reader's language, as holding no fresh data; when every series a matrix row shows is stale, the row's time marked once instead and its cells unmarked |
+| the same, without `removable: "true"` | shown, its value greyed with a mark before it, whatever level it stored; the mark and the words saying it holds no fresh data in the reader's language, on hover with the time it was collected |
+| the same, in a matrix | its cell marked the same way, every stale cell of a row on its own |
 | a series on `/debug` exactly three intervals old | shown unmarked: the bound is inclusive, as for gaps |
 | that series reporting again | shown as before, unmarked |
 | a series whose newest value names no sensor | aged by the longest interval among the sensors its node runs ([state](state.md#staleness)): marked, or hidden if it is removable, once past that bound |
 | the same series once its node is silent past its `silence_after` | marked with the rest of that node's series: silence is the node's, not the series' |
 | a series whose node runs its sensor no longer — resolved `enabled: false`, or a node the file no longer names | marked as holding no fresh data, or hidden if it is removable: nothing will refresh it |
 | a node silent past its `silence_after`, its series not yet three intervals old | its series hidden or marked already: evaluation freezes a silent node's subjects in the tick it falls silent |
-| a node whose every series is left out | "no current measurements" in place of its tables, rather than the "no measurements yet" of a node that never sent one |
+| a node whose every series is left out | "no current measurements" in place of its groups, rather than the "no measurements yet" of a node that never sent one |
 | a node still reporting but sending no measurements — its mount table unreadable | its series age like any other and are hidden or marked once past the bound |
+| a whole number in a metric with no unit, wherever a value is written | no decimals, `15` and not `15.00`; any other value keeps its two |
 | any chart page | the tabs ([web](web.md#skins)), the table of every series among them |
 | `&lang=ru` | axis labels, dates, byte sizes and percentages in Russian |
 | any time on the page, and every axis label | the reader's time zone, named once on the chart ([web.md](web.md#zone)); which day a tick is labelled with follows that zone, where the ticks sit does not |
+
+### The table of every series {#table}
+
+The page is two panes ([0059](../decisions/0059-all-series-is-two-panes-and-settings-a-dialog.md)).
+A *group* is what one node shows as one table: its series without labels, named "General",
+or one of its matrices, named by its family, or by its metric's name when its id has no dot.
+A *problem* is what the timeline would list for a series
+([attention](attention.md#model)): a level on a fresh series, or a watched series gone stale
+on a node still reporting others.
+
+| Request | What the reader sees |
+|---|---|
+| `/debug` | on the left every node, each with its groups under it; on the right one group under its node's line, its entry marked on the left |
+| the left pane | nodes by name; in each, "General" first, then the matrices in the order of [the page](#page) |
+| `/debug` with no group named and a problem somewhere | the first group from the top of the left pane that holds one, chosen anew by each refresh |
+| `/debug` with no group named and no problem | the first group of the first node that shows any |
+| `?node=server-b&group=…` | that group of that node; an entry on the left carries both, and no filter |
+| `?node=server-b` for a node showing groups | its first group holding a problem, else its first group |
+| `?node=server-c` for a node showing no series | that node's line and its reason ([page](#page)) on the right, its entry marked |
+| a node or a group the hub does not show, a group emptied by a refresh among them | as with neither named; the group back in a later refresh, it is shown again |
+| a group's address in the other language | the same group |
+| a family named `general` beside "General", and two matrices of one family | each entry opens its own group |
+| two matrices of one family on one node | each entry on the left also names its label keys |
+| a group's entry on the left | a mark and a count of its problems, the mark that of the worst — critical, then warning, then no fresh data; a mark and a count of its unusual series; neither when it has none |
+| a node showing no series | on the left with no groups under it, its name a link to its reason |
+| any `/debug` | above the panes a search field and four filters, "All", "Problems", "Unusual" and "Without a threshold", and a legend of the marks |
+| a filter's count | series of the whole hub, whatever the search or the filter; "Without a threshold" counts every series none is stored for, a node the file no longer names included, unlike the count on a node's line |
+| `?show=all` | every group of every node on the right, nothing marked on the left, "All" marked as chosen |
+| `?show=problems` | on the right only the problems, of every node; a matrix row holding one stays whole, its other cells dimmed; a row or a node holding none is left out, but for a silent node's line |
+| `?show=unusual` | the same, for series with an anomaly rank |
+| `?show=unwatched` | the same, for series no threshold is stored for |
+| `?q=vpn` | the same, for series whose node, name, metric id or a label value holds the text, whatever its case; the field holds the text, no filter marked as chosen |
+| `?q=vpn&show=unusual` | both at once |
+| `?show=all&q=vpn` | as `?q=vpn`, "All" marked as chosen |
+| a filter or a search beside a named group | the filter or the search, nothing marked on the left |
+| a filter or a search matching nothing | a line saying nothing matches and a link back to `/debug` |
+| a `show` this page does not know, a `q` that is empty or spaces | each ignored on its own |
+| Enter in the search with a filter chosen, or a click on a filter with a search | the other kept |
+| a click on an entry on the left | that group; the filter and the search dropped |
+| an address naming a group, a filter or a search, opened again or refreshed | the same group and the same filter ([live](web.md#live)) |
+| a hub no node has reported to | an empty left pane, the filters at zero, and the line saying no node has reported on the right |
+| every node showing no series | every node on the left, the first one's line and reason on the right |
+| `&lang=ru` | kept by every link, the entries on the left, the filters and the search included |
+| the line of a node | its name and agent version, its last report once with its zone, and its level, silence and unwatched count ([state](state.md#page)) |
+| the hub's own version | once, at the top of the page |
+| a narrow screen | the left pane above the right one, nothing cut off |
 
 The value axis starts at zero: a free-space chart scaled to its own minimum turns a quiet
 week into a cliff. Each axis carries at most six labelled ticks, spaced so the window's own

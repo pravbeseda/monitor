@@ -1,6 +1,6 @@
 # 0029. Pages refresh themselves by fetching their own address
 
-- **Status:** accepted
+- **Status:** accepted, amended by [0059](0059-all-series-is-two-panes-and-settings-a-dialog.md)
 - **Date:** 2026-09-18
 - **Source:** [web spec](../specs/web.md#live), [ADR 0005](0005-poc-stack.md),
   [ADR 0026](0026-reader-time-zone-from-the-browser.md)

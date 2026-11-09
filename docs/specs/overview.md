@@ -353,7 +353,7 @@ the page leaves out has no panel.
 
 **The generic panel** is a table of the group: a row per set of the labels it names —
 whatever their keys, so one panel holds what `/debug` splits across matrices — named by
-those labels as `/debug` names a matrix row by its own, nameless when there is none, in
+those labels as a series' name names them ([history](history.md#page)), nameless when there is none, in
 the page order; a column per metric, headed as a `/debug` matrix column is, the metric id
 on hover, in metric id order; a cell its series' value and mark, a dash where the row has
 no series of that metric, as on `/debug`.

@@ -20,7 +20,8 @@
   [0035](../decisions/0035-mission-control-is-rendered-by-the-hub.md),
   [0036](../decisions/0036-an-anomaly-is-a-value-outside-its-weeks-band.md),
   [0042](../decisions/0042-an-anomalys-start-and-end-are-recorded.md),
-  [0053](../decisions/0053-a-computer-card-is-lines-on-a-shared-scale.md)
+  [0053](../decisions/0053-a-computer-card-is-lines-on-a-shared-scale.md),
+  [0059](../decisions/0059-all-series-is-two-panes-and-settings-a-dialog.md)
 
 ## Purpose
 
@@ -37,7 +38,8 @@ series' anomaly
 against the anomaly evaluation holds open for it
 ([0042](../decisions/0042-an-anomalys-start-and-end-are-recorded.md)), which is no level
 and leads to no event. The debug view `/debug` is its first consumer: it shows every
-subject with its level, and nothing the endpoint would not return. The timeline's list of
+subject with its level, and nothing the endpoint would not return but what each series is
+judged by, read in the same snapshot and kept off the wire ([below](#out-of-scope)). The timeline's list of
 what needs attention is its second ([attention.md](attention.md)).
 
 Each series also carries its anomaly — how far its newest value lies from its own norm —
@@ -225,18 +227,18 @@ Names and labels are compared byte by byte; labels are rendered as history rende
 
 | Request | What the reader sees |
 |---|---|
-| `/debug` | beside every series shown in a row of its own, its level in the reader's language |
-| a series in a matrix ([history](history.md#page)) | its value marked by its level, `ok` too, so that it looks unlike a series with no level; `warning` or `critical` also named beside it in the reader's language, and any level, or that there is none, on hover |
+| any series on `/debug` ([history](history.md#page)) | its level, or that there is none, on hover in the reader's language |
+| a fresh series at `warning` or `critical` | a mark before its value and the value in that level's colour, the two levels unlike each other, the level's word there for a screen reader |
+| a series at `ok` or with no level | its value unmarked: what a series is judged by stands beside it in a row of its own, and on hover in a matrix |
 | a hub where nothing is watched | a line above the tables, in the reader's language, saying that nothing here is being judged and where to set a threshold |
 | a node some of whose series are unwatched | how many, beside the node's name |
-| series at `ok`, `warning` and `critical` | each of the three marked differently from the other two |
-| a series with no level | a dash in place of the level; in a matrix, its value unmarked |
 | a node whose level is `warning` or `critical` | that level beside the node's name, marked as a series at that level is |
 | a node whose level is `ok` or `null` | nothing beside its name |
 | a node whose silence subject is `critical` | the node marked silent in the reader's language, beside its last-seen time |
-| a stale series still shown | its level kept: beside the "no fresh data" mark in a row of its own, on its value in a matrix, whether the mark is on its cell or on its matrix row's time |
-| a series with an anomaly rank | marked as unusual in the reader's language, in its row or its cell, with its usual value — the norm — in its unit, so the series the timeline's "now" leaves off past its fifth anomaly can be found ([attention.md](attention.md#order)) |
+| a stale series still shown | greyed under the "no fresh data" mark whatever level it stored, as on a card ([overview](overview.md#model)); the level it stored kept on hover |
+| a series with an anomaly rank | a mark before its value and, on hover and for a screen reader, that it is unusual in the reader's language, with its usual value — the norm — in its unit, so the series the timeline's "now" leaves off past its fifth anomaly can be found ([attention.md](attention.md#order)) |
 | a series with an anomaly and no rank | no mark: it is not unusual ([anomaly](anomaly.md#model)) |
+| a fresh series at a level that is also unusual | both marks before its value, the level's first |
 | `/debug` | the tabs, the timeline among them ([web](web.md#skins)) |
 | `/debug?lang=ru` | every level word, on hover too, every mark and the silent mark in Russian, the language kept on every link |
 
