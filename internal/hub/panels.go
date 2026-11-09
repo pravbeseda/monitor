@@ -144,7 +144,7 @@ func columnsOf(series []panelSeries, known map[string]bool) []column {
 		}
 	}
 	out := make([]column, 0, len(metrics))
-	for _, metric := range slices.Sorted(maps.Keys(metrics)) {
+	for _, metric := range slices.SortedFunc(maps.Keys(metrics), compareMetrics) {
 		out = append(out, column{metric: metric, say: formatting(metric)})
 	}
 	return out

@@ -482,3 +482,30 @@ func TestAttentionLinksIntoTheTable(t *testing.T) {
 	store.levels = []storage.State{silenceLevel("laptop-a", "critical")}
 	containsAll(t, "timeline", showTimeline(t, logged{stored: store}, "/timeline"), `href="/debug?node=laptop-a"`)
 }
+
+// spec: history.md#page — a number inside a metric id compares by value, for rows and for
+// columns alike.
+func TestDebugCountsTheNumbersInAMetricID(t *testing.T) {
+	plain := func(metric string) storage.Value {
+		return storage.Value{Metric: metric, Sensor: "disk", Value: 1, TS: lastSeen}
+	}
+	labelled := func(metric string) storage.Value {
+		value := plain(metric)
+		value.Labels = map[string]string{"queue": "a"}
+		return value
+	}
+	store := stored{states: []storage.NodeState{{Node: "laptop-a", LastSeen: lastSeen, Values: []storage.Value{
+		plain("load.avg_15m"), plain("load.avg_1m"), plain("load.avg_5m"),
+		labelled("q.depth_10"), labelled("q.depth_2"),
+	}}}}
+	body := showDebug(t, store, "/debug")
+	own := ownRows(t, body)
+	for i, want := range []string{"load.avg_1m", "load.avg_5m", "load.avg_15m"} {
+		if !strings.Contains(own[i], `title="`+want+`"`) {
+			t.Errorf("row %d = %s, want %s", i, own[i], want)
+		}
+	}
+	if heads := matrices(t, body)[0].metrics; heads[0] != "q.depth_2" || heads[1] != "q.depth_10" {
+		t.Errorf("columns = %v, want 2 before 10", heads)
+	}
+}

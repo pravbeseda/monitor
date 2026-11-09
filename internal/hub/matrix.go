@@ -86,6 +86,35 @@ type matrixGroup struct {
 	series []seriesRow
 }
 
+// compareMetrics orders metric ids as a reader counts: a number inside one compares by
+// value, so load.avg_5m comes before load.avg_15m.
+func compareMetrics(a, b string) int {
+	for i, j := 0, 0; i < len(a) && j < len(b); {
+		endA, endB := digitsEnd(a, i), digitsEnd(b, j)
+		if endA == i || endB == j {
+			if a[i] != b[j] {
+				return cmp.Compare(a[i], b[j])
+			}
+			i, j = i+1, j+1
+			continue
+		}
+		numA, numB := strings.TrimLeft(a[i:endA], "0"), strings.TrimLeft(b[j:endB], "0")
+		if order := cmp.Or(cmp.Compare(len(numA), len(numB)), strings.Compare(numA, numB)); order != 0 {
+			return order
+		}
+		i, j = endA, endB
+	}
+	return cmp.Compare(a, b)
+}
+
+// digitsEnd is where the run of digits starting at from ends; from itself when there is none.
+func digitsEnd(text string, from int) int {
+	for from < len(text) && text[from] >= '0' && text[from] <= '9' {
+		from++
+	}
+	return from
+}
+
 // familyOf is the part of a metric id before its first dot; an id without one is a family
 // of its own.
 func familyOf(metric string) (family string, dotted bool) {
@@ -112,7 +141,7 @@ func matrixOf(printer *i18n.Printer, book names.Book, node string, series []seri
 	for _, row := range series {
 		metrics[row.metric] = true
 	}
-	for _, metric := range slices.Sorted(maps.Keys(metrics)) {
+	for _, metric := range slices.SortedFunc(maps.Keys(metrics), compareMetrics) {
 		out.Columns = append(out.Columns, columnView{Metric: metric, Label: columnLabel(printer, book, metric)})
 	}
 
