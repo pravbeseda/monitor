@@ -155,7 +155,7 @@
               var searching = search && document.activeElement === search;
               var focused = document.activeElement && document.activeElement.getAttribute("href");
               document.body.replaceWith(page.body);
-              if (searching) document.querySelector('input[type="search"]').focus();
+              if (searching) document.querySelector('input[type="search"]').focus({ preventScroll: true });
               var link = focused && Array.prototype.find.call(document.links, function (one) {
                 return one.getAttribute("href") === focused;
               });
