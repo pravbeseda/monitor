@@ -152,8 +152,10 @@
             }
             var body = page.body.innerHTML;
             if (stalled || body !== (shown === null ? document.body.innerHTML : shown)) {
+              var searching = search && document.activeElement === search;
               var focused = document.activeElement && document.activeElement.getAttribute("href");
               document.body.replaceWith(page.body);
+              if (searching) document.querySelector('input[type="search"]').focus();
               var link = focused && Array.prototype.find.call(document.links, function (one) {
                 return one.getAttribute("href") === focused;
               });

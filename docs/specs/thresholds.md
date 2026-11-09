@@ -117,7 +117,7 @@ One row = one test. Anchors: `spec: thresholds.md#<heading>`.
 |---|---|
 | any series | the series' name above its node, a link to its history, and "Cancel", which leaves what was typed unsaved |
 | the page on its own | "Cancel" and a link above the name both lead to "All series", in the reader's language |
-| a series with points in the last 24 hours | its newest value and a chart of those hours with the stored values drawn across it; with scripting on, a value typed into either field that a save would read — its unit or comma included — moves its line at once, on the page and in the [dialog](web.md#dialog), and a blank or anything else takes its line away |
+| a series with points in the last 24 hours | its newest value and a chart of those hours with the stored values drawn across it; with scripting on, a value typed into either field that a save would read — its unit or comma included — moves its line at once, on the page and in the [dialog](web.md#dialog), and a blank, a negative value — the chart's axis starts at zero ([history](history.md#page)) — or anything else takes its line away |
 | a typed value past the top of the chart | the chart grows to hold it |
 | scripting off | the stored lines only |
 | a series with no point in the last 24 hours, or whose points cannot be read | the same form with no chart: reading them never costs the form |

@@ -241,7 +241,7 @@ tested.
 - **A page that gets shorter on a refresh** — a row left, a node went — keeps the scroll
   position where it still exists and ends at the new bottom otherwise.
 - **A refresh that changes something** replaces the page's content, so a text selection
-  inside it is lost then, and the focus unless it was on a link still there. Only a change
+  inside it is lost then, and the focus unless it was on the search field or a link still there. Only a change
   costs that; an unchanged refresh
   touches nothing. A chart on a short window changes on nearly every refresh, so a
   selection on it rarely lasts longer than a period.
