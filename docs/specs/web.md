@@ -24,7 +24,8 @@
   [0037](../decisions/0037-skins-are-tabs-and-the-root-opens-the-last-one.md),
   [0040](../decisions/0040-the-hub-serves-its-public-pages-open.md),
   [0041](../decisions/0041-mission-control-folds-into-the-timeline.md),
-  [0046](../decisions/0046-an-overview-of-items-rendered-by-the-hub.md)
+  [0046](../decisions/0046-an-overview-of-items-rendered-by-the-hub.md),
+  [0059](../decisions/0059-all-series-is-two-panes-and-settings-a-dialog.md)
 
 ## Purpose
 
@@ -121,7 +122,45 @@ zone is ([zone](#zone)); the hub only reads it.
 | the hub was upgraded, or the page's language changed | the page reloads once, whole, in the new rendering |
 | the reader uses the back button afterwards | the page they came from; refreshing added nothing to the browser's history |
 | a page whose content is a form — `/thresholds` | never refreshed: nothing on it changes on its own, and a refresh would replace what the reader typed or the refusal they are reading ([thresholds.md](thresholds.md#form)) |
+| text typed into the search on `/debug` and not applied | the page left as it is, focus or none, until the reader applies or clears it; then the current state |
+| a [dialog](#dialog) open over the page | the page behind it kept current, the dialog and what is typed in it untouched |
+| the hub was upgraded while a dialog or its notice is up | the reload waits for both to go |
 | scripting is turned off | the page as it was drawn, never refreshed; reloading it by hand still works |
+
+### The settings dialog {#dialog}
+
+A link to a series' settings opens them over the page the reader is on, from any hub page
+([0059](../decisions/0059-all-series-is-two-panes-and-settings-a-dialog.md)). The dialog is
+[the settings page](thresholds.md) itself, so what it accepts and refuses is that page's.
+
+| With scripting on | What the reader sees |
+|---|---|
+| a click on a link to a series' settings | that page's form in a dialog over the current page, which is dimmed; the address does not change; the first field holds the focus |
+| the same with a modifier key held, or the middle button | the settings page in a new tab, as any link |
+| a click on another settings link while one is loading | the last one clicked opens; never two dialogs |
+| a dialog closed and the same link clicked again | the form as now stored, nothing typed before kept |
+| the settings answering with something that is not the form, or not within two minutes, the time a credential prompt may stay up | the browser goes to the settings page, which says what is wrong |
+| opening the settings when the proxy no longer accepts the reader's credentials | the browser asks for them; given, the dialog opens; refused, no dialog and the page as it was |
+| a save the form accepts | the dialog closes, a notice says it was saved and leaves after five seconds or when dismissed, and the page behind is fetched at once, whatever a refresh already under way brings: what the series is judged by is shown straight away, its level from the next check, and a series a filter no longer matches leaves the page |
+| the dialog closes | the focus on the link to the same series; where that link has left the page, on the page itself |
+| a save the form refuses | the dialog stays, naming what is wrong, with what was typed |
+| "Apply to every series of this metric" | the list in the same dialog, "Confirm" as on the page; no second dialog |
+| "Confirm" | as a save the form accepts |
+| a save answered by anything but the form or the form saying it was saved, a save not answered within 15 seconds, or a credential prompt cancelled | the dialog stays, with what was typed and a line saying it was not saved |
+| "Save" or "Confirm" pressed again, a field edited, or the dialog asked to close, while a save is unanswered | nothing until the answer: one save, of what was on the screen |
+| Escape, the close button, "Cancel" or a click outside, every field as it was opened | the dialog closes and the page is as it was |
+| any of those with a field changed, a direction or the switch among them, or after a refused save or the list | the dialog stays and asks: close without saving, or go back to the form |
+| Escape while the dialog asks | back to the form, what was typed kept |
+| a press inside the dialog released outside it | not a click outside |
+| the reader leaving the page while the settings are loading | the page they chose, not the settings |
+| a modifier key held on "History of this series" | that page in a new tab, the dialog as it was |
+| "History of this series" with every field as it was opened | the browser goes to that page |
+| "History of this series" with a field changed | the dialog stays and asks; closing without saving goes on to that page |
+| the page in Russian | the form, its close button, the question on closing, the "not saved" line and the notice all in Russian, the line with no answer from the hub needed |
+
+| With scripting off | What the reader sees |
+|---|---|
+| a click on a link to a series' settings | [the settings page](thresholds.md), which saves and says so on its own |
 
 ### The public pages {#public}
 
@@ -169,7 +208,8 @@ tested.
   two renderings.
 - A page in front that is not being kept current says so within a minute: with no notice on
   it, it is at most a minute behind the hub — counted from when it came to the front — or
-  has its scripting turned off.
+  has its scripting turned off, or holds a search the reader has not applied, or waits to
+  reload for a dialog or a notice the reader has in front of them.
 - Whether an answer counts is settled before what it looks like: a failure, a refused
   credential, a redirect or an answer that is not a hub page puts the notice up, whatever
   it carries; only a hub page that succeeded or refused the query is shown, reloading the
@@ -200,8 +240,9 @@ tested.
   the two a reader gets is their browser's to decide, and neither is wrong.
 - **A page that gets shorter on a refresh** — a row left, a node went — keeps the scroll
   position where it still exists and ends at the new bottom otherwise.
-- **A refresh that changes something** replaces the page's content, so a text selection or
-  a focused link inside it is lost then. Only a change costs that; an unchanged refresh
+- **A refresh that changes something** replaces the page's content, so a text selection
+  inside it is lost then, and the focus unless it was on the search field or a link still there. Only a change
+  costs that; an unchanged refresh
   touches nothing. A chart on a short window changes on nearly every refresh, so a
   selection on it rarely lasts longer than a period.
 - **A slow answer** puts the notice up after 15 seconds and is still waited for; when it

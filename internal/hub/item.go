@@ -52,6 +52,11 @@ func levelsOf(ctx context.Context, store ThresholdReader, s state.Subject) (stor
 	if err != nil || !stored || !th.Readable() {
 		return th, false, nil, err
 	}
+	return th, true, levelsIn(th), nil
+}
+
+// levelsIn is what a chart draws across its line for a stored threshold.
+func levelsIn(th storage.Threshold) []threshold {
 	var levels []threshold
 	if th.Warning != nil {
 		levels = append(levels, threshold{value: *th.Warning, level: evaluate.Warning})
@@ -59,7 +64,7 @@ func levelsOf(ctx context.Context, store ThresholdReader, s state.Subject) (stor
 	if th.Critical != nil {
 		levels = append(levels, threshold{value: *th.Critical, level: evaluate.Critical})
 	}
-	return th, true, levels, nil
+	return levels
 }
 
 // itemPageView is an item's page as the template sees it.

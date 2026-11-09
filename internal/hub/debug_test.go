@@ -23,11 +23,23 @@ func usualFree() []storage.Point {
 	return out
 }
 
+// wholePage asks /debug for every group at once, which most of what a table holds is
+// easiest to read from; what the page opens on its own is debug_table_test.go's.
+func wholePage(target string) string {
+	if !strings.HasPrefix(target, "/debug") && target != "/" && !strings.HasPrefix(target, "/?") || strings.Contains(target, "show=") {
+		return target
+	}
+	if strings.Contains(target, "?") {
+		return target + "&show=all"
+	}
+	return target + "?show=all"
+}
+
 func showDebug(t *testing.T, store stored, target string) string {
 	t.Helper()
 	rec := httptest.NewRecorder()
 	hub.Debug(hub.ReadState(store, judging(), anomaly.NewNorms(store), func() time.Time { return lastSeen })).
-		ServeHTTP(rec, httptest.NewRequest(http.MethodGet, target, nil))
+		ServeHTTP(rec, httptest.NewRequest(http.MethodGet, wholePage(target), nil))
 	if rec.Code != http.StatusOK {
 		t.Fatalf("status = %d: %s", rec.Code, rec.Body)
 	}

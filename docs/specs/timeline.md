@@ -95,7 +95,7 @@ later by the time the hub itself was down in between
 the same silence. An anomaly's start shows the time, a purple dot, the node and the series
 as a transition does, "unusual", the value it was recorded with, and the band it was
 judged against, formatted in its unit as `/debug` formats a value ("usually 0.20 to 0.60",
-or "usually 0.00" when both ends are equal); its end shows a grey dot and "usual again"
+or "usually 0" when both ends are equal); its end shows a grey dot and "usual again"
 with the value it came back at. A withdrawn anomaly has no end to show: nothing came back.
 Changes are listed newest first, transitions and anomalies together; at one instant an
 anomaly comes before a transition, since the tick records it after the levels, and two of
@@ -169,13 +169,13 @@ fresh at every moment.
 | a load series of `server-a` becoming unusual at 10:20 with 2.4, its band 0.2 to 0.6 | "10:20", a purple dot, the node, the series named as "now" names it, "unusual", "2.40" and "usually 0.20 to 0.60" |
 | that series usual again at 12:40 with 0.5 | "12:40", a grey dot, the node, the series, "usual again" and "0.50" |
 | a volume's free percentage that became unusual with a band of 0 to 0 | "usually 0.0%" |
-| a series of plain numbers that became unusual with a band of −1 to 1 | "usually -1.00 to 1.00" |
+| a series of plain numbers that became unusual with a band of −1 to 1 | "usually -1 to 1" |
 | a volume's free bytes becoming unusual, in Russian | "необычно", its value and "обычно от 10,0 ГБ до 12,0 ГБ", sizes formatted as `/debug` formats them |
 | two anomalies starting at the same instant, of `server-a` and `server-b` | `server-b`'s first, as for transitions |
 | an anomaly withdrawn by excluding its series | its start listed; no end |
 | an anomaly still open | its start listed; no end yet |
 | a transition of a series, or an anomaly's start or end | a link to that series' history page, carrying the node, the metric, every label and the language |
-| a transition of a node's silence | a link to `/debug` |
+| a transition of a node's silence | a link to that node on `/debug` ([table](history.md#table)) |
 | transitions yesterday and today | today's under "Today", yesterday's under "Yesterday", as the reader's zone counts days |
 | a transition three days ago, in Russian | under its day and month, "21 сентября" |
 | 60 transitions of nodes that take part | the newest 50 |

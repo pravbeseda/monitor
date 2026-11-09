@@ -322,7 +322,7 @@ func TestBackupPanel(t *testing.T) {
 		current.Names.Metrics["backup.queue_depth"] = names.Text{i18n.English: "Queue {backup} {job}"}
 		g := panelOf(t, serverB(t, current, ""), "web")
 		equal(t, "columns", columnHeads(g), []string{"Since success", "Newest archive", "Archives", "Stored", "Newest archive data", "Queue"})
-		equal(t, "rows", panelRows(g), []string{"copy 4.0 h 7.0 h 10 5.1 GB 2.3 GB 2.00"})
+		equal(t, "rows", panelRows(g), []string{"copy 4.0 h 7.0 h 10 5.1 GB 2.3 GB 2"})
 	})
 
 	t.Run("archives rounded, not grouped", func(t *testing.T) {
@@ -345,7 +345,7 @@ func TestBackupPanel(t *testing.T) {
 	})
 
 	t.Run("the flag unwatched", func(t *testing.T) {
-		for value, word := range map[float64]string{0: "last run ok", 1: "last run failed", 2: "last run 2.00"} {
+		for value, word := range map[float64]string{0: "last run ok", 1: "last run failed", 2: "last run 2"} {
 			name := flag(t, failed(value)).name
 			containsAll(t, word, name, `<th scope="row" title="`+word+`">`, `<span class="row-mark-word"> `+word+`</span>`)
 			if strings.Contains(name, "level-") {
@@ -406,7 +406,7 @@ func TestBackupPanel(t *testing.T) {
 		current.Names.Metrics["backup.queue_depth"] = names.Text{i18n.English: "Queue {backup} {job}"}
 		g := panelOf(t, serverB(t, current, ""), "web")
 		equal(t, "columns", columnHeads(g), []string{"Archives", "Queue"})
-		equal(t, "rows", panelRows(g), []string{"copy 3 2.00"})
+		equal(t, "rows", panelRows(g), []string{"copy 3 2"})
 		current.Names.Metrics["backup.queue_depth"] = names.Text{i18n.English: "{backup} {job}"}
 		equal(t, "columns", columnHeads(panelOf(t, serverB(t, current, ""), "web")), []string{"Archives", "queue_depth"})
 
@@ -416,7 +416,7 @@ func TestBackupPanel(t *testing.T) {
 		current.Names.Metrics["backup.a_depth"] = names.Text{i18n.English: "Zeta {backup} {job}"}
 		g = panelOf(t, serverB(t, current, ""), "web")
 		equal(t, "columns", columnHeads(g), []string{"Zeta", "Alpha", "verify_age_seconds"})
-		equal(t, "rows", panelRows(g), []string{"copy 1.00 1.00 1.0 h"})
+		equal(t, "rows", panelRows(g), []string{"copy 1 1 1.0 h"})
 	})
 
 	t.Run("rows that are not a job's", func(t *testing.T) {
@@ -447,33 +447,33 @@ func TestGenericPanel(t *testing.T) {
 	}
 	g := page(t, queue("q.depth", map[string]string{"queue": "a", "shard": "2"}), queue("q.depth", map[string]string{"queue": "a", "shard": "1"}))
 	equal(t, "columns", columnHeads(g), []string{"Depth"})
-	equal(t, "rows", panelRows(g), []string{"shard=1 1.00", "shard=2 1.00"})
+	equal(t, "rows", panelRows(g), []string{"shard=1 1", "shard=2 1"})
 
 	t.Run("no other label", func(t *testing.T) {
-		equal(t, "rows", panelRows(page(t, queue("q.depth", map[string]string{"queue": "a"}))), []string{"1.00"})
+		equal(t, "rows", panelRows(page(t, queue("q.depth", map[string]string{"queue": "a"}))), []string{"1"})
 	})
 	t.Run("mixed label sets", func(t *testing.T) {
 		g := page(t, queue("q.depth", map[string]string{"queue": "a", "shard": "1"}), queue("q.depth", map[string]string{"queue": "a"}))
-		equal(t, "rows", panelRows(g), []string{"1.00", "shard=1 1.00"})
+		equal(t, "rows", panelRows(g), []string{"1", "shard=1 1"})
 	})
 	t.Run("a missing cell", func(t *testing.T) {
 		g := page(t, queue("q.age_seconds", map[string]string{"queue": "a", "shard": "1"}),
 			queue("q.depth", map[string]string{"queue": "a", "shard": "1"}), queue("q.depth", map[string]string{"queue": "a", "shard": "2"}))
 		equal(t, "columns", columnHeads(g), []string{"age_seconds", "Depth"})
-		equal(t, "rows", panelRows(g), []string{"shard=1 1.0 s 1.00", "shard=2 — 1.00"})
+		equal(t, "rows", panelRows(g), []string{"shard=1 1.0 s 1", "shard=2 — 1"})
 		_, metrics := columns(g)
 		equal(t, "column hover", metrics, []string{"q.age_seconds", "q.depth"})
 	})
 	t.Run("a cell at critical", func(t *testing.T) {
 		g := page(t, judgedAt(queue("q.depth", map[string]string{"queue": "a"}), evaluate.Critical))
-		equal(t, "rows", panelRows(g), []string{"1.00"})
+		equal(t, "rows", panelRows(g), []string{"1"})
 		containsAll(t, "cell", tableRows(g)[0].cells[0], `level-critical`, `<td title="critical">`, `<span class="row-mark-word"> critical</span>`)
 	})
 	t.Run("on a site's page", func(t *testing.T) {
 		current := grouped(stateOf(reading("sites", "site.hits", map[string]string{"site": "blog-a", "path": "/x", "page": "p1"}, 1)),
 			map[string]string{"site": "page"})
 		g := panelOf(t, itemPage(t, current, held{}, logbook{}, "/item?node=sites&label.site=blog-a"), "p1")
-		equal(t, "rows", panelRows(g), []string{"path=/x 1.00"})
+		equal(t, "rows", panelRows(g), []string{"path=/x 1"})
 	})
 	t.Run("a family of sites grouped by site", func(t *testing.T) {
 		current := grouped(stateOf(siteOf("blog-a", "site.requests_per_min", 4)), map[string]string{"site": "site"})

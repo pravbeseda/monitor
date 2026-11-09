@@ -52,7 +52,7 @@ One decision per file, each stating what was rejected and why. New records start
 | [0026](decisions/0026-reader-time-zone-from-the-browser.md) | The reader's time zone comes from the browser in a cookie; pages stay server-rendered | accepted, amended by [0037](decisions/0037-skins-are-tabs-and-the-root-opens-the-last-one.md) and [0040](decisions/0040-the-hub-serves-its-public-pages-open.md) |
 | [0027](decisions/0027-the-hub-installer-reuses-the-binary-in-place.md) | The hub's installer reuses a binary in place that is already its release | accepted |
 | [0028](decisions/0028-agents-follow-a-target-the-hub-serves.md) | Agents follow a target the hub serves under `/api/v1/agent/` | accepted |
-| [0029](decisions/0029-pages-refresh-by-fetching-their-own-address.md) | Pages refresh themselves by fetching their own address | accepted |
+| [0029](decisions/0029-pages-refresh-by-fetching-their-own-address.md) | Pages refresh themselves by fetching their own address | accepted, amended by [0059](decisions/0059-all-series-is-two-panes-and-settings-a-dialog.md) |
 | [0030](decisions/0030-the-state-api-reports-the-stored-verdict.md) | The State API reports the verdict evaluation stored | accepted, amended by [0033](decisions/0033-a-subject-is-a-series.md) and [0036](decisions/0036-an-anomaly-is-a-value-outside-its-weeks-band.md) |
 | [0031](decisions/0031-a-table-of-series.md) | A table of series beside the measurements | accepted, amended by [0033](decisions/0033-a-subject-is-a-series.md) |
 | [0032](decisions/0032-thresholds-are-set-in-the-interface.md) | Thresholds are set in the interface and stored with the data | accepted, amended by [0052](decisions/0052-a-sensor-declares-default-thresholds-seeded-once.md) |
@@ -82,6 +82,7 @@ One decision per file, each stating what was rejected and why. New records start
 | [0056](decisions/0056-cards-in-a-section-are-ordered-by-name.md) | An overview section's cards are ordered by name, the red ones (critical, silent) first | accepted |
 | [0057](decisions/0057-sites-are-a-sortable-table.md) | The sites are one table, a row per site, sortable by any of its figures on the server | accepted |
 | [0058](decisions/0058-a-computers-page-is-tiles.md) | A computer's page is tiles, a line only where a trend says something: a volume over 10 days, the rest over a day | accepted |
+| [0059](decisions/0059-all-series-is-two-panes-and-settings-a-dialog.md) | All series is two panes, and a series' settings open in a dialog from any hub page | accepted |
 
 ## Behaviour specs
 
@@ -151,6 +152,7 @@ Reasoning from working sessions, including options that were rejected.
 | [2026-11-03](log/2026-11-03-backup-panel-table.md) | The backup panel becomes a table: the job's name stands for the failure flag, marks become colour, headings are the declared names |
 | [2026-11-03](log/2026-11-03-default-thresholds.md) | Default thresholds: written once by the sensor's declaration, never layered; applying one threshold to every series of a metric |
 | [2026-11-04](log/2026-11-04-computer-card.md) | The computer card: eight layouts weighed, why bullets on a shared scale, and how each of its questions was settled |
+| [2026-11-09](log/2026-11-09-all-series-and-settings-ux.md) | All series and settings: the prototype, why two panes and a dialog, and what changed on the way to the build |
 
 ## Not written yet
 

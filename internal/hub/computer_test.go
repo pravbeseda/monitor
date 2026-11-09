@@ -388,8 +388,8 @@ func TestComputerCardMarks(t *testing.T) {
 		ref := storage.SeriesRef{Node: "server-b", Metric: "load.avg_1m", Labels: map[string]string{}}
 		load := lineCalled(t, show(t, limits{heldKey(ref): {Direction: storage.Above, Critical: f(8)}},
 			banded(plain("server-b", "load.avg_15m", 0.67), 0.1, 0.2, 0.3, 1), judgedAt(plain("server-b", "load.avg_1m", 9), evaluate.Critical)), "Load")
-		equal(t, "values", load.values(), []string{"9.00 (muted level-critical marked)", "0.61 (muted)", "0.67 (level-unusual marked)"})
-		if load.why() != "threshold 8.00" {
+		equal(t, "values", load.values(), []string{"9 (muted level-critical marked)", "0.61 (muted)", "0.67 (level-unusual marked)"})
+		if load.why() != "threshold 8" {
 			t.Errorf("why = %q", load.why())
 		}
 	})
@@ -408,7 +408,7 @@ func TestComputerCardMarks(t *testing.T) {
 	})
 	t.Run("stale, a muted series fresh and unusual", func(t *testing.T) {
 		load := lineCalled(t, show(t, limits{}, staled(plain("server-b", "load.avg_15m", 0.67)), banded(plain("server-b", "load.avg_1m", 3), 0.1, 0.2, 0.3, 1)), "Load")
-		if !strings.Contains(load.class, "faded") || load.values()[0] != "3.00 (muted level-unusual marked)" || load.why() != "usually 0.20" {
+		if !strings.Contains(load.class, "faded") || load.values()[0] != "3 (muted level-unusual marked)" || load.why() != "usually 0.20" {
 			t.Errorf("class %q, values %q, why %q", load.class, load.values(), load.why())
 		}
 	})
@@ -599,7 +599,7 @@ func TestComputerCardGathersTheBackup(t *testing.T) {
 	})
 	t.Run("a readable threshold", func(t *testing.T) {
 		stored := limits{heldKey(refOf(failedAt("job-a", evaluate.Warning))): {Direction: storage.Above, Warning: f(0)}}
-		hint := "Failed borg job-a: threshold 0.00"
+		hint := "Failed borg job-a: threshold 0"
 		is(t, saidOn(t, stored, gathering("server-b"), failedAt("job-a", evaluate.Warning)), whySaid{"warning", "level-warning", hint, hint})
 	})
 	t.Run("an unreadable threshold", func(t *testing.T) {

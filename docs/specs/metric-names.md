@@ -195,14 +195,15 @@ page or message is written in:
 | a value on a computer page's tile, on hover | the series' name |
 | the history page's heading | `node · ` the series' name with filesystem and removable |
 | the history page's list of several series | `node · ` the series' name with filesystem and removable |
+| `/debug`'s entry for a group on the left ([table](history.md#table)) | the family's name; a group of a metric with no dot, that metric's name; a group of unlabelled series, "General" |
 | `/debug`'s table of unlabelled series | the series' name; the metric id on hover |
 | a `/debug` matrix's corner | the family's name |
 | a `/debug` matrix's column | its metric's name with the labels it refers to left out; the metric id on hover |
 | a `/debug` matrix's column whose metric's name is only references to labels | headed as before names: its id less its family; the metric id on hover |
 | a generic panel's column | as a `/debug` matrix's column |
-| a generic panel's row, and a row of the backup panel that is not a job's | the labels it names, as a `/debug` matrix row names its own |
+| a generic panel's row, and a row of the backup panel that is not a job's | the labels it names, as a series' name names them ([history](history.md#page)) |
 | a column of the backup panel | as a `/debug` matrix's column |
-| the thresholds form | `node · ` the series' name with filesystem and removable; the metric id on hover |
+| the thresholds form | the series' name with filesystem and removable, above its node; the metric id on hover |
 | an item of the list of what needs attention | `node · ` the series' name |
 | a change on the timeline or the item page | the series' name |
 | a delivered notification or digest entry | `node · name: level (was …)` and the value alone after the dash: `laptop-a · Свободно /srv: критично (было предупреждение с 10:00) — 4,0 %` |

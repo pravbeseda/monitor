@@ -335,7 +335,7 @@ func TestComputerPage(t *testing.T) {
 	if len(families(body)) != 0 {
 		t.Errorf("tiles under a family heading")
 	}
-	for _, absent := range []string{`<ul class="numbers">`, `<figure class="chart"`, `<nav class="windows">`, `/thresholds?`, `<a class="tile-name`} {
+	for _, absent := range []string{`<ul class="numbers">`, `<figure class="chart"`, `<nav class="windows">`, `href="/thresholds?`, `<a class="tile-name`} {
 		if strings.Contains(body, absent) {
 			t.Errorf("a computer's page carries %q", absent)
 		}

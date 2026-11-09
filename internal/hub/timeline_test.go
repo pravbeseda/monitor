@@ -330,7 +330,7 @@ func TestTheChangesListWhatTheLogRecorded(t *testing.T) {
 			t.Errorf("change %d carries no %s dot: %s", i, dot, raw[i])
 		}
 	}
-	if !strings.Contains(raw[0], `href="/debug?lang=ru"`) {
+	if !strings.Contains(raw[0], `href="/debug?lang=ru&amp;node=laptop-a"`) {
 		t.Errorf("the silence links elsewhere: %s", raw[0])
 	}
 	if !strings.Contains(raw[1], `href="/history?label.fs=ext4&amp;label.mount=%2Fdata&amp;label.removable=false&amp;lang=ru&amp;metric=disk.free_pct&amp;node=server-b"`) {
@@ -515,7 +515,7 @@ func TestAnAnomalysBandReadsInItsUnit(t *testing.T) {
 		t.Errorf("a flat band reads %q", got)
 	}
 	store.anomalies = []storage.Anomaly{negative}
-	if _, got := changesOf(showTimeline(t, store, "/timeline")); len(got) != 1 || !strings.HasSuffix(got[0], "usually -1.00 to 1.00") {
+	if _, got := changesOf(showTimeline(t, store, "/timeline")); len(got) != 1 || !strings.HasSuffix(got[0], "usually -1 to 1") {
 		t.Errorf("a negative band reads %q", got)
 	}
 	store.anomalies = []storage.Anomaly{bytes}

@@ -7,6 +7,7 @@ import (
 	"iter"
 	"log/slog"
 	"net/http"
+	"net/url"
 	"sort"
 	"time"
 
@@ -356,7 +357,7 @@ func endOf(printer *i18n.Printer, book names.Book, record storage.Anomaly, lang 
 func changeOf(printer *i18n.Printer, book names.Book, change storage.Transition, targets func(node string) (evaluate.Target, bool), lang string) changeView {
 	to, _ := evaluate.ParseLevel(change.To)
 	if change.Metric == evaluate.SilenceMetric {
-		out := changeView{Time: printer.Clock(change.At), Class: to.String(), Node: change.Node, Link: pageLink("/debug", lang)}
+		out := changeView{Time: printer.Clock(change.At), Class: to.String(), Node: change.Node, Link: debugLink(lang, url.Values{"node": {change.Node}})}
 		if to == evaluate.OK {
 			out.Name = printer.T("timeline.reporting")
 			return out

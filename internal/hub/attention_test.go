@@ -201,7 +201,7 @@ func TestASilentNodeIsOneItem(t *testing.T) {
 		silenceOf("server-b", evaluate.Critical),
 		staled(judgedAt(free("server-b", "/", 1e9), evaluate.Critical)),
 	), "/timeline")
-	containsAll(t, "the silence item", oneItem(t, body), "server-b", "silent", "2026-08-28 10:05 UTC", `href="/debug"`)
+	containsAll(t, "the silence item", oneItem(t, body), "server-b", "silent", "2026-08-28 10:05 UTC", `href="/debug?node=server-b"`)
 }
 
 // spec: attention.md#items — a volume at critical.
@@ -335,7 +335,7 @@ func TestAnomaliesComeByRankFiveAtMost(t *testing.T) {
 	// Ranks 1 to 6 sit on server-f to server-a: the five shown are f to b.
 	body = showAttention(t, rankedOn(6, nil), "/timeline")
 	order(t, body, "server-f", "server-e", "server-d", "server-c", "server-b")
-	containsAll(t, "the list", body, `<a href="/debug">more unusual series: 1</a>`)
+	containsAll(t, "the list", body, `<a href="/debug?show=unusual">more unusual series: 1</a>`)
 
 	// Ranks 1 and 2, on server-g and server-f, are level items and come first.
 	body = showAttention(t, rankedOn(7, map[int]evaluate.Level{1: evaluate.Critical, 2: evaluate.Critical}), "/timeline")

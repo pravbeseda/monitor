@@ -143,7 +143,7 @@ func TestSitesTable(t *testing.T) {
 		for _, column := range []string{"requests", "views", "errors", "latency"} {
 			values = append(values, strings.Join(siteCell(t, row, column).values(), " "))
 		}
-		equal(t, "values", values, []string{"12.60", "88.00", "0.1%", "400 ms"})
+		equal(t, "values", values, []string{"12.60", "88", "0.1%", "400 ms"})
 		if day := dayPattern.FindStringSubmatch(row); day == nil || !strings.Contains(day[1], `<svg class="spark"`) || strings.Contains(day[1], `class="threshold`) {
 			t.Errorf("no line of the day, or one with a threshold: %s", row)
 		}
@@ -188,7 +188,7 @@ func TestSitesTable(t *testing.T) {
 		row := siteRow(t, replaced(sites(), judgedAt(siteOf("blog-a", "site.requests_per_min", 34.2), evaluate.Warning)), traffic, stored, "blog-a")
 		requests := siteCell(t, row, "requests")
 		equal(t, "values", requests.values(), []string{"34.20 (level-warning marked)"})
-		if requests.why().text != "threshold 30.00" || strings.Contains(row, `class="threshold`) || !strings.Contains(row, `<svg class="spark"`) {
+		if requests.why().text != "threshold 30" || strings.Contains(row, `class="threshold`) || !strings.Contains(row, `<svg class="spark"`) {
 			t.Errorf("why %+v: %s", requests.why(), row)
 		}
 	})
@@ -258,13 +258,13 @@ func TestSitesTable(t *testing.T) {
 	t.Run("in the order attention lists them", func(t *testing.T) {
 		row := siteRow(t, append(sites(), ranked(siteOf("blog-a", "uptime.x", 9), 1), judgedAt(siteOf("blog-a", "site.client_error_pct", 4), evaluate.Warning)), traffic, limits{}, "blog-a")
 		items, _ := alsoOf(t, row)
-		equal(t, "also", items, []string{"site.client_error_pct 4.0% (level-warning marked)", "uptime.x 9.00 (level-unusual marked)"})
+		equal(t, "also", items, []string{"site.client_error_pct 4.0% (level-warning marked)", "uptime.x 9 (level-unusual marked)"})
 	})
 	t.Run("at most two, then more", func(t *testing.T) {
 		row := siteRow(t, append(sites(), judgedAt(siteOf("blog-a", "queue.a", 1), evaluate.Warning),
 			judgedAt(siteOf("blog-a", "queue.b", 1), evaluate.Warning), judgedAt(siteOf("blog-a", "queue.c", 1), evaluate.Warning)), traffic, limits{}, "blog-a")
 		items, rest := alsoOf(t, row)
-		equal(t, "also", items, []string{"queue.a 1.00 (level-warning marked)", "queue.b 1.00 (level-warning marked)"})
+		equal(t, "also", items, []string{"queue.a 1 (level-warning marked)", "queue.b 1 (level-warning marked)"})
 		containsAll(t, "also", rest, `<span class="card-more">1 more</span>`)
 	})
 	t.Run("a silent site", func(t *testing.T) {

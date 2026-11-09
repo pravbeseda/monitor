@@ -25,8 +25,7 @@ type matrix struct {
 type matrixRow struct {
 	name string
 	// cells holds the whole <td> of each column, keyed by the metric the column names.
-	cells     map[string]string
-	collected string
+	cells map[string]string
 }
 
 var (
@@ -45,16 +44,16 @@ func matrices(t *testing.T, body string) []matrix {
 		var m matrix
 		heads := headCell.FindAllStringSubmatch(head, -1)
 		m.corner = strings.TrimSpace(heads[0][2])
-		for _, h := range heads[1 : len(heads)-1] {
+		for _, h := range heads[1:] {
 			m.metrics = append(m.metrics, h[1])
 			m.heads = append(m.heads, strings.TrimSpace(h[2]))
 		}
 		for _, tr := range bodyRow.FindAllString(rest, -1) {
 			tds := dataCell.FindAllStringSubmatch(tr, -1)
-			if len(tds) != len(m.metrics)+2 {
-				t.Fatalf("row %s has %d cells, want %d", tr, len(tds), len(m.metrics)+2)
+			if len(tds) != len(m.metrics)+1 {
+				t.Fatalf("row %s has %d cells, want %d", tr, len(tds), len(m.metrics)+1)
 			}
-			row := matrixRow{name: strings.TrimSpace(tds[0][1]), cells: map[string]string{}, collected: tds[len(tds)-1][0]}
+			row := matrixRow{name: strings.TrimSpace(tds[0][1]), cells: map[string]string{}}
 			for i, metric := range m.metrics {
 				row.cells[metric] = tds[i+1][0]
 			}
@@ -131,18 +130,15 @@ func TestDebugShowsTheSitesAsOneMatrix(t *testing.T) {
 	if want := "site.requests_per_min"; m.metrics[0] != want {
 		t.Errorf("first column names %q on hover, want %q", m.metrics[0], want)
 	}
-	if len(m.rows) != 2 || m.rows[0].name != "site=blog-a" || m.rows[1].name != "site=shop-c" {
+	if len(m.rows) != 2 || m.rows[0].name != "blog-a" || m.rows[1].name != "shop-c" {
 		t.Fatalf("rows = %v, want blog-a then shop-c", m.rows)
 	}
 	if cell := m.rows[0].cells["site.response_p95_seconds"]; !strings.Contains(cell, ">—<") || strings.Contains(cell, "href") {
 		t.Errorf("blog-a's response time = %s, want a dash", cell)
 	}
 	cell := m.rows[1].cells["site.server_error_pct"]
-	if !strings.Contains(cell, "/history?") || !strings.Contains(cell, "label.site=shop-c") || !strings.Contains(cell, "metric=site.server_error_pct") {
-		t.Errorf("shop-c's server errors = %s, want a link to their chart", cell)
-	}
-	if strings.Contains(body, "/thresholds?") {
-		t.Errorf("a cell links to the thresholds page: %s", body)
+	if !strings.Contains(cell, "/thresholds?") || !strings.Contains(cell, "label.site=shop-c") || !strings.Contains(cell, "metric=site.server_error_pct") {
+		t.Errorf("shop-c's server errors = %s, want a link to their settings", cell)
 	}
 }
 
@@ -156,7 +152,7 @@ func TestDebugShowsUnlabelledSeriesAsRowsAboveTheMatrices(t *testing.T) {
 	body := showDebug(t, stored{states: []storage.NodeState{{Node: "laptop-a", LastSeen: lastSeen, Values: values}}}, "/debug")
 
 	own := ownRows(t, body)
-	if len(own) != 2 || !strings.Contains(own[0], ">kern.memorystatus_level</td>") || !strings.Contains(own[1], ">load.avg_15m</td>") {
+	if len(own) != 2 || !strings.Contains(own[0], ">kern.memorystatus_level</a>") || !strings.Contains(own[1], ">load.avg_15m</a>") {
 		t.Fatalf("rows above the matrix = %q, want the two unlabelled series by metric id", own)
 	}
 	for _, row := range own {
@@ -194,38 +190,35 @@ func TestDebugShowsAMatrixPerFamilyAndLabelKeys(t *testing.T) {
 	}
 }
 
-// spec: history.md#page — a matrix row shows the newest of its series' times, each cell its
-// own on hover, beside the level or its absence.
-func TestDebugDatesAMatrixRowByItsNewestSeries(t *testing.T) {
+// spec: history.md#page — a time on /debug: each series' own on hover, beside the level or
+// its absence; no column of times.
+func TestDebugDatesASeriesOnHover(t *testing.T) {
 	values := pair(mounted("/"), lastSeen)
 	values[1].TS = lastSeen.Add(-30 * time.Second)
 
 	body := showDebug(t, stored{states: []storage.NodeState{{Node: "laptop-a", LastSeen: lastSeen, Values: values}}}, "/debug")
 
 	row := matrixRowOf(t, body, "/")
-	if !strings.Contains(row.collected, "2026-08-28 10:05 UTC") {
-		t.Errorf("row dated %s, want its newest series' time", row.collected)
-	}
 	if cell := row.cells["disk.free_pct"]; !strings.Contains(cell, `title="no level · 2026-08-28 10:04 UTC"`) {
 		t.Errorf("cell = %s, want its own time and its lack of a level on hover", cell)
 	}
 }
 
-// spec: history.md#page — a stale series in a matrix has its cell marked; a row whose every
-// series is stale has its time marked once instead.
-func TestDebugMarksAStaleCellOrAWhollyStaleRow(t *testing.T) {
+// spec: history.md#page — a stale series in a matrix has its own cell marked, every stale
+// cell of a row on its own.
+func TestDebugMarksEveryStaleCell(t *testing.T) {
 	values := append(pair(mounted("/"), lastSeen), pair(mounted("/data"), lastSeen.Add(-time.Hour))...)
 	values[1].TS = lastSeen.Add(-time.Hour)
 
 	body := showDebug(t, stored{states: []storage.NodeState{{Node: "laptop-a", LastSeen: lastSeen, Values: values}}}, "/debug")
 
 	root := matrixRowOf(t, body, "/")
-	if !strings.Contains(root.cells["disk.free_pct"], "no fresh data") || strings.Contains(root.cells["disk.free_bytes"]+root.collected, "no fresh data") {
+	if !strings.Contains(root.cells["disk.free_pct"], "no fresh data") || strings.Contains(root.cells["disk.free_bytes"], "no fresh data") {
 		t.Errorf("row of / = %v, want only its stale cell marked", root)
 	}
 	data := matrixRowOf(t, body, "/data")
-	if !strings.Contains(data.collected, "no fresh data") || strings.Contains(data.cells["disk.free_bytes"]+data.cells["disk.free_pct"], "no fresh data") {
-		t.Errorf("row of /data = %v, want its time marked once and its cells unmarked", data)
+	if !strings.Contains(data.cells["disk.free_bytes"], "no fresh data") || !strings.Contains(data.cells["disk.free_pct"], "no fresh data") {
+		t.Errorf("row of /data = %v, want both cells marked", data)
 	}
 }
 
@@ -286,8 +279,8 @@ func TestDebugShowsTheLevelAndMarksOfARowOfItsOwn(t *testing.T) {
 	}, "/debug")
 
 	own := ownRows(t, body)
-	if !strings.Contains(own[0], `class="level-critical">critical<`) || !strings.Contains(own[0], "no fresh data") {
-		t.Errorf("row = %s, want its level beside the stale mark", own[0])
+	if !strings.Contains(own[0], `title="critical`) || !strings.Contains(own[0], "no fresh data") {
+		t.Errorf("row = %s, want its level on hover beside the stale mark", own[0])
 	}
 	if !strings.Contains(own[1], "unusual, usually 40.0 GB") {
 		t.Errorf("row = %s, want it marked unusual beside its usual value", own[1])
@@ -346,7 +339,7 @@ func TestDebugSaysTheDeclaredNames(t *testing.T) {
 	body := showDebug(t, stored{states: []storage.NodeState{{Node: "laptop-a", LastSeen: lastSeen, Values: values}}, names: book}, "/debug?lang=ru")
 
 	own := ownRows(t, body)
-	if len(own) != 1 || !strings.Contains(own[0], `<td title="load.avg_15m">Нагрузка 15 мин</td>`) {
+	if len(own) != 1 || !strings.Contains(own[0], `title="load.avg_15m"`) || !strings.Contains(own[0], ">Нагрузка 15 мин</a>") {
 		t.Errorf("rows above the matrix = %q, want the load row by its name", own)
 	}
 	got := matrices(t, body)

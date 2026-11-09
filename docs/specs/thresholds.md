@@ -16,7 +16,8 @@
   [0033](../decisions/0033-a-subject-is-a-series.md),
   [0036](../decisions/0036-an-anomaly-is-a-value-outside-its-weeks-band.md),
   [0042](../decisions/0042-an-anomalys-start-and-end-are-recorded.md),
-  [0052](../decisions/0052-a-sensor-declares-default-thresholds-seeded-once.md)
+  [0052](../decisions/0052-a-sensor-declares-default-thresholds-seeded-once.md),
+  [0059](../decisions/0059-all-series-is-two-panes-and-settings-a-dialog.md)
 
 ## Purpose
 
@@ -61,7 +62,7 @@ threshold belongs to one series and not to a family of them.
 **The unit is the series' own**, derived from the metric id as everywhere else
 ([history.md](history.md#wire-format)): a `_bytes` metric takes a size, a `_pct` metric a
 percentage number, a `_seconds` metric a duration in seconds, anything else a plain number.
-The form says which it is asking for. A size may be written with a decimal unit — `10GB` is
+The form says which it is asking for, and names no unit for a plain number. A size may be written with a decimal unit — `10GB` is
 10 000 000 000, as sizes are written everywhere in this project — and a duration with one of
 `s`, `m` (minutes), `h` or `d` — `36h` is 129 600; everything else is a plain number. A size
 unit or a duration unit is read regardless of case and of a space before it, and is written
@@ -114,10 +115,16 @@ One row = one test. Anchors: `spec: thresholds.md#<heading>`.
 
 | Request | What the reader sees |
 |---|---|
+| any series | the series' name above its node, a link to its history, and "Cancel", which leaves what was typed unsaved |
+| the page on its own | "Cancel" and a link above the name both lead to "All series", in the reader's language |
+| a series with points in the last 24 hours | its newest value and a chart of those hours with the stored values drawn across it; with scripting on, a value typed into either field that a save would read — its unit or comma included — moves its line at once, on the page and in the [dialog](web.md#dialog), and a blank, a negative value — the chart's axis starts at zero ([history](history.md#page)) — or anything else takes its line away |
+| a typed value past the top of the chart | the chart grows to hold it |
+| scripting off | the stored lines only |
+| a series with no point in the last 24 hours, or whose points cannot be read | the same form with no chart: reading them never costs the form |
 | a series with nothing configured | an empty form: direction `below`, both values blank, and a line saying the series has no level until a value is set |
 | a series with a configuration | its direction and values as stored, in the unit the metric implies |
 | a `_seconds` series | the field asks for seconds and names the units it also takes, saying that `m` is minutes, with an example: `36h` |
-| any series | a switch saying the series may be shown as unusual, on unless the series is excluded |
+| any series | one switch saying the series is marked as unusual when it is, on unless the series is excluded; off, the form says `exclude`, not nothing |
 | a series whose stored threshold this build cannot read | the switch as stored: an exclusion is read on its own |
 | any series the hub has values for | the same form, whatever the metric: nothing about it is particular to disks |
 | a series the hub has never stored | `404` as a page: a threshold is set on something that reports |
@@ -134,7 +141,11 @@ One row = one test. Anchors: `spec: thresholds.md#<heading>`.
 
 | Save | Result |
 |---|---|
-| direction and both values, consistent | stored; the reader is sent back to the form, which shows what is now stored, and the next tick judges by it |
+| direction and both values, consistent | stored; the reader is sent back to the form, which says it was saved and that it applies from the next check, and shows what is now stored; the next tick judges by it |
+| the form reached by reloading that answer | the same form, saying so again, its address marked `saved=1`; nothing stored |
+| the form opened with `saved=1` | as without it, saying it was saved; a save from it goes to the address without the mark |
+| a value written with a decimal comma — `6,5`, `1,5h` | read as the decimal point it stands for: 6.5, 5 400; a single comma is always decimal, so `1,000` is 1 |
+| a value with more than one separator — `1,000.5` | refused, naming the field; nothing is stored |
 | one value filled, the other blank | stored: a subject may have only a warning or only a critical |
 | both values blank | the configuration is removed; the subject loses its level without an event or a recovery message ([evaluation.md](evaluation.md#configuration-changes)) |
 | a value that is not a finite number | refused, naming the field; nothing is stored, and what the reader typed is still in the form |
@@ -203,13 +214,13 @@ own address.
 
 | Request | Result |
 |---|---|
-| the form of any series | beside "Save", a button "Apply to every series of this metric" |
+| the form of any series | below "Save", a button "Apply to every series of this metric" |
 | that button, with consistent values | the form again, with the values typed, and above "Confirm" the four series by node, then by name (`node · ` the series' name, [metric names](metric-names.md#naming)), each with its current threshold or "none", and a line saying their thresholds will be replaced and the switch is this series' only; nothing stored |
 | that button, both values blank | the same, saying their thresholds will be removed |
 | that button, a value refused by a save | the form, refused as a save is; nothing stored |
 | a metric with one series | the button, and that one series listed |
 | a series of a node the file no longer names | listed and changed like the others |
-| "Confirm" | all four judged by the form's values from the next tick; the reader is sent back to the form |
+| "Confirm" | all four judged by the form's values from the next tick; the reader is sent back to the form, which says it was saved |
 | "Confirm" with both values blank | all four thresholds removed, without an event or a recovery message ([evaluation.md](evaluation.md#configuration-changes)); later measurements with a default leave them empty |
 | "Confirm" covering a series whose stored threshold cannot be read | replaced like the others |
 | "Confirm" from `server-b`'s `web` / `copy` with the switch off | that series excluded; the other three keep their switches |
@@ -233,6 +244,7 @@ own address.
 | a threshold cleared for a subject standing in `critical` | no recovery message: the question was withdrawn, not answered ([evaluation.md](evaluation.md#configuration-changes)) |
 | an exclusion set or cleared | no level, event or message changes, and the series stays watched or unwatched as it was; an anomaly still open is withdrawn by the next tick, with no end listed ([anomaly](anomaly.md#record)) |
 | any save | the hub restarts nothing and rereads no file |
+| a save made in the dialog ([web](web.md#dialog)) | the same save: a dialog is this page, shown over another |
 
 ## Invariants
 
@@ -248,8 +260,8 @@ own address.
   else; seeding never replaces a stored threshold, and never touches a series seeded
   before or whose threshold a save of this build changed.
 - A page never shows a threshold it did not read from the store, so two readers see the
-  same numbers — the values a reader typed, redrawn with a refusal or above "Confirm",
-  apart.
+  same numbers — the values a reader typed, redrawn with a refusal or above "Confirm" or
+  drawn as a line while typing, apart.
 - Nothing on this page reaches an agent.
 
 ## Edge cases
@@ -287,8 +299,8 @@ own address.
 - Exporting the stored thresholds to a file, or restoring them from one → the database is
   the record, and backing it up is [hub-backup-requirements.md](../hub-backup-requirements.md).
 - Editing thresholds from a skin other than this page → the store is the contract
-  ([0001](../decisions/0001-semantic-core-and-skins.md)); only this page and seeding write
-  it today.
+  ([0001](../decisions/0001-semantic-core-and-skins.md)); only this page, whether opened on
+  its own or in the [dialog](web.md#dialog), and seeding write it today.
 
 ## Open questions
 
