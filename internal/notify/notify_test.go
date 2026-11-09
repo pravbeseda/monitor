@@ -117,7 +117,8 @@ func TestAValueIsRenderedInTheUnitItsMetricIDDeclares(t *testing.T) {
 		{"disk.free_bytes", 3e9, "3.0 GB"},
 		{"disk.free_pct", 2.34, "2.3%"},
 		{"battery.age_seconds", 90, "1.5 min"},
-		{"queue.depth", 42, "42.00"},
+		{"queue.depth", 42, "42"},
+		{"queue.depth", 42.5, "42.50"},
 	}
 	for _, tc := range tests {
 		t.Run(tc.metric, func(t *testing.T) {

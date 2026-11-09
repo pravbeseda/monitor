@@ -44,7 +44,9 @@ type chart struct {
 	// Baseline and RightEdge are the plot's far sides, already offset by their margins,
 	// so the template does no arithmetic.
 	Baseline, RightEdge float64
-	Lines               []string
+	// Scale is the value at the top of the plot, which a script places a typed value by.
+	Scale float64
+	Lines []string
 	// Areas close each line down to the baseline, for a skin that fills under it.
 	Areas          []string
 	Dots           []dot
@@ -113,6 +115,7 @@ func draw(printer *i18n.Printer, series history.Series, window history.Window, i
 	if top <= 0 {
 		top = 1
 	}
+	out.Scale = top
 
 	x := func(at time.Time) float64 {
 		return in.left + float64(at.Sub(window.From))/float64(span)*(in.width-in.left-in.right)

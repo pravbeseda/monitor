@@ -23,7 +23,7 @@ func showJudged(t *testing.T, store hub.Snapshots, target string) string {
 	t.Helper()
 	rec := httptest.NewRecorder()
 	hub.Debug(hub.ReadState(store, judging(), noNorms{}, func() time.Time { return lastSeen })).
-		ServeHTTP(rec, httptest.NewRequest(http.MethodGet, target, nil))
+		ServeHTTP(rec, httptest.NewRequest(http.MethodGet, wholePage(target), nil))
 	if rec.Code != http.StatusOK {
 		t.Fatalf("status = %d: %s", rec.Code, rec.Body)
 	}
@@ -114,8 +114,8 @@ func TestPageShowsTheLevelOfEverySeries(t *testing.T) {
 			t.Errorf("cell of %s = %s: the word %q beside the value is %v", mount, cell, want, named)
 		}
 		mark := levelClass.FindString(cell)
-		if mark == "" {
-			t.Errorf("cell of %s carries no level mark: %s", mount, cell)
+		if (mark == "") != (want == "ok") {
+			t.Errorf("cell of %s = %s, want a mark on a level past ok only", mount, cell)
 		}
 		marks[mark] = mount
 		// The other series of the same volume is judged separately, and is not judged here.
@@ -123,13 +123,13 @@ func TestPageShowsTheLevelOfEverySeries(t *testing.T) {
 			t.Errorf("cell of %s = %s, want the unwatched series of the volume to carry no level", mount, other)
 		}
 	}
-	if len(marks) != 3 {
+	if len(marks) != 3 { // no mark, and one for each level past ok
 		t.Errorf("three levels share marks: %v", marks)
 	}
 }
 
 // spec: state.md#page — no level where there is none: a series nothing watches, and one
-// watched but not judged yet; a dash in a row of its own, an unmarked value in a matrix.
+// watched but not judged yet: an unmarked value, and that there is none on hover.
 func TestPageShowsADashWithoutALevel(t *testing.T) {
 	load := storage.Value{Metric: "load.avg_15m", Sensor: "disk", Value: 1, TS: lastSeen}
 	body := showJudged(t, stored{
@@ -142,10 +142,9 @@ func TestPageShowsADashWithoutALevel(t *testing.T) {
 			t.Errorf("cell of %s = %s, want no level marked, and that there is none on hover", metric, cell)
 		}
 	}
-	// The level cell of a row of its own carries the dash and the link that sets what
-	// judges the series.
-	if own := ownRows(t, body)[0]; !strings.Contains(own, "<td>— <a class=\"set\"") || levelClass.MatchString(own) {
-		t.Errorf("row = %s, want a dash and no level", own)
+	// A row of its own says what judges the series, and links to where that is set.
+	if own := ownRows(t, body)[0]; !strings.Contains(own, `class="judged"`) || !strings.Contains(own, "/thresholds?") || levelClass.MatchString(own) {
+		t.Errorf("row = %s, want what judges it and no level", own)
 	}
 }
 
@@ -199,8 +198,8 @@ func TestPageMarksASilentNode(t *testing.T) {
 	}
 }
 
-// spec: state.md#page — a stale series keeps its level, on its value in a matrix whose row's
-// time carries the "no fresh data" mark.
+// spec: state.md#page — a stale series is greyed under the "no fresh data" mark, the level
+// it stored kept on hover.
 func TestPageShowsTheLevelOfAStaleSeries(t *testing.T) {
 	body := showJudged(t, stored{
 		states:     []storage.NodeState{{Node: "laptop-a", LastSeen: lastSeen, Values: pair(mounted("/"), lastSeen.Add(-time.Hour))}},
@@ -209,11 +208,9 @@ func TestPageShowsTheLevelOfAStaleSeries(t *testing.T) {
 	}, "/")
 
 	row := matrixRowOf(t, body, "/")
-	if cell := row.cells["disk.free_bytes"]; !strings.Contains(cell, `class="level-warning"`) || !strings.Contains(cell, ">warning<") {
-		t.Errorf("cell = %s, want its level kept", cell)
-	}
-	if !strings.Contains(row.collected, "no fresh data") {
-		t.Errorf("row dated %s, want it marked", row.collected)
+	cell := row.cells["disk.free_bytes"]
+	if !strings.Contains(cell, `title="warning`) || !strings.Contains(cell, "no fresh data") || !strings.Contains(cell, "level-stale") {
+		t.Errorf("cell = %s, want the stale mark and its level on hover", cell)
 	}
 }
 

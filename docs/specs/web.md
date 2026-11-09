@@ -238,8 +238,9 @@ tested.
   the two a reader gets is their browser's to decide, and neither is wrong.
 - **A page that gets shorter on a refresh** — a row left, a node went — keeps the scroll
   position where it still exists and ends at the new bottom otherwise.
-- **A refresh that changes something** replaces the page's content, so a text selection or
-  a focused link inside it is lost then. Only a change costs that; an unchanged refresh
+- **A refresh that changes something** replaces the page's content, so a text selection
+  inside it is lost then, and the focus unless it was on a link still there. Only a change
+  costs that; an unchanged refresh
   touches nothing. A chart on a short window changes on nearly every refresh, so a
   selection on it rarely lasts longer than a period.
 - **A slow answer** puts the notice up after 15 seconds and is still waited for; when it

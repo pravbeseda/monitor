@@ -3,45 +3,66 @@
 <head>
 {{ template "shell" . }}
   <style>
-    body { font-family: system-ui, sans-serif; margin: 2rem auto; max-width: 40rem; }
-    h1 { font-size: 1.3rem; margin-bottom: 0.2rem; }
-    p.meta { color: var(--muted); margin-top: 0; font-size: 0.9rem; }
-    form { display: grid; gap: 0.8rem; margin-top: 1.5rem; }
-    label { display: block; font-size: 0.9rem; }
-    input[type=text] { padding: 0.3rem 0.4rem; width: 12rem; }
-    p.error { color: var(--bad); font-weight: 600; }
-    p.note { color: var(--muted); font-size: 0.9rem; }
+    body { font-family: system-ui, sans-serif; margin: 2rem auto; max-width: 34rem; padding: 0 1rem; }
+    p.crumbs { margin: 0 0 1rem; font-size: 0.9rem; }
   </style>
 </head>
 <body>
   {{ template "tabs" . }}
-  <h1>{{ .Title }}</h1>
-  <p class="meta" title="{{ .Metric }}">{{ .Series }}</p>
-  {{ with .Error }}<p class="error">{{ . }}</p>{{ end }}
-  {{ with .Unwatched }}<p class="note">{{ . }}</p>{{ end }}
-  {{ with .Detached }}<p class="note">{{ . }}</p>{{ end }}
-  {{ with .Unreadable }}<p class="note">{{ . }}</p>{{ end }}
-  <form method="post" action="{{ .Action }}">
-    <fieldset>
-      <legend>{{ .DirectionLabel }}</legend>
-      <label><input type="radio" name="direction" value="below" {{ if .Below }}checked{{ end }}> {{ .BelowLabel }}</label>
-      <label><input type="radio" name="direction" value="above" {{ if not .Below }}checked{{ end }}> {{ .AboveLabel }}</label>
-    </fieldset>
-    <label>{{ .WarningLabel }} <input type="text" name="warning" value="{{ .Warning }}" inputmode="decimal"> <small>{{ .Unit }}</small></label>
-    <label>{{ .CriticalLabel }} <input type="text" name="critical" value="{{ .Critical }}" inputmode="decimal"> <small>{{ .Unit }}</small></label>
-    <fieldset>
-      <legend>{{ .UnusualLabel }}</legend>
-      <label><input type="radio" name="anomalies" value="show" {{ if not .Excluded }}checked{{ end }}> {{ .ShowLabel }}</label>
-      <label><input type="radio" name="anomalies" value="exclude" {{ if .Excluded }}checked{{ end }}> {{ .ExcludeLabel }}</label>
-    </fieldset>
-    <div><button type="submit">{{ .SaveLabel }}</button> <button type="submit" name="apply" value="every">{{ .EveryLabel }}</button> <a href="{{ .BackURL }}">{{ .BackLabel }}</a></div>
-    {{ with .Every }}
-      <section class="every">
-        <p class="note">{{ $.EveryNote }}</p>
-        <ul>{{ range . }}<li class="every-series">{{ .Series }} — {{ .Current }}</li>{{ end }}</ul>
-        <button type="submit" name="apply" value="confirm">{{ $.ConfirmLabel }}</button>
-      </section>
+  <p class="crumbs"><a href="{{ .AllURL }}">{{ .AllLabel }}</a></p>
+  {{ with .Saved }}<p class="settings-saved" role="status" data-saved>{{ . }}</p>{{ end }}
+  <main id="series-settings" class="settings">
+    <header class="settings-head">
+      <div>
+        <h1 title="{{ .Metric }}">{{ .Series }}</h1>
+        <p class="meta">{{ .Node }}</p>
+      </div>
+      <button type="button" class="settings-x" data-dismiss aria-label="{{ .CloseLabel }}">×</button>
+    </header>
+    {{ with .Chart }}
+      <p class="settings-now"><b>{{ $.Now }}</b></p>
+      <div class="settings-chart" data-scale="{{ .Scale }}" data-baseline="{{ .Baseline }}" data-top="{{ .Top }}" data-units="{{ $.Units }}">{{ template "spark" . }}</div>
     {{ end }}
-  </form>
+    <form method="post" action="{{ .Action }}">
+      {{ with .Error }}<p class="error" role="alert">{{ . }}</p>{{ end }}
+      {{ with .Unwatched }}<p class="note">{{ . }}</p>{{ end }}
+      {{ with .Detached }}<p class="note">{{ . }}</p>{{ end }}
+      {{ with .Unreadable }}<p class="note">{{ . }}</p>{{ end }}
+      <p class="error settings-unsent" role="alert" hidden>{{ .UnsentLabel }}</p>
+      <fieldset class="settings-direction">
+        <legend>{{ .DirectionLabel }}</legend>
+        <label><input type="radio" name="direction" value="below" {{ if .Below }}checked{{ end }}><span>{{ .BelowLabel }}</span></label>
+        <label><input type="radio" name="direction" value="above" {{ if not .Below }}checked{{ end }}><span>{{ .AboveLabel }}</span></label>
+      </fieldset>
+      <div class="settings-values">
+        <label><span class="level-warning">●</span> {{ .WarningLabel }} <input type="text" name="warning" value="{{ .Warning }}" inputmode="decimal" autocomplete="off"></label>
+        <label><span class="level-critical">●</span> {{ .CriticalLabel }} <input type="text" name="critical" value="{{ .Critical }}" inputmode="decimal" autocomplete="off"></label>
+      </div>
+      <p class="note">{{ with .Unit }}{{ . }}. {{ end }}{{ .BlankHint }}</p>
+      {{/* The box first: on, it is the value a save reads; off, only the hidden one is sent. */}}
+      <label class="settings-switch"><input type="checkbox" name="anomalies" value="show" {{ if not .Excluded }}checked{{ end }}> {{ .SwitchLabel }}</label>
+      <input type="hidden" name="anomalies" value="exclude">
+      <div class="settings-actions">
+        <button type="submit" class="primary">{{ .SaveLabel }}</button>
+        <a class="button" href="{{ .AllURL }}" data-dismiss>{{ .CancelLabel }}</a>
+      </div>
+      <div class="settings-guard" role="alert" hidden>
+        <span>{{ .UnsavedLabel }}</span>
+        <button type="button" data-discard>{{ .DiscardLabel }}</button>
+        <button type="button" data-stay>{{ .StayLabel }}</button>
+      </div>
+      {{ with .Every }}
+        <section class="every">
+          <p class="note">{{ $.EveryNote }}</p>
+          <ul>{{ range . }}<li class="every-series">{{ .Series }} — {{ .Current }}</li>{{ end }}</ul>
+          <button type="submit" name="apply" value="confirm" class="primary">{{ $.ConfirmLabel }}</button>
+        </section>
+      {{ end }}
+      <div class="settings-below">
+        <button type="submit" name="apply" value="every" class="settings-link">{{ .EveryLabel }}</button>
+        <a href="{{ .BackURL }}" data-leave>{{ .BackLabel }}</a>
+      </div>
+    </form>
+  </main>
 </body>
 </html>

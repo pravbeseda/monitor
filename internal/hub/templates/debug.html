@@ -3,93 +3,126 @@
 <head>
 {{ template "shell" . }}
   <style>
-    body { font-family: system-ui, sans-serif; margin: 2rem auto; max-width: 72rem; }
-    h1 { font-size: 1.4rem; }
-    section { margin-bottom: 2rem; }
-    h2 { font-size: 1.1rem; margin-bottom: 0.2rem; }
-    h1 small, h2 small { color: var(--muted); font-size: 0.8rem; font-weight: normal; }
-    p.meta { color: var(--muted); margin-top: 0; font-size: 0.9rem; }
+    body { font-family: system-ui, sans-serif; margin: 1.2rem auto 3rem; max-width: 76rem; padding: 0 1.5rem; font-variant-numeric: tabular-nums; }
+    .filters { display: flex; flex-wrap: wrap; gap: 0.4rem; align-items: center; margin-bottom: 1.1rem; }
+    .filters input[type=search] { padding: 0.3rem 0.6rem; width: 15rem; max-width: 100%; font: inherit; color: var(--fg); background: var(--raised); border: 1px solid var(--rule); border-radius: 6px; }
+    .chip { color: var(--muted); text-decoration: none; border: 1px solid var(--rule); border-radius: 6px; padding: 0.25rem 0.6rem; }
+    .chip b { font-weight: 500; color: var(--fg); margin-left: 0.3rem; }
+    .chip[aria-current] { background: #22303f; border-color: #3b5f85; color: var(--fg); }
+    .legend { margin-left: auto; color: var(--faint); font-size: 0.82rem; display: flex; flex-wrap: wrap; gap: 0.9rem; }
+    .panes { display: grid; grid-template-columns: 15rem minmax(0, 1fr); gap: 1.6rem; align-items: start; }
+    .tree h3 { font-size: 0.9rem; margin: 0.9rem 0 0.2rem; }
+    .tree h3:first-child { margin-top: 0; }
+    .tree h3 a { color: inherit; text-decoration: none; }
+    .tree ul { list-style: none; margin: 0; padding: 0; }
+    .tree li a { display: flex; justify-content: space-between; gap: 0.5rem; padding: 0.3rem 0.5rem; border-radius: 5px; color: var(--muted); text-decoration: none; }
+    .tree li a:hover { background: var(--raised); }
+    .tree li a[aria-current], .tree h3 a[aria-current] { background: #20303f; color: var(--fg); }
+    .counts { font-size: 0.8em; white-space: nowrap; }
+    .counts span + span { margin-left: 0.4em; }
+    section { margin-bottom: 1.9rem; }
+    section:last-child { margin-bottom: 0; }
+    h2 { font-size: 1.05rem; margin: 0; }
+    h2 small { color: var(--muted); font-size: 0.8rem; font-weight: normal; }
+    p.meta { color: var(--muted); margin: 0.2rem 0 0.5rem; font-size: 0.87rem; }
+    p.notice { margin-top: 0; }
+    small.unwatched { color: var(--muted); font-size: 0.85rem; }
+    div.scroll { overflow-x: auto; }
+    div.scroll + div.scroll { margin-top: 1.1rem; }
     table { border-collapse: collapse; width: 100%; }
-    th, td { text-align: left; padding: 0.3rem 0.6rem; border-bottom: 1px solid var(--rule); }
-    th { font-weight: 600; font-size: 0.85rem; color: var(--muted); }
-    small.stale, small.unusual { color: var(--warn); }
-    small.unwatched, a.set { color: var(--muted); font-size: 0.85rem; }
-    div.scroll { overflow-x: auto; margin-top: 0.8rem; }
-    table.matrix th, table.matrix td { white-space: nowrap; }
-    table.matrix td small { display: block; }
+    th, td { padding: 0 0.6rem; height: 1.95rem; white-space: nowrap; text-align: right; border-bottom: 1px solid var(--grid); }
+    th { font-weight: 500; font-size: 0.83rem; color: var(--muted); border-bottom-color: var(--rule); }
+    th:first-child, td:first-child { text-align: left; }
+    table.own tbody tr, td.cell { position: relative; }
+    table.own tbody tr:hover, td.cell:hover { background: #1b2129; }
+    a.fill { color: inherit; text-decoration: none; }
+    a.fill::after { content: ""; position: absolute; inset: 0; }
+    a.fill:focus-visible { outline: none; }
+    a.fill:focus-visible::after { outline: 2px solid var(--link); outline-offset: -2px; }
+    td.judged { color: var(--faint); font-size: 0.86rem; }
+    td.dim { opacity: 0.35; }
+    .mark { font-style: normal; font-size: 0.72em; margin-right: 0.3em; vertical-align: 0.08em; }
+    @media (max-width: 760px) {
+      body { padding: 0 1rem; }
+      .panes { grid-template-columns: minmax(0, 1fr); }
+      .legend { margin-left: 0; }
+    }
   </style>
 </head>
 <body>
   {{ template "tabs" . }}
-  <h1>{{ .Title }} <small>{{ .Version }}</small></h1>
-  {{ if not .Nodes }}
-    <p>{{ .Empty }}</p>
-  {{ end }}
+  <h1 class="row-mark-word">{{ .Title }}</h1>
+  <div class="filters">
+    <form method="get" action="/debug">
+      <input type="search" name="q" value="{{ .Search.Value }}" placeholder="{{ .Search.Label }}" aria-label="{{ .Search.Label }}">
+      {{- with .Search.Show }}<input type="hidden" name="show" value="{{ . }}">{{ end }}
+      {{- with .Search.Lang }}<input type="hidden" name="lang" value="{{ . }}">{{ end }}
+    </form>
+    {{ range .Filters }}<a class="chip" href="{{ .URL }}"{{ if .On }} aria-current="true"{{ end }}>{{ .Label }}<b>{{ .Count }}</b></a>{{ end }}
+    <span class="legend">
+      {{ range .Legend }}<span><i class="mark {{ .Class }}" aria-hidden="true">{{ .Glyph }}</i>{{ .Word }}</span>{{ end }}
+      <span>{{ .Version }}</span>
+    </span>
+  </div>
   {{ with .NothingWatched }}<p class="notice">{{ . }}</p>{{ end }}
-  {{ range .Nodes }}
-    <section>
-      <h2>{{ .Name }}{{ with .Version }} <small>{{ . }}</small>{{ end }}{{ with .Level }} <span class="{{ .Class }}">{{ .Word }}</span>{{ end }}</h2>
-      <p class="meta">{{ $.LastSeenLabel }}: {{ .LastSeen }}{{ with .Silent }} <small class="level-critical">{{ . }}</small>{{ end }}{{ with .Unwatched }} <small class="unwatched">{{ . }}</small>{{ end }}</p>
-      {{ with .Empty }}
-        <p class="meta">{{ . }}</p>
+  <div class="panes">
+    <nav class="tree" aria-label="{{ .TreeLabel }}">
+      {{ range .Tree }}
+        <h3>{{ if .URL }}<a href="{{ .URL }}"{{ if .Current }} aria-current="true"{{ end }}>{{ .Name }}</a>{{ else }}{{ .Name }}{{ end }}</h3>
+        {{ with .Groups }}<ul>
+          {{- range . }}<li><a href="{{ .URL }}"{{ if .Current }} aria-current="true"{{ end }}><span>{{ .Label }}</span>{{ if or .Problems .Unusual }}<span class="counts">
+            {{- with .Problems }}<span><i class="mark {{ .Class }}" aria-hidden="true">{{ .Glyph }}</i>{{ .Count }}</span>{{ end }}
+            {{- with .Unusual }}<span><i class="mark level-unusual" aria-hidden="true">◆</i>{{ . }}</span>{{ end -}}
+          </span>{{ end }}</a></li>{{ end }}
+        </ul>{{ end }}
       {{ end }}
-      {{ if .Rows }}
-        <table>
-          <thead>
-            <tr>
-              <th>{{ $.MetricLabel }}</th>
-              <th>{{ $.ValueLabel }}</th>
-              <th>{{ $.LevelLabel }}</th>
-              <th>{{ $.CollectedLabel }}</th>
-            </tr>
-          </thead>
-          <tbody>
-            {{ range .Rows }}
-              <tr>
-                <td title="{{ .Metric }}">{{ .Name }}</td>
-                <td><a href="{{ .History }}">{{ .Value }}</a></td>
-                <td>{{ with .Level }}<span class="{{ .Class }}">{{ .Word }}</span>{{ else }}—{{ end }} <a class="set" href="{{ .Thresholds }}">{{ .SetLabel }}</a></td>
-                <td>{{ .Collected }}{{ with .Stale }} <small class="stale">{{ . }}</small>{{ end }}{{ with .Unusual }} <small class="unusual">{{ . }}</small>{{ end }}</td>
-              </tr>
-            {{ end }}
-          </tbody>
-        </table>
+    </nav>
+    <div class="pane">
+      {{ with .Empty }}<p>{{ . }}</p>{{ end }}
+      {{ with .NothingMatches }}<p>{{ . }} <a href="{{ $.ResetURL }}">{{ $.ResetLabel }}</a></p>{{ end }}
+      {{ range .Panes }}
+        <section>
+          <h2>{{ .Name }}{{ with .Version }} <small>{{ . }}</small>{{ end }}{{ with .Level }} <span class="{{ .Class }}">{{ .Word }}</span>{{ end }}</h2>
+          <p class="meta">{{ $.LastSeenLabel }}: {{ .LastSeen }}{{ with .Silent }} <small class="level-critical">{{ . }}</small>{{ end }}{{ with .Unwatched }} <small class="unwatched">{{ . }}</small>{{ end }}</p>
+          {{ with .Empty }}<p class="meta">{{ . }}</p>{{ end }}
+          {{ if .Rows }}
+            <div class="scroll">
+              <table class="own">
+                <thead><tr><th>{{ $.GeneralLabel }}</th><th>{{ $.ValueLabel }}</th><th>{{ $.ThresholdLabel }}</th></tr></thead>
+                <tbody>
+                  {{ range .Rows }}
+                    <tr>
+                      <td title="{{ .Metric }}"><a class="fill" href="{{ .Thresholds }}">{{ .Name }}</a></td>
+                      <td title="{{ .Hover }}"{{ if .Dim }} class="dim"{{ end }}>{{ template "value" . }}</td>
+                      <td class="judged">{{ .Judged }}</td>
+                    </tr>
+                  {{ end }}
+                </tbody>
+              </table>
+            </div>
+          {{ end }}
+          {{ range .Matrices }}
+            <div class="scroll">
+              <table class="matrix">
+                <thead><tr><th>{{ .Family }}</th>{{ range .Columns }}<th title="{{ .Metric }}">{{ .Label }}</th>{{ end }}</tr></thead>
+                <tbody>
+                  {{ range .Rows }}<tr><td title="{{ .Hover }}">{{ .Labels }}</td>{{ range .Cells }}{{ template "cell" . }}{{ end }}</tr>{{ end }}
+                </tbody>
+              </table>
+            </div>
+          {{ end }}
+        </section>
       {{ end }}
-      {{ range .Matrices }}
-        <div class="scroll">
-          <table class="matrix">
-            <thead>
-              <tr>
-                <th>{{ .Family }}</th>
-                {{ range .Columns }}<th title="{{ .Metric }}">{{ .Label }}</th>{{ end }}
-                <th>{{ $.CollectedLabel }}</th>
-              </tr>
-            </thead>
-            <tbody>
-              {{ range .Rows }}
-                <tr>
-                  <td>{{ .Labels }}</td>
-                  {{ range .Cells }}{{ template "cell" . }}{{ end }}
-                  <td>{{ .Collected }}{{ with .Stale }} <small class="stale">{{ . }}</small>{{ end }}</td>
-                </tr>
-              {{ end }}
-            </tbody>
-          </table>
-        </div>
-      {{ end }}
-    </section>
-  {{ end }}
+    </div>
+  </div>
 </body>
 </html>
 
+{{ define "value" }}{{ range .Marks }}<i class="mark {{ .Class }}" aria-hidden="true">{{ .Glyph }}</i><span class="row-mark-word">{{ .Word }}</span>{{ end }}<span{{ with .ValueClass }} class="{{ . }}"{{ end }}>{{ .Value }}</span>{{ end }}
+
 {{ define "cell" }}
   {{- with . -}}
-    <td title="{{ .Hover }}">
-      <a href="{{ .History }}"{{ with .Level }} class="{{ .Class }}"{{ end }}>{{ .Value }}</a>
-      {{- with .Named }} <small class="{{ .Class }}">{{ .Word }}</small>{{ end }}
-      {{- with .Stale }} <small class="stale">{{ . }}</small>{{ end }}
-      {{- with .Unusual }} <small class="unusual">{{ . }}</small>{{ end -}}
-    </td>
+    <td class="cell{{ if .Dim }} dim{{ end }}" title="{{ .Hover }}"><a class="fill" href="{{ .Thresholds }}">{{ template "value" . }}</a></td>
   {{- else -}}
     <td>—</td>
   {{- end -}}

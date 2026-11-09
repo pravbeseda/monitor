@@ -138,10 +138,14 @@ func inputs(body string) []string {
 	return out
 }
 
-// checked reports whether the form's radio button for one direction is the selected one.
-func checked(body, direction string) bool {
+// checked reports whether the form's control for one value is the selected one: a direction,
+// or the switch being on ("show") or off ("exclude").
+func checked(body, value string) bool {
+	if value == "exclude" {
+		return !checked(body, "show")
+	}
 	for _, input := range inputs(body) {
-		if strings.Contains(input, `value="`+direction+`"`) {
+		if strings.Contains(input, `value="`+value+`"`) {
 			return strings.Contains(input, "checked")
 		}
 	}
@@ -183,7 +187,7 @@ func TestThresholdFormIsEmptyWhenNothingIsConfigured(t *testing.T) {
 	if !strings.Contains(body, "Nothing is set, so this series has no level") {
 		t.Errorf("page = %q, want it to say the series is not judged", body)
 	}
-	if !strings.Contains(body, "server-b · disk.free_bytes") || !strings.Contains(body, "/data · ext4") {
+	if !strings.Contains(body, "server-b") || !strings.Contains(body, "disk.free_bytes /data · ext4") {
 		t.Errorf("page = %q, want it to name the series it configures", body)
 	}
 }
@@ -291,7 +295,7 @@ func TestThresholdSaveStoresAndRedirects(t *testing.T) {
 	if rec.Code != http.StatusSeeOther {
 		t.Fatalf("status = %d, want 303: %s", rec.Code, rec.Body)
 	}
-	if got := rec.Header().Get("Location"); got != dataAddress {
+	if got := rec.Header().Get("Location"); got != dataAddress+"&saved=1" {
 		t.Errorf("Location = %q, want the form of the same series", got)
 	}
 	held, ok := store.held[key(dataSeries)]
@@ -741,8 +745,8 @@ func TestASaveWithoutTheSwitchIsRefused(t *testing.T) {
 // spec: thresholds.md#form — the switch in the reader's language.
 func TestThresholdSwitchSpeaksTheReadersLanguage(t *testing.T) {
 	for target, wants := range map[string][]string{
-		dataAddress:              {"When this series is unusual", "show it on the timeline", "never show it as unusual"},
-		dataAddress + "&lang=ru": {"Когда серия необычна", "показывать в ленте", "никогда не показывать как необычную"},
+		dataAddress:              {"Mark this series as unusual when it is"},
+		dataAddress + "&lang=ru": {"Отмечать серию как необычную"},
 	} {
 		_, body := openForm(t, holding(dataSeries), target)
 		for _, want := range wants {

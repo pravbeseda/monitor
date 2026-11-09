@@ -560,7 +560,7 @@ labelled `backup: borg`, `job: job-a`, reporting `backup.success_age_seconds`,
 | `backup.latest_archive_age_seconds` of `job-a` and of a second job `job-b` of `borg`, and `backup.archives` of `job-a`, all unusual, nothing else needing attention | the four slots and nothing after them: no extra line, no "N more" |
 | three non-backup series needing attention and two gathered series unusual | two extra lines and "1 more" |
 | `backup.failed` 1 at `critical`, the backup on the line unusual | "critical" under the backup's value in the critical colour: the most urgent mark speaks |
-| `backup.failed` 1 at `warning` under its readable `above` `warning` of 0 | "warning" under the backup's value in the warning colour, and on hover "Failed borg job-a: threshold 0.00" |
+| `backup.failed` 1 at `warning` under its readable `above` `warning` of 0 | "warning" under the backup's value in the warning colour, and on hover "Failed borg job-a: threshold 0" |
 | `backup.failed` 1 at `warning`, its threshold unreadable | "warning" under the backup's value, and on hover "Failed borg job-a: warning" |
 | `backup.failed` of `job-a` and of `job-b` both at `critical` | on hover "Failed borg job-a: critical": the first in the page order |
 | the backup on the line at `critical` under a readable `critical`, a gathered series at `warning` | the line's own threshold under the value; nothing names the gathered one |
@@ -585,7 +585,7 @@ labelled `backup: borg`, `job: job-a`, reporting `backup.success_age_seconds`,
 | `disk.free_pct /` at `warning` under a readable `warning` of 10 | its value in the warning colour, "threshold 10.0%" under the values |
 | `disk.free_pct /` at `warning`, its threshold unreadable | "warning" under the values |
 | `load.avg_15m` and `load.avg_1m` both at `warning`, under readable `warning`s of 0.5 and 0.4 | "threshold 0.50": the line's own first among equals |
-| `load.avg_15m` unusual, `load.avg_1m` at `critical` under a readable `critical` of 8 | `load.avg_1m` in the critical colour, "threshold 8.00" under the values: the most urgent mark speaks |
+| `load.avg_15m` unusual, `load.avg_1m` at `critical` under a readable `critical` of 8 | `load.avg_1m` in the critical colour, "threshold 8" under the values: the most urgent mark speaks |
 | `memory.available_pct` usual, `memory.available_bytes` unusual with norm 3 GB | the bytes in the unusual colour, "usually 3.0 GB" under the values, "38.5%" in the text colour |
 | `load.avg_15m` stale | the load line faded, nothing under the values |
 | `load.avg_15m` stale, `load.avg_1m` fresh and unusual | the line faded but for `load.avg_1m`, in the unusual colour, and "usually X" under the values |
@@ -611,12 +611,12 @@ English catalogue writes them.
 | State | The sites |
 |---|---|
 | any overview with sites | one table under the "Sites" heading, its headers "Site", "Requests/min", "Last 24 h", "Views/day", "Server errors", "Response p95", "Also"; no site card |
-| the sites above | rows `blog-a`, `shop-c`; `blog-a` reading "12.60", its line of the day, "88.00", "0.1%", "400 ms" and nothing under "Also" |
+| the sites above | rows `blog-a`, `shop-c`; `blog-a` reading "12.60", its line of the day, "88", "0.1%", "400 ms" and nothing under "Also" |
 | `shop-c` with no `site.pageviews_24h` and no `site.response_p95_seconds` | a dash in those two cells |
 | `site.requests_per_min` with no point in its last day | its value, and an empty "Last 24 h" cell |
 | a site's row | its name a link to its page, carrying the language and not the sort; a dot in its state's colour, the word on hover and to a screen reader |
 | `site.requests_per_min` unusual at 34.2, norm 9.5 | "34.20" in the unusual colour, "usually 9.50" under it |
-| `site.requests_per_min` at `warning` under a readable `above` `warning` of 30 | its value in the warning colour, "threshold 30.00" under it, and no dashed line across its line of the day |
+| `site.requests_per_min` at `warning` under a readable `above` `warning` of 30 | its value in the warning colour, "threshold 30" under it, and no dashed line across its line of the day |
 | `site.requests_per_min` at `warning`, its threshold unreadable | "warning" under its value |
 | `site.requests_per_min` at `critical` and stale | its cell faded, its value in the colour of no fresh data, nothing under it: a stale level is no level |
 | `site.server_error_pct` at `critical` | that cell's value in the critical colour, the dot in the critical colour, the row first while no sort is chosen |
@@ -796,7 +796,7 @@ same for `vpn`, and its family `backup` is grouped by `backup`.
 | `copy` with `failed` alone | a row `copy` and no column |
 | `failed` 0, no threshold on it | `copy` not coloured; "last run ok" on hover |
 | `failed` 1, no threshold on it | `copy` not coloured; "last run failed" on hover |
-| `failed` 2 | "last run 2.00" on hover |
+| `failed` 2 | "last run 2" on hover |
 | `failed` 1 at `critical` | `copy` coloured critical; "last run failed" and "critical" on hover and for a screen reader, neither shown |
 | `failed` 0 at `critical`, stale | `copy` coloured as holding no fresh data |
 | `copy`'s name | a link to its `backup.failed` history page with the page's window and the language |
@@ -806,7 +806,7 @@ same for `vpn`, and its family `backup` is grouped by `backup`.
 | a stale figure | coloured as holding no fresh data |
 | an unusual figure | coloured unusual |
 | a figure | a link to its series' history page with the page's window and the language |
-| `copy` reporting `backup.queue_depth`, a metric the panel does not know, named "Queue {backup} {job}" | a column `Queue` after the known ones, its cell `2.00` |
+| `copy` reporting `backup.queue_depth`, a metric the panel does not know, named "Queue {backup} {job}" | a column `Queue` after the known ones, its cell `2` |
 | the same metric named "{backup} {job}" | headed `queue_depth` |
 | `backup.b_depth` named "Alpha {backup} {job}" and `backup.a_depth` named "Zeta {backup} {job}" | columns `Zeta`, then `Alpha` |
 | `backup.verify_age_seconds` 3600, a metric the panel does not know | its cell `1.0 h` |

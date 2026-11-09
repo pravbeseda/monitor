@@ -125,7 +125,12 @@ func (p *Printer) at(instant time.Time) time.Time {
 }
 
 // Number renders a plain value: a metric whose id carries no unit still has to be shown.
-func (p *Printer) Number(value float64) string { return p.number(value, 2) }
+func (p *Printer) Number(value float64) string {
+	if value == math.Trunc(value) {
+		return p.number(value, 0)
+	}
+	return p.number(value, 2)
+}
 
 // number applies the decimal separator of the locale.
 func (p *Printer) number(value float64, decimals int) string {

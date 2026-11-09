@@ -30,7 +30,7 @@ func TestEveryPageNamesASeriesByAllItsLabels(t *testing.T) {
 		{Metric: "site.requests_per_min", Sensor: "access_log", Labels: site("shop-c"), Value: 2, TS: lastSeen},
 	}
 	debug := showDebug(t, stored{states: []storage.NodeState{{Node: "sites", LastSeen: lastSeen, Values: values}}}, "/debug")
-	for _, want := range []string{"<td>site=blog-a</td>", "<td>site=shop-c</td>"} {
+	for _, want := range []string{`<td title="site=blog-a">blog-a</td>`, `<td title="site=shop-c">shop-c</td>`} {
 		if !strings.Contains(debug, want) {
 			t.Errorf("/debug does not show %q: %s", want, debug)
 		}
@@ -50,7 +50,7 @@ func TestEveryPageNamesASeriesByAllItsLabels(t *testing.T) {
 
 	ref := siteSeries("blog-a").SeriesRef
 	_, form := openForm(t, holding(ref), "/thresholds?label.site=blog-a&metric=site.requests_per_min&node=sites")
-	if want := "sites · site.requests_per_min site=blog-a"; !strings.Contains(form, want) {
+	if want := "site.requests_per_min site=blog-a</h1>"; !strings.Contains(form, want) {
 		t.Errorf("thresholds form does not name %q: %s", want, form)
 	}
 
@@ -77,7 +77,7 @@ func TestHeadingsSayTheDeclaredName(t *testing.T) {
 	form := holding(volume.SeriesRef)
 	form.names = book
 	_, body := openForm(t, form, "/thresholds?label.fs=ext4&label.mount=/srv&label.removable=false&metric=disk.free_pct&node=server-b&lang=ru")
-	if want := `<p class="meta" title="disk.free_pct">server-b · Свободно /srv · ext4</p>`; !strings.Contains(body, want) {
+	if want := `<h1 title="disk.free_pct">Свободно /srv · ext4</h1>`; !strings.Contains(body, want) {
 		t.Errorf("thresholds form does not name %q: %s", want, body)
 	}
 }

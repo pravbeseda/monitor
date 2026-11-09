@@ -59,7 +59,7 @@ func Routes(cfg *config.Config, store Store, norms NormReader, now func() time.T
 	mux.Handle("GET /item", Item(current, read, store, layoutOf(cfg), targetOf(cfg)))
 	// One handler for both methods: a save is the same page answering for itself, and a
 	// method it does not take is its own refusal rather than the mux's (thresholds.md).
-	mux.Handle("/thresholds", Thresholds(store, func(node string) bool {
+	mux.Handle("/thresholds", Thresholds(store, read, func(node string) bool {
 		_, known := cfg.Node(node)
 		return known
 	}))

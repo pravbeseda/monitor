@@ -147,7 +147,7 @@ func TestDebugLinksEachValueToItsHistory(t *testing.T) {
 
 	body := recorder.Body.String()
 	for _, want := range []string{
-		"/history?",
+		`href="/thresholds?`,
 		"metric=disk.free_pct",
 		"node=laptop-a",
 		"label.mount=%2F",

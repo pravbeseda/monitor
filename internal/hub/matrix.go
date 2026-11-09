@@ -4,9 +4,9 @@ import (
 	"cmp"
 	"maps"
 	"slices"
+	"strconv"
 	"strings"
 
-	"github.com/pravbeseda/monitor/internal/evaluate"
 	"github.com/pravbeseda/monitor/internal/i18n"
 	"github.com/pravbeseda/monitor/internal/names"
 	"github.com/pravbeseda/monitor/internal/notify"
@@ -19,6 +19,9 @@ type matrixView struct {
 	Family  string
 	Columns []columnView
 	Rows    []matrixRowView
+	// key addresses the matrix in a link; keys are its label keys.
+	key  string
+	keys []string
 }
 
 type columnView struct {
@@ -27,23 +30,11 @@ type columnView struct {
 }
 
 type matrixRowView struct {
+	// Labels names the row by its values; Hover by the names of its labels.
 	Labels string
+	Hover  string
 	// Cells follow Columns; a nil cell is a metric this label set shows no series of.
-	Cells     []*seriesCell
-	Collected string
-	// Stale marks the row's time when every series it shows is stale, its cells then
-	// left unmarked.
-	Stale string
-}
-
-// seriesCell is one series in a matrix, shown as its row would show it but for the link to
-// its thresholds, which its chart carries instead.
-type seriesCell struct {
-	rowView
-	// Hover names the level, or that there is none, and the series' own time.
-	Hover string
-	// Named is Level when it is worth naming beside the value: warning or critical.
-	Named *levelView
+	Cells []*rowView
 }
 
 // layOut splits a node's shown series, in the order seriesBefore gives them, into the rows
@@ -59,7 +50,7 @@ func layOut(printer *i18n.Printer, book names.Book, node string, series []series
 			continue
 		}
 		family := familyKey(row.metric)
-		keys := slices.Sorted(maps.Keys(row.labels))
+		keys := sortedKeys(row.labels)
 		at := slices.IndexFunc(groups, func(g *matrixGroup) bool { return g.family == family && slices.Equal(g.keys, keys) })
 		if at < 0 {
 			at = len(groups)
@@ -73,9 +64,18 @@ func layOut(printer *i18n.Printer, book names.Book, node string, series []series
 	})
 	matrices := make([]matrixView, 0, len(groups))
 	for _, group := range groups {
-		matrices = append(matrices, matrixOf(printer, book, node, group.series, lang))
+		matrix := matrixOf(printer, book, node, group.series, lang)
+		matrix.key, matrix.keys = matrixKey(group.family, group.keys), group.keys
+		matrices = append(matrices, matrix)
 	}
 	return own, matrices
+}
+
+func sortedKeys(labels map[string]string) []string { return slices.Sorted(maps.Keys(labels)) }
+
+// matrixKey addresses a matrix: its family, its dot kept, and its label keys.
+func matrixKey(family string, keys []string) string {
+	return family + "|" + strings.Join(keys, ",")
 }
 
 // matrixGroup is the series one matrix gathers: one family — its dot kept, so that an id
@@ -142,40 +142,35 @@ func columnLabel(printer *i18n.Printer, book names.Book, metric string) string {
 
 // setRowOf is the matrix row of one label set.
 func setRowOf(printer *i18n.Printer, node string, set []seriesRow, columns []columnView, lang string) matrixRowView {
-	out := matrixRowView{Labels: notify.Describe(printer, set[0].labels), Cells: make([]*seriesCell, len(columns))}
-	newest, allStale := set[0], true
-	for _, row := range set {
-		if row.ts.After(newest.ts) {
-			newest = row
-		}
-		allStale = allStale && row.stale
-	}
-	out.Collected = printer.Time(newest.ts)
-	if allStale {
-		out.Stale = printer.T("value.stale")
+	out := matrixRowView{
+		Labels: rowName(printer, set[0].labels),
+		Hover:  notify.Describe(printer, set[0].labels),
+		Cells:  make([]*rowView, len(columns)),
 	}
 	for i, column := range columns {
 		for _, row := range set {
 			if row.metric == column.Metric {
-				out.Cells[i] = seriesCellOf(printer, node, row, !allStale, lang)
+				cell := rowOf(printer, node, row, lang)
+				out.Cells[i] = &cell
 			}
 		}
 	}
 	return out
 }
 
-func seriesCellOf(printer *i18n.Printer, node string, row seriesRow, markStale bool, lang string) *seriesCell {
-	out := &seriesCell{rowView: rowOf(printer, node, row, lang)}
-	word := printer.T("level.none")
-	if out.Level != nil {
-		word = out.Level.Word
-		if *row.level != evaluate.OK {
-			out.Named = out.Level
+// rowName names a matrix row. A volume reads as it does everywhere; anything else by its
+// values alone, the matrix being all one key set, quoted where a value would not read back.
+func rowName(printer *i18n.Printer, labels map[string]string) string {
+	if _, volume := labels["mount"]; volume {
+		return notify.Describe(printer, labels)
+	}
+	parts := make([]string, 0, len(labels))
+	for _, key := range sortedKeys(labels) {
+		value := labels[key]
+		if value == "" || strings.Contains(value, ",") {
+			value = strconv.Quote(value)
 		}
+		parts = append(parts, value)
 	}
-	out.Hover = word + " · " + out.Collected
-	if !markStale {
-		out.Stale = ""
-	}
-	return out
+	return strings.Join(parts, ", ")
 }

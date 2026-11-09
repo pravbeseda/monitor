@@ -7,6 +7,7 @@
     :root {
       color-scheme: dark;
       --bg: #111418;
+      --raised: #181c22;
       --fg: #d8dde3;
       --muted: #8b949e;
       --faint: #6e7681;
@@ -33,6 +34,51 @@
     .level-unusual { color: var(--unusual); }
     .level-stale { color: var(--muted); }
     .row-mark-word { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
+    svg.spark { width: 100%; height: 3.2rem; }
+    svg.spark polyline { fill: none; stroke: var(--link); stroke-width: 2; vector-effect: non-scaling-stroke; }
+    svg.spark polyline.point { stroke-width: 5; stroke-linecap: round; }
+    svg.spark polygon.area { fill: color-mix(in srgb, var(--link) 16%, transparent); stroke: none; }
+    svg.spark line.threshold { stroke-width: 1.5; stroke-dasharray: 5 4; vector-effect: non-scaling-stroke; }
+    svg.spark line.level-warning { stroke: var(--warn); }
+    svg.spark line.level-critical { stroke: var(--bad); }
+    .settings h1 { font-size: 1.15rem; margin: 0; }
+    .settings p.meta { color: var(--muted); margin: 0.1rem 0 0; font-size: 0.9rem; }
+    .settings-head { display: flex; justify-content: space-between; gap: 1rem; align-items: start; }
+    .settings-x { display: none; }
+    .settings-now { margin: 0.9rem 0 0.4rem; font-size: 1.35rem; }
+    .settings-chart svg.spark { display: block; height: 5.25rem; background: var(--bg); border-radius: 6px; }
+    .settings form { display: grid; gap: 0.8rem; margin-top: 1rem; }
+    .settings fieldset { border: 0; margin: 0; padding: 0; }
+    .settings legend { padding: 0; margin-bottom: 0.3rem; color: var(--muted); font-size: 0.86rem; }
+    .settings p.error { color: var(--bad); font-weight: 600; margin: 0; }
+    .settings p.note { color: var(--muted); font-size: 0.85rem; margin: 0; }
+    .settings-direction label { display: inline-block; cursor: pointer; }
+    .settings-direction input { position: absolute; opacity: 0; }
+    .settings-direction span { display: inline-block; padding: 0.3rem 0.9rem; border: 1px solid var(--rule); color: var(--muted); }
+    .settings-direction label:first-of-type span { border-radius: 6px 0 0 6px; }
+    .settings-direction label:last-of-type span { border-radius: 0 6px 6px 0; border-left: 0; }
+    .settings-direction input:checked + span { background: #22303f; color: var(--fg); }
+    .settings-direction input:focus-visible + span { outline: 2px solid var(--link); outline-offset: 1px; }
+    .settings-values { display: grid; grid-template-columns: 1fr 1fr; gap: 0.8rem; }
+    .settings-values label { display: block; color: var(--muted); font-size: 0.86rem; }
+    .settings-values input { display: block; width: 100%; box-sizing: border-box; margin-top: 0.3rem; padding: 0.42rem 0.55rem; font: inherit; font-size: 1rem; color: var(--fg); background: var(--bg); border: 1px solid var(--rule); border-radius: 6px; }
+    .settings-switch { display: flex; gap: 0.5rem; align-items: center; cursor: pointer; }
+    .settings-actions { display: flex; gap: 0.5rem; }
+    .settings button, .settings a.button { font: inherit; color: var(--fg); background: none; border: 1px solid var(--rule); border-radius: 6px; padding: 0.38rem 0.9rem; cursor: pointer; text-decoration: none; }
+    .settings button.primary { background: #238636; border-color: #2ea043; color: #fff; font-weight: 500; }
+    .settings-guard { display: flex; flex-wrap: wrap; gap: 0.6rem; align-items: center; padding: 0.55rem 0.7rem; border-radius: 6px; background: var(--notice-bg); color: var(--notice-fg); }
+    .settings-guard[hidden], .settings-unsent[hidden] { display: none; }
+    .settings .every ul { margin: 0.4rem 0 0.8rem; padding-left: 1.1rem; max-height: 13rem; overflow-y: auto; font-size: 0.88rem; }
+    .settings-below { display: flex; flex-wrap: wrap; justify-content: space-between; gap: 0.4rem; padding-top: 0.7rem; border-top: 1px solid var(--rule); font-size: 0.88rem; }
+    .settings button.settings-link { border: 0; padding: 0; color: var(--link); }
+    .settings button.settings-x { border: 0; padding: 0.1rem 0.3rem; color: var(--muted); font-size: 1.3rem; line-height: 1; }
+    .settings-saved { background: #16301f; border: 1px solid #2ea043; border-radius: 6px; padding: 0.5rem 0.7rem; }
+    dialog.settings-dialog { width: min(30rem, calc(100vw - 2rem)); padding: 0; color: var(--fg); background: var(--raised); border: 1px solid var(--rule); border-radius: 10px; font-family: system-ui, sans-serif; }
+    dialog.settings-dialog::backdrop { background: rgba(4, 6, 9, 0.66); }
+    dialog.settings-dialog .settings { padding: 1.2rem 1.3rem; }
+    dialog.settings-dialog .settings-x { display: block; }
+    .settings-notice { position: fixed; z-index: 10; top: 1.2rem; right: 1.2rem; max-width: 24rem; display: flex; gap: 0.8rem; align-items: start; padding: 0.6rem 0.8rem; color: var(--fg); background: #16301f; border: 1px solid #2ea043; border-radius: 8px; font-family: system-ui, sans-serif; }
+    .settings-notice button { background: none; border: 0; color: var(--muted); font-size: 1.1rem; line-height: 1; cursor: pointer; }
   </style>
   {{ if .Live }}<meta name="monitor-live" content="{{ .StalledNotice }}" data-rendering="{{ .Rendering }}">{{ end }}
   <script>
@@ -69,6 +115,7 @@
       var inFlight = false;
       var halted = false;
       var leaving = false;
+      var again = false;
       var next;
 
       function refresh() {
@@ -96,13 +143,21 @@
             var page = new DOMParser().parseFromString(html, "text/html");
             var theirs = page.querySelector(marker);
             if (!theirs) throw "not a hub page";
+            // What only the reader has outlasts an upgrade and a refresh (ADR 0059).
+            var search = document.querySelector('input[type="search"]');
+            if (search && search.value !== search.defaultValue) return;
             if (theirs.getAttribute("data-rendering") !== mine.getAttribute("data-rendering")) {
-              location.reload();
+              if (!document.querySelector("dialog.settings-dialog, .settings-notice")) location.reload();
               return;
             }
             var body = page.body.innerHTML;
             if (stalled || body !== (shown === null ? document.body.innerHTML : shown)) {
+              var focused = document.activeElement && document.activeElement.getAttribute("href");
               document.body.replaceWith(page.body);
+              var link = focused && Array.prototype.find.call(document.links, function (one) {
+                return one.getAttribute("href") === focused;
+              });
+              if (link) link.focus({ preventScroll: true });
             }
             shown = body;
             stalled = false;
@@ -112,7 +167,8 @@
             clearTimeout(late);
             clearTimeout(dead);
             inFlight = false;
-            if (!halted) next = setTimeout(refresh, Math.max(0, period - (performance.now() - started)));
+            if (!halted) next = setTimeout(refresh, again ? 0 : Math.max(0, period - (performance.now() - started)));
+            again = false;
           });
       }
 
@@ -134,6 +190,11 @@
 
       next = setTimeout(refresh, period);
       document.addEventListener("visibilitychange", refresh);
+      // A save just changed what this page shows; a fetch already out may have missed it.
+      document.addEventListener("monitor-refresh", function () {
+        if (inFlight) again = true;
+        else refresh();
+      });
       window.addEventListener("pagehide", function () {
         leaving = true;
       });
@@ -158,6 +219,217 @@
       }
       function holds(zone) {
         return document.cookie.split("; ").indexOf("tz=" + zone) >= 0;
+      }
+    })();
+  </script>
+  <script>
+    (function () {
+      // A link to a series' settings opens that page's form over this one (ADR 0059). The
+      // dialog and its notice hang off <html>: a refresh replaces <body>.
+      var settings = 'a[href^="/thresholds?"]';
+      var patience = 15000;
+      var latest = 0;
+      var open = null;
+
+      document.addEventListener("click", function (event) {
+        var link = event.target.closest && event.target.closest(settings);
+        if (!link || event.button !== 0 || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return;
+        if (!window.fetch || !window.DOMParser || !window.HTMLDialogElement || !window.AbortController) return;
+        event.preventDefault();
+        var mine = ++latest;
+        var href = link.getAttribute("href");
+        ask(href).then(function (reply) {
+          if (mine !== latest || reply.answer.status === 401) return;
+          var content = reply.page.querySelector("#series-settings");
+          if (!reply.answer.ok || !content) throw reply.answer.status;
+          show(content, href);
+        }).catch(function () {
+          if (mine === latest) location.href = href;
+        });
+      });
+
+      document.addEventListener("DOMContentLoaded", function () {
+        var page = document.querySelector("#series-settings");
+        if (page) followTyping(page);
+      });
+
+      function ask(address, options) {
+        var abort = new AbortController();
+        var late = setTimeout(function () { abort.abort(); }, patience);
+        var request = Object.assign({ cache: "no-store", credentials: "same-origin", signal: abort.signal }, options);
+        return fetch(address, request).then(function (answer) {
+          return answer.text().then(function (html) {
+            clearTimeout(late);
+            return { answer: answer, page: new DOMParser().parseFromString(html, "text/html") };
+          });
+        });
+      }
+
+      function show(content, href) {
+        var element = document.createElement("dialog");
+        element.className = "settings-dialog";
+        element.appendChild(content);
+        document.documentElement.appendChild(element);
+        open = { element: element, href: href, opened: null, busy: false, then: null };
+        open.opened = fields();
+        var pressed = null;
+        element.addEventListener("mousedown", function (event) { pressed = event.target; });
+        element.addEventListener("cancel", function (event) {
+          event.preventDefault();
+          leave(null);
+        });
+        element.addEventListener("click", function (event) {
+          var on = event.target.closest.bind(event.target);
+          var link = on("[data-leave]");
+          if (link) {
+            event.preventDefault();
+            leave(link.href);
+          } else if (on("[data-dismiss]")) {
+            event.preventDefault();
+            leave(null);
+          } else if (on("[data-discard]")) {
+            if (open.then) location.href = open.then;
+            else close();
+          } else if (on("[data-stay]")) {
+            guard().hidden = true;
+          } else if (event.target === element && pressed === element) {
+            leave(null);
+          }
+        });
+        element.addEventListener("submit", save);
+        element.showModal();
+        settle();
+      }
+
+      function form() { return open.element.querySelector("form"); }
+      function guard() { return open.element.querySelector(".settings-guard"); }
+      function fields() { return new URLSearchParams(new FormData(form())).toString(); }
+
+      // settle readies what a form just put in the dialog.
+      function settle() {
+        followTyping(open.element.querySelector("#series-settings"));
+        var first = open.element.querySelector('input[name="warning"]');
+        if (first) first.focus();
+      }
+
+      function leave(destination) {
+        if (open.busy) return;
+        if (!guard().hidden && !destination) {
+          guard().hidden = true;
+          return;
+        }
+        if (open.opened !== null && open.opened === fields()) {
+          if (destination) location.href = destination;
+          else close();
+          return;
+        }
+        open.then = destination;
+        guard().hidden = false;
+      }
+
+      function close() {
+        var href = open.href;
+        open.element.close();
+        open.element.remove();
+        open = null;
+        var link = Array.prototype.find.call(document.querySelectorAll(settings), function (one) {
+          return one.getAttribute("href") === href;
+        });
+        if (link) link.focus({ preventScroll: true });
+      }
+
+      function save(event) {
+        event.preventDefault();
+        if (open.busy) return;
+        var body = new URLSearchParams(new FormData(form()));
+        if (event.submitter && event.submitter.name) body.append(event.submitter.name, event.submitter.value);
+        open.busy = true;
+        var unsent = open.element.querySelector(".settings-unsent");
+        unsent.hidden = true;
+        ask(form().getAttribute("action"), { method: "POST", body: body }).then(function (reply) {
+          open.busy = false;
+          var saved = reply.page.querySelector("[data-saved]");
+          var content = reply.page.querySelector("#series-settings");
+          if (reply.answer.redirected && saved) {
+            var closeLabel = open.element.querySelector(".settings-x").getAttribute("aria-label");
+            close();
+            notice(saved.textContent, closeLabel);
+            document.dispatchEvent(new Event("monitor-refresh"));
+          } else if (content && (reply.answer.ok || reply.answer.status === 400)) {
+            // What the form now holds is the reader's and is not stored: closing must ask.
+            open.element.querySelector("#series-settings").replaceWith(content);
+            open.opened = null;
+            settle();
+          } else {
+            unsent.hidden = false;
+          }
+        }).catch(function () {
+          open.busy = false;
+          unsent.hidden = false;
+        });
+      }
+
+      function notice(text, closeLabel) {
+        var old = document.querySelector(".settings-notice");
+        if (old) old.remove();
+        var element = document.createElement("div");
+        element.className = "settings-notice";
+        element.setAttribute("role", "status");
+        var words = document.createElement("span");
+        words.textContent = text;
+        var dismiss = document.createElement("button");
+        dismiss.textContent = "×";
+        dismiss.setAttribute("aria-label", closeLabel);
+        dismiss.addEventListener("click", function () { element.remove(); });
+        element.append(words, dismiss);
+        document.documentElement.appendChild(element);
+        setTimeout(function () { element.remove(); }, 5000);
+      }
+
+      // followTyping moves the chart's lines as values are typed. Whether a value is
+      // acceptable stays the server's: one this cannot read just has no line.
+      function followTyping(root) {
+        var box = root.querySelector(".settings-chart");
+        if (!box) return;
+        var svg = box.querySelector("svg");
+        var width = svg.viewBox.baseVal.width, height = svg.viewBox.baseVal.height;
+        var scale = +box.dataset.scale, baseline = +box.dataset.baseline, top = +box.dataset.top;
+        var units = JSON.parse(box.dataset.units);
+
+        function valueOf(text) {
+          var parts = text.trim().replace(",", ".").match(/^(-?\d*\.?\d+(?:e[+-]?\d+)?)\s*([a-z]*)$/i);
+          if (!parts) return null;
+          var unit = parts[2] ? units[parts[2].toLowerCase()] : 1;
+          return unit ? parseFloat(parts[1]) * unit : null;
+        }
+
+        function place() {
+          var highest = top;
+          [["warning", "level-warning"], ["critical", "level-critical"]].forEach(function (pair) {
+            var value = valueOf(root.querySelector('input[name="' + pair[0] + '"]').value);
+            var line = svg.querySelector("line." + pair[1]);
+            if (value === null || value < 0) {
+              if (line) line.remove();
+              return;
+            }
+            if (!line) {
+              line = document.createElementNS("http://www.w3.org/2000/svg", "line");
+              line.setAttribute("class", "threshold " + pair[1]);
+              line.setAttribute("x1", "0");
+              line.setAttribute("x2", String(width));
+              svg.insertBefore(line, svg.firstChild);
+            }
+            var y = baseline - value / scale * (baseline - top);
+            line.setAttribute("y1", String(y));
+            line.setAttribute("y2", String(y));
+            highest = Math.min(highest, y);
+          });
+          var above = top - highest;
+          svg.setAttribute("viewBox", "0 " + -above + " " + width + " " + (height + above));
+        }
+
+        root.addEventListener("input", place);
+        place();
       }
     })();
   </script>

@@ -225,6 +225,8 @@ Each line is an index into the ADR that owns it.
   overview of items at `/overview` with a page per item at `/item`, and the debug table at
   `/debug` — until a skin needs a client; TypeScript arrives with that one. They sit side by
   side as tabs, and `/` opens the one last clicked. → 0035, 0037, 0041, 0046
+- **All series is two panes, one group at a time**, filters and search spanning the hub, and
+  a series' settings open in a dialog over any hub page, which is that page's own form. → 0059
 - **An item is a node, and the sites node is one item per site**; the overview groups items
   by who collects them. → 0045, 0046
 - **A computer's page is tiles**: a volume's free bytes and share on one, a line only where a

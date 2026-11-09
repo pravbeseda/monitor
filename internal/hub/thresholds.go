@@ -3,6 +3,7 @@ package hub
 import (
 	"cmp"
 	"context"
+	"encoding/json"
 	"html/template"
 	"log/slog"
 	"maps"
@@ -21,7 +22,10 @@ import (
 )
 
 var thresholdTemplate = template.Must(template.ParseFS(templates,
-	"templates/thresholds.html", "templates/shell.html"))
+	"templates/thresholds.html", "templates/chart.html", "templates/shell.html"))
+
+// settingsFrame is the form's chart: no axes, the stored values drawn across it.
+var settingsFrame = frame{width: 400, height: 84, top: 6, bottom: 2}
 
 // ThresholdStore is what the page needs of persistence: the series it may be opened for,
 // what one of them is judged by, and whether it is excluded from anomalies
@@ -44,9 +48,18 @@ type ThresholdStore interface {
 type thresholdView struct {
 	shell
 	// Series names the series; Metric, its id, is shown on hover.
-	Series     string
-	Metric     string
-	Unit       string
+	Series string
+	Metric string
+	Node   string
+	// Unit says what the fields take, empty for a plain number.
+	Unit string
+	// Chart is the series' last day, nil when it has no point there or they cannot be read,
+	// and Now its newest value. Units is the JSON of what a value may be written in, by
+	// which a script places a typed value on the chart.
+	Chart      *chart
+	Now        string
+	Units      string
+	Saved      string
 	Action     string
 	Below      bool
 	Excluded   bool
@@ -62,13 +75,22 @@ type thresholdView struct {
 	AboveLabel     string
 	WarningLabel   string
 	CriticalLabel  string
-	UnusualLabel   string
-	ShowLabel      string
-	ExcludeLabel   string
+	BlankHint      string
+	SwitchLabel    string
 	SaveLabel      string
+	CancelLabel    string
+	CloseLabel     string
 	BackLabel      string
 	BackURL        string
+	AllLabel       string
+	AllURL         string
 	EveryLabel     string
+	// What the dialog says beyond the form (docs/specs/web.md#dialog) comes with the form,
+	// so that it can say it when the hub no longer answers.
+	UnsavedLabel string
+	DiscardLabel string
+	StayLabel    string
+	UnsentLabel  string
 
 	// Every lists the series "Confirm" will change, once the reader asked to apply the form
 	// to every series of its metric (docs/specs/thresholds.md#all).
@@ -86,7 +108,7 @@ type everyView struct {
 // Thresholds serves the page that sets what one series is judged by, and the posts it
 // accepts: a save, and applying the form to every series of its metric
 // (docs/specs/thresholds.md). Beside it only seeding writes a threshold, at ingest.
-func Thresholds(store ThresholdStore, configured func(node string) bool) http.Handler {
+func Thresholds(store ThresholdStore, reader history.Reader, configured func(node string) bool) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		values := r.URL.Query()
 		printer := i18n.For(i18n.Negotiate(values.Get("lang"), r.Header.Get("Accept-Language"))).In(zoneOf(r))
@@ -120,18 +142,21 @@ func Thresholds(store ThresholdStore, configured func(node string) bool) http.Ha
 
 		name := namesFrom(r.Context(), store).Metrics[ref.Metric]
 		if r.Method == http.MethodPost {
-			save(w, r, store, printer, name, ref, language(values))
+			save(w, r, store, reader, printer, name, ref, language(values))
 			return
 		}
-		showForm(r.Context(), w, store, printer, name, ref, language(values), configured(ref.Node))
+		showForm(r.Context(), w, store, reader, printer, name, ref, language(values), configured(ref.Node), values.Has(savedParam))
 	})
 }
 
 // showForm draws the form over what is stored.
-func showForm(ctx context.Context, w http.ResponseWriter, store ThresholdStore,
-	printer *i18n.Printer, name names.Text, ref storage.SeriesRef, lang string, configured bool,
+func showForm(ctx context.Context, w http.ResponseWriter, store ThresholdStore, reader history.Reader,
+	printer *i18n.Printer, name names.Text, ref storage.SeriesRef, lang string, configured, saved bool,
 ) {
 	view := emptyForm(printer, name, ref, lang)
+	if saved {
+		view.Saved = printer.T("threshold.saved")
+	}
 	if !configured {
 		view.Detached = printer.T("threshold.detached")
 	}
@@ -158,11 +183,27 @@ func showForm(ctx context.Context, w http.ResponseWriter, store ThresholdStore,
 		view.Below = th.Direction != storage.Above
 		view.Warning, view.Critical = typed(ref.Metric, th.Warning), typed(ref.Metric, th.Critical)
 	}
+	view.Chart, view.Now = lastDay(ctx, printer, reader, ref, th)
 	drawForm(w, view)
 }
 
+// lastDay is the series' last day as the form draws it, and its newest value. Reading it
+// never costs the form, so a failure only leaves the chart out (thresholds.md#form).
+func lastDay(ctx context.Context, printer *i18n.Printer, reader history.Reader, ref storage.SeriesRef, th storage.Threshold) (*chart, string) {
+	series, window, err := reader.ReadOne(ctx, ref, history.DefaultWindow)
+	if err != nil {
+		slog.Error("read a series for its form", "node", ref.Node, "metric", ref.Metric, "error", err)
+		return nil, ""
+	}
+	if series == nil || len(series.Points) == 0 {
+		return nil, ""
+	}
+	drawn := draw(printer, *series, window, settingsFrame, levelsIn(th)...)
+	return &drawn, format(printer, ref.Metric, series.Points[len(series.Points)-1].Value)
+}
+
 // save replaces the whole configuration of one series: a form states it, never patches it.
-func save(w http.ResponseWriter, r *http.Request, store ThresholdStore,
+func save(w http.ResponseWriter, r *http.Request, store ThresholdStore, reader history.Reader,
 	printer *i18n.Printer, name names.Text, ref storage.SeriesRef, lang string,
 ) {
 	if err := r.ParseForm(); err != nil {
@@ -176,7 +217,7 @@ func save(w http.ResponseWriter, r *http.Request, store ThresholdStore,
 	case string(storage.Above):
 		direction = storage.Above
 	default:
-		refuseForm(w, printer, name, ref, lang, r, "threshold.bad_direction")
+		refuseForm(w, reader, printer, name, ref, lang, r, "threshold.bad_direction")
 		return
 	}
 	// A form is the whole configuration, so a save that says nothing about the switch —
@@ -184,22 +225,22 @@ func save(w http.ResponseWriter, r *http.Request, store ThresholdStore,
 	anomalies := r.PostForm.Get("anomalies")
 	exclude := anomalies == "exclude"
 	if !exclude && anomalies != "show" {
-		refuseForm(w, printer, name, ref, lang, r, "threshold.bad_switch")
+		refuseForm(w, reader, printer, name, ref, lang, r, "threshold.bad_switch")
 		return
 	}
 
 	warning, err := parseValue(ref.Metric, r.PostForm.Get("warning"))
 	if err != nil {
-		refuseForm(w, printer, name, ref, lang, r, "threshold.bad_warning")
+		refuseForm(w, reader, printer, name, ref, lang, r, "threshold.bad_warning")
 		return
 	}
 	critical, err := parseValue(ref.Metric, r.PostForm.Get("critical"))
 	if err != nil {
-		refuseForm(w, printer, name, ref, lang, r, "threshold.bad_critical")
+		refuseForm(w, reader, printer, name, ref, lang, r, "threshold.bad_critical")
 		return
 	}
 	if !storage.Ordered(direction, warning, critical) {
-		refuseForm(w, printer, name, ref, lang, r, "threshold.unordered")
+		refuseForm(w, reader, printer, name, ref, lang, r, "threshold.unordered")
 		return
 	}
 
@@ -211,7 +252,7 @@ func save(w http.ResponseWriter, r *http.Request, store ThresholdStore,
 	}
 	switch r.PostForm.Get("apply") {
 	case "every":
-		askEvery(w, r, store, printer, name, ref, lang, th == nil)
+		askEvery(w, r, store, reader, printer, name, ref, lang, th == nil)
 		return
 	case "confirm":
 		err = store.ConfigureEvery(r.Context(), ref, th, exclude)
@@ -224,12 +265,12 @@ func save(w http.ResponseWriter, r *http.Request, store ThresholdStore,
 		return
 	}
 	// A redirect, so that reloading the answer saves nothing twice.
-	http.Redirect(w, r, thresholdLink(ref.Node, ref.Metric, ref.Labels, lang), http.StatusSeeOther)
+	http.Redirect(w, r, thresholdLink(ref.Node, ref.Metric, ref.Labels, lang)+"&"+savedParam+"=1", http.StatusSeeOther)
 }
 
 // askEvery redraws the form as typed, with every series of its metric that "Confirm" will
 // change and what each is judged by now; nothing is stored (docs/specs/thresholds.md#all).
-func askEvery(w http.ResponseWriter, r *http.Request, store ThresholdStore,
+func askEvery(w http.ResponseWriter, r *http.Request, store ThresholdStore, reader history.Reader,
 	printer *i18n.Printer, name names.Text, ref storage.SeriesRef, lang string, removing bool,
 ) {
 	all, err := store.Series(r.Context(), storage.Selection{Metric: ref.Metric})
@@ -242,7 +283,7 @@ func askEvery(w http.ResponseWriter, r *http.Request, store ThresholdStore,
 	slices.SortStableFunc(all, func(a, b storage.SeriesNewest) int {
 		return cmp.Or(strings.Compare(a.Node, b.Node), strings.Compare(heading(a), heading(b)))
 	})
-	view := typedForm(printer, name, ref, lang, r)
+	view := typedForm(r.Context(), reader, printer, name, ref, lang, r)
 	for _, s := range all {
 		th, watched, err := store.ThresholdOf(r.Context(), s.SeriesRef)
 		if err != nil {
@@ -282,18 +323,20 @@ func currentOf(printer *i18n.Printer, th storage.Threshold, watched bool) string
 }
 
 // refuseForm redraws the form with what the reader typed and says what is wrong with it.
-func refuseForm(w http.ResponseWriter, printer *i18n.Printer, name names.Text, ref storage.SeriesRef, lang string,
+func refuseForm(w http.ResponseWriter, reader history.Reader, printer *i18n.Printer, name names.Text, ref storage.SeriesRef, lang string,
 	r *http.Request, reason string,
 ) {
-	view := typedForm(printer, name, ref, lang, r)
+	view := typedForm(r.Context(), reader, printer, name, ref, lang, r)
 	view.Error = printer.T(reason)
 	w.WriteHeader(http.StatusBadRequest)
 	drawForm(w, view)
 }
 
-// typedForm is the form holding what the reader posted.
-func typedForm(printer *i18n.Printer, name names.Text, ref storage.SeriesRef, lang string, r *http.Request) thresholdView {
+// typedForm is the form holding what the reader posted, its chart with no stored value on
+// it: what the reader typed is what a script draws there.
+func typedForm(ctx context.Context, reader history.Reader, printer *i18n.Printer, name names.Text, ref storage.SeriesRef, lang string, r *http.Request) thresholdView {
 	view := emptyForm(printer, name, ref, lang)
+	view.Chart, view.Now = lastDay(ctx, printer, reader, ref, storage.Threshold{})
 	view.Below = r.PostForm.Get("direction") != string(storage.Above)
 	view.Excluded = r.PostForm.Get("anomalies") == "exclude"
 	view.Warning, view.Critical = r.PostForm.Get("warning"), r.PostForm.Get("critical")
@@ -301,11 +344,13 @@ func typedForm(printer *i18n.Printer, name names.Text, ref storage.SeriesRef, la
 }
 
 func emptyForm(printer *i18n.Printer, name names.Text, ref storage.SeriesRef, lang string) thresholdView {
-	return thresholdView{
+	unit := history.UnitOf(ref.Metric)
+	view := thresholdView{
 		shell:          still(printer, "threshold.title", "", lang),
-		Series:         ref.Node + " · " + notify.Heading(printer, name, ref.Metric, ref.Labels),
+		Series:         notify.Heading(printer, name, ref.Metric, ref.Labels),
 		Metric:         ref.Metric,
-		Unit:           printer.T("unit." + string(history.UnitOf(ref.Metric))),
+		Node:           ref.Node,
+		Units:          unitsJSON(unit),
 		Action:         thresholdLink(ref.Node, ref.Metric, ref.Labels, lang),
 		Below:          true,
 		DirectionLabel: printer.T("threshold.direction"),
@@ -313,14 +358,38 @@ func emptyForm(printer *i18n.Printer, name names.Text, ref storage.SeriesRef, la
 		AboveLabel:     printer.T("threshold.above"),
 		WarningLabel:   printer.T("level.warning"),
 		CriticalLabel:  printer.T("level.critical"),
-		UnusualLabel:   printer.T("threshold.unusual"),
-		ShowLabel:      printer.T("threshold.unusual_show"),
-		ExcludeLabel:   printer.T("threshold.unusual_exclude"),
+		BlankHint:      printer.T("threshold.blank_hint"),
+		SwitchLabel:    printer.T("threshold.unusual_switch"),
 		SaveLabel:      printer.T("threshold.save"),
+		CancelLabel:    printer.T("threshold.cancel"),
+		CloseLabel:     printer.T("threshold.close"),
 		EveryLabel:     printer.T("threshold.every"),
 		BackLabel:      printer.T("threshold.back"),
 		BackURL:        historyLink(ref.Node, ref.Metric, ref.Labels, lang, ""),
+		AllLabel:       printer.T("page.all_series"),
+		AllURL:         pageLink("/debug", lang),
+		UnsavedLabel:   printer.T("threshold.unsaved"),
+		DiscardLabel:   printer.T("threshold.discard"),
+		StayLabel:      printer.T("threshold.stay"),
+		UnsentLabel:    printer.T("threshold.unsent"),
 	}
+	if unit != history.Number {
+		view.Unit = printer.T("unit." + string(unit))
+	}
+	return view
+}
+
+// unitsJSON maps what a value of this unit may be written in, lower-cased, to its scale.
+func unitsJSON(unit history.Unit) string {
+	scales := map[string]float64{}
+	for _, written := range writtenUnits[unit] {
+		scales[strings.ToLower(written.suffix)] = written.scale
+	}
+	encoded, err := json.Marshal(scales)
+	if err != nil {
+		return "{}"
+	}
+	return string(encoded)
 }
 
 func drawForm(w http.ResponseWriter, view thresholdView) {
@@ -332,7 +401,7 @@ func drawForm(w http.ResponseWriter, view thresholdView) {
 // seriesOf reads the series a link names. Every label the series carries has to be there:
 // a threshold belongs to one series, never to a family of them.
 func seriesOf(values url.Values) (storage.SeriesRef, error) {
-	query, err := history.ParseSelection(values, "lang")
+	query, err := history.ParseSelection(values, "lang", savedParam)
 	if err != nil {
 		return storage.SeriesRef{}, err
 	}
@@ -341,6 +410,9 @@ func seriesOf(values url.Values) (storage.SeriesRef, error) {
 	}
 	return storage.SeriesRef{Node: query.Node, Metric: query.Metric, Labels: maps.Clone(query.Labels)}, nil
 }
+
+// savedParam marks the address of the form a save answered with, so that it can say so.
+const savedParam = "saved"
 
 var errNoNode = refusalError("a threshold belongs to one series, so its node is named")
 
@@ -402,7 +474,8 @@ var errNotANumber = refusalError("not a finite number")
 // number reads what a level can be judged against: NaN is never entered and never left,
 // and an infinity is no measurement, so neither is a threshold.
 func number(text string) (float64, error) {
-	trimmed := strings.TrimSpace(text)
+	// A single comma is the decimal separator the Russian interface writes values with.
+	trimmed := strings.Replace(strings.TrimSpace(text), ",", ".", 1)
 	// Go's own literal spellings are not this field's grammar: 0x1p10 is a typo, not 1024.
 	if strings.ContainsAny(trimmed, "xXpP_") {
 		return 0, errNotANumber

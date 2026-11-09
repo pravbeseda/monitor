@@ -2,6 +2,7 @@ package hub
 
 import (
 	"fmt"
+	"net/url"
 	"sort"
 	"time"
 
@@ -60,7 +61,7 @@ func (i item) silence() bool { return i.subject.Metric == evaluate.SilenceMetric
 
 func attentionOf(printer *i18n.Printer, current state.State, lang string) attentionView {
 	out := attentionView{
-		DebugURL: pageLink("/debug", lang),
+		DebugURL: debugLink(lang, url.Values{"show": {showUnusual}}),
 		SetLabel: printer.T("table.set"),
 	}
 	found := itemsOf(current)
@@ -158,7 +159,7 @@ func itemOf(printer *i18n.Printer, one item, current state.State, lang string) i
 		return itemView{
 			Class: "item-critical",
 			Name:  s.Node,
-			Link:  pageLink("/debug", lang),
+			Link:  debugLink(lang, url.Values{"node": {s.Node}}),
 			Note:  fmt.Sprintf(printer.T("attention.silent"), printer.Time(lastSeenOf(current, s.Node))),
 		}
 	}

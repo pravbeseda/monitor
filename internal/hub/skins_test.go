@@ -167,7 +167,7 @@ func TestNothingAnswersAtBoard(t *testing.T) {
 func TestALinkUnderNowIsNoTab(t *testing.T) {
 	body := showAttention(t, stateOf(silenceOf("server-b", evaluate.Critical)), "/timeline")
 	item := oneItem(t, body)
-	containsAll(t, "the silence item", item, `href="/debug"`)
+	containsAll(t, "the silence item", item, `href="/debug?node=server-b"`)
 	if strings.Contains(item, "data-skin") || strings.Contains(item, `class="tab`) {
 		t.Errorf("the item's link is a tab: %s", item)
 	}

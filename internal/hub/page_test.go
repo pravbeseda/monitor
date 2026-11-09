@@ -109,7 +109,7 @@ var laptop = storage.NodeState{
 
 func show(t *testing.T, store hub.Snapshots, target, acceptLanguage string) *httptest.ResponseRecorder {
 	t.Helper()
-	req := httptest.NewRequest(http.MethodGet, target, nil)
+	req := httptest.NewRequest(http.MethodGet, wholePage(target), nil)
 	if acceptLanguage != "" {
 		req.Header.Set("Accept-Language", acceptLanguage)
 	}
@@ -147,9 +147,9 @@ func TestPageShowsEveryNodeWithItsLatestValues(t *testing.T) {
 func TestPageShowsTheHubVersionBesideTheTitle(t *testing.T) {
 	rec := show(t, stored{states: []storage.NodeState{laptop}}, "/debug", "")
 
-	want := "<h1>Monitor <small>" + version.Current + "</small></h1>"
+	want := "<span>" + version.Current + "</span>"
 	if !strings.Contains(rec.Body.String(), want) {
-		t.Errorf("page = %q, want the heading %q", rec.Body.String(), want)
+		t.Errorf("page = %q, want the version %q", rec.Body.String(), want)
 	}
 }
 
@@ -230,7 +230,6 @@ func TestPageFailsLoudlyWhenStorageDoes(t *testing.T) {
 // spec: history.md#page — a series that stopped arriving is hidden when removable and marked
 // otherwise; one that names no sensor ages by its node's longest interval.
 func TestPageLeavesOutOrMarksSeriesThatStoppedArriving(t *testing.T) {
-	const marker = "no fresh data"
 	bound := evaluate.StaleFactor * time.Minute
 	series := func(metric, mount, removable string, age time.Duration) storage.Value {
 		return diskValue(metric, mount, removable, 1, age)
@@ -298,7 +297,7 @@ func TestPageAgesSeriesByTheHubsClock(t *testing.T) {
 	if strings.Contains(body, "/Volumes/stick-a") {
 		t.Errorf("page = %q, want the stick left out under both nodes", body)
 	}
-	if got := strings.Count(body, "no fresh data"); got != 2 {
+	if got := strings.Count(body, marker); got != 2 {
 		t.Errorf("%d rows marked, want the fixed volume marked under both nodes; page = %q", got, body)
 	}
 }
@@ -335,7 +334,7 @@ func TestDebugAgesSeriesByTheConfiguredInterval(t *testing.T) {
 		routesWith(t, stored{states: []storage.NodeState{state}}, func() time.Time { return lastSeen }).
 			ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/debug", nil))
 
-		if marked := strings.Contains(rec.Body.String(), "no fresh data"); marked != tc.wantMarked {
+		if marked := strings.Contains(rec.Body.String(), marker); marked != tc.wantMarked {
 			t.Errorf("%s at %v: marked = %v, want %v", tc.node, tc.age, marked, tc.wantMarked)
 		}
 	}
@@ -375,6 +374,9 @@ func TestPageFreezesTheRowsOfASilentNode(t *testing.T) {
 }
 
 // rows returns the body rows of every table on the page, matrices included, one string each.
+// marker is how a series reads as holding no fresh data; the legend says the words too.
+const marker = `row-mark-word">no fresh data`
+
 func rows(body string) []string {
 	var out []string
 	for _, tbody := range strings.Split(body, "<tbody>")[1:] {
@@ -409,8 +411,8 @@ func TestPageShowsAVolumeAsAMatrixRow(t *testing.T) {
 	}
 	for metric, value := range map[string]string{"disk.free_bytes": "1.5 GB", "disk.free_pct": "34.2%"} {
 		cell := got[0].rows[0].cells[metric]
-		if !strings.Contains(cell, value) || !strings.Contains(cell, "/history?") || !strings.Contains(cell, "metric="+metric) {
-			t.Errorf("cell of %s = %q, want %s linked to its history", metric, cell, value)
+		if !strings.Contains(cell, value) || !strings.Contains(cell, "/thresholds?") || !strings.Contains(cell, "metric="+metric) {
+			t.Errorf("cell of %s = %q, want %s linked to its settings", metric, cell, value)
 		}
 	}
 }
@@ -470,9 +472,6 @@ func TestPageAgesEachSeriesOfAVolumeOnItsOwn(t *testing.T) {
 			}
 			if cell := row.cells["disk.free_bytes"]; !strings.Contains(cell, "1.5 GB") || strings.Contains(cell, "no fresh data") {
 				t.Errorf("fresh cell = %s, want it shown unmarked", cell)
-			}
-			if !strings.Contains(row.collected, "2026-08-28 10:05 UTC") {
-				t.Errorf("row dated %s, want the fresh series' time", row.collected)
 			}
 		})
 	}

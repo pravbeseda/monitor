@@ -53,9 +53,12 @@ type Subject struct {
 	Metric  string
 	Labels  map[string]string
 	Watched bool
-	Level   *evaluate.Level
-	Since   time.Time
-	Stale   bool
+	// Threshold is what the series is judged by, nil when none is stored or this build
+	// cannot read it. It stays off the wire (docs/specs/state.md#out-of-scope).
+	Threshold *storage.Threshold
+	Level     *evaluate.Level
+	Since     time.Time
+	Stale     bool
 	// Unit, Value and TS are the newest reading of the series. The silence subject has
 	// none: its input is the node's last-seen time.
 	Unit  history.Unit
@@ -86,9 +89,9 @@ func Build(targets func(node string) (evaluate.Target, bool), snap storage.Snaps
 	// A series is watched when a threshold is stored for it, whether or not this build
 	// can judge by it: something is set, and saying otherwise would read as "nobody
 	// configured this" (docs/specs/state.md#listing).
-	set := make(map[string]struct{}, len(snap.Thresholds))
+	set := make(map[string]storage.Threshold, len(snap.Thresholds))
 	for _, threshold := range snap.Thresholds {
-		set[seriesKey(threshold.Series.Node, threshold.Series.Metric, threshold.Series.Labels)] = struct{}{}
+		set[seriesKey(threshold.Series.Node, threshold.Series.Metric, threshold.Series.Labels)] = threshold
 	}
 
 	excluded := make(map[string]struct{}, len(snap.Excluded))
@@ -141,7 +144,7 @@ func Build(targets func(node string) (evaluate.Target, bool), snap storage.Snaps
 		for _, value := range reported.Values {
 			key := seriesKey(reported.Node, value.Metric, value.Labels)
 			one, judged := watched[key]
-			_, isWatched := set[key]
+			threshold, isWatched := set[key]
 			if !judged {
 				one = Subject{Node: reported.Node, Metric: value.Metric, Labels: value.Labels}
 			}
@@ -149,6 +152,9 @@ func Build(targets func(node string) (evaluate.Target, bool), snap storage.Snaps
 			// says "something is set", which a reader has to be able to tell from
 			// "nobody set anything" (docs/specs/state.md#listing).
 			one.Watched = isWatched
+			if isWatched && threshold.Readable() {
+				one.Threshold = &threshold
+			}
 			// A tick freezes the series it judged; everything else — unwatched, or
 			// watched by a threshold this build cannot read — is aged here by the same
 			// rule, so nothing reads as fresh merely because nothing judged it. Only a

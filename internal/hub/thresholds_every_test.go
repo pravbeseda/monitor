@@ -66,7 +66,7 @@ func listed(body string) []string {
 // spec: thresholds.md#all — the form offers to apply its values to every series.
 func TestThresholdFormOffersEverySeries(t *testing.T) {
 	_, body := openForm(t, holding(flags...), flagAddress)
-	containsAll(t, "form", body, `<button type="submit" name="apply" value="every">Apply to every series of this metric</button>`)
+	containsAll(t, "form", body, `<button type="submit" name="apply" value="every" class="settings-link">Apply to every series of this metric</button>`)
 }
 
 // spec: thresholds.md#all — the button lists every series of the metric by node, then name,
@@ -94,7 +94,7 @@ func TestApplyingToEverySeriesAsksFirst(t *testing.T) {
 		}
 	}
 	containsAll(t, "page", body, "will be replaced", "the switch is this series",
-		`<button type="submit" name="apply" value="confirm">Confirm</button>`)
+		`<button type="submit" name="apply" value="confirm" class="primary">Confirm</button>`)
 	if valueOf(t, body, "warning") != "0" || !checked(body, "above") {
 		t.Errorf("the typed values were not kept: %s", body)
 	}
@@ -132,7 +132,7 @@ func TestApplyingToEverySeriesAsksFirst(t *testing.T) {
 func TestConfirmingAppliesToEverySeries(t *testing.T) {
 	store := holding(append(flags, dataSeries)...)
 	rec := saveForm(t, store, flagAddress, excluding(applying(form("above", "0", ""), "confirm")), "")
-	if rec.Code != http.StatusSeeOther || rec.Header().Get("Location") != flagAddress {
+	if rec.Code != http.StatusSeeOther || rec.Header().Get("Location") != flagAddress+"&saved=1" {
 		t.Fatalf("status %d to %q, want a redirect to the form", rec.Code, rec.Header().Get("Location"))
 	}
 	for _, ref := range flags {
