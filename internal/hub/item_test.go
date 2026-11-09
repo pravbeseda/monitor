@@ -183,7 +183,7 @@ func TestItemPage(t *testing.T) {
 		got := charts(body)
 		equal(t, "charts", got[:7], []string{
 			"disk.free_bytes /a · ext4", "disk.free_pct /a · ext4", "disk.free_bytes /b · ext4", "disk.free_pct /b · ext4",
-			"load.avg_15m", "load.avg_1m", "load.avg_5m",
+			"load.avg_1m", "load.avg_5m", "load.avg_15m",
 		})
 	})
 

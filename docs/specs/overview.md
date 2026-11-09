@@ -684,7 +684,7 @@ below is a service; a computer's page is [its own](#computer-page).
 | any window link | the same item, that window and the language |
 | a service with `disk.free_pct /`, `load.avg_1m`, `memory.available_pct` and `uptime.boot_seconds` | four families headed by their names — "Disk", "Load", "Memory", "Uptime" in English — in the order of their ids `disk`, `load`, `memory`, `uptime` |
 | two volumes, each with `free_bytes` and `free_pct` | four charts under the family `disk`: `/a`'s two, then `/b`'s two |
-| `load.avg_1m`, `load.avg_15m` and `load.avg_5m` | under the family `load` in metric id order: `avg_15m`, `avg_1m`, `avg_5m` |
+| `load.avg_1m`, `load.avg_15m` and `load.avg_5m` | under the family `load` in metric id order, its numbers by value: `avg_1m`, `avg_5m`, `avg_15m` |
 | 60 `queue.depth` series of one node | 60 charts |
 | a removable volume that is stale | no chart for it |
 | a series holding `warning: 10GB` and `critical: 5GB` | its chart with a yellow line at 10 GB named "warning" and a red one at 5 GB named "critical" |

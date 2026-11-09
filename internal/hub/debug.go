@@ -663,7 +663,7 @@ func seriesBefore(aLabels map[string]string, aMetric string, bLabels map[string]
 	if first, second := storage.LabelKey(aLabels), storage.LabelKey(bLabels); first != second {
 		return first < second
 	}
-	return aMetric < bMetric
+	return compareMetrics(aMetric, bMetric) < 0
 }
 
 // silentNodes is which nodes the state holds silent: their silence subject is critical.
