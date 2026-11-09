@@ -252,6 +252,14 @@
 
       window.addEventListener("beforeunload", function () { latest++; });
 
+      // Escape is taken before it becomes a close the dialog cannot refuse, wherever the focus
+      // has gone.
+      document.addEventListener("keydown", function (event) {
+        if (!open || event.key !== "Escape") return;
+        event.preventDefault();
+        leave(null);
+      });
+
       function newTab(event) {
         return event.button !== 0 || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey;
       }
@@ -282,12 +290,6 @@
         open.opened = fields();
         var pressed = null;
         element.addEventListener("mousedown", function (event) { pressed = event.target; });
-        // Escape is taken here: a second one would reach the dialog as a close it cannot refuse.
-        element.addEventListener("keydown", function (event) {
-          if (event.key !== "Escape") return;
-          event.preventDefault();
-          leave(null);
-        });
         element.addEventListener("cancel", function (event) {
           event.preventDefault();
           leave(null);
@@ -311,6 +313,7 @@
             else close();
           } else if (on("[data-stay]")) {
             guard().hidden = true;
+            focusField();
           } else if (event.target === element && pressed === element) {
             leave(null);
           }
@@ -327,6 +330,10 @@
       // settle readies what a form just put in the dialog.
       function settle() {
         followTyping(open.element.querySelector("#series-settings"));
+        focusField();
+      }
+
+      function focusField() {
         var first = open.element.querySelector('input[name="warning"]');
         if (first) first.focus();
       }
@@ -335,6 +342,7 @@
         if (open.busy) return;
         if (!guard().hidden && !destination) {
           guard().hidden = true;
+          focusField();
           return;
         }
         if (open.opened !== null && open.opened === fields()) {
@@ -373,14 +381,15 @@
         ask(sending.getAttribute("action"), { method: "POST", body: body }).then(function (reply) {
           mine.busy = false;
           sending.inert = false;
-          if (open !== mine) return;
           var saved = reply.page.querySelector("[data-saved]");
           var content = reply.page.querySelector("#series-settings");
           if (reply.answer.redirected && saved) {
-            var closeLabel = open.element.querySelector(".settings-x").getAttribute("aria-label");
-            close();
+            var closeLabel = mine.element.querySelector(".settings-x").getAttribute("aria-label");
+            if (open === mine) close();
             notice(saved.textContent, closeLabel);
             document.dispatchEvent(new Event("monitor-refresh"));
+          } else if (open !== mine) {
+            return;
           } else if (content && (reply.answer.ok || reply.answer.status === 400)) {
             // What the form now holds is the reader's and is not stored: closing must ask.
             open.element.querySelector("#series-settings").replaceWith(content);
@@ -388,11 +397,14 @@
             settle();
           } else {
             unsent.hidden = false;
+            focusField();
           }
         }).catch(function () {
           mine.busy = false;
           sending.inert = false;
+          if (open !== mine) return;
           unsent.hidden = false;
+          focusField();
         });
       }
 
