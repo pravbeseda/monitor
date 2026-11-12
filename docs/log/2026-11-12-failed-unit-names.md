@@ -44,11 +44,12 @@ Left out and filed as #107. Three things settled it:
   are read only when that count is above zero, with one `list-units` and one `show` for
   all the failed units together. Collection stays a fixed number of calls, not one per unit.
 - **Where notes show**: the State API, messages, the computer page's tiles, the changes on
-  the timeline and on an item's page, and the timeline's list of what needs attention. That covers every place a person reads the
-  count's value next to something that needs action. The card head, `/debug` and the
-  history pages still show the value alone.
+  the timeline and on an item's page, and the timeline's list of what needs attention. That
+  covers every place a person reads the count's value next to something that needs action.
+  The card head, `/debug` and the history pages still show the value alone.
 - **Storage**: the series and the event log gain a column. Both tables are rebuilt by
   copying their rows, so the step can be replayed and sensor names are kept, which the
   earlier series rebuilds lost. A replay does lose the notes already stored: a series gets
-  its notes back from its next value, but the event log's notes are gone for good. A separate notes table keyed by series and timestamp was
-  rejected: it would mean a second join on every read of the newest values.
+  its notes back from its next value, but the event log's notes are gone for good. A
+  separate notes table keyed by series and timestamp was rejected: it would mean a second
+  join on every read of the newest values.

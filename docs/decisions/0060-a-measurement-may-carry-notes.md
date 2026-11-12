@@ -35,8 +35,8 @@ the count: these two are the two.
 - **They are shown with the value they came with**: on the subject in the State API, after
   the value in a message, on the changes of the timeline and of an item's page, in the
   timeline's list of what needs attention, and under the values of a tile on a computer's
-  page. Other surfaces — a card,
-  `/debug`, a history page — show the value alone until a need says otherwise.
+  page. Other surfaces — a card, `/debug`, a history page — show the value alone until a
+  need says otherwise.
 - **They are bounded at ingest**: at most 20 notes, each 1 to 128 characters with no
   control, format or line-separating character. What breaks a bound is dropped and the
   measurement is kept: the value is what the threshold works on, and a note it cannot keep

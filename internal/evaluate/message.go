@@ -78,7 +78,7 @@ func storedLevel(text, node, metric string) Level {
 }
 
 // fromEvent is the message an event of the log carries: the change it recorded, with the
-// value and the notes that produced it.
+// value that produced it and that value's notes.
 func fromEvent(s Subject, event storage.Transition) Message {
 	return Message{
 		Node: s.Node, Metric: s.Metric, Labels: s.Labels,

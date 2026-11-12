@@ -185,8 +185,9 @@ func detail(p *i18n.Printer, m evaluate.Message) string {
 }
 
 // Noted is a rendered value followed by the notes it came with, as every surface that shows
-// them on one line writes them — a message, the timeline's changes, its list of what needs
-// attention (ADR 0060): a colon, then the notes parted by commas. English and Russian share
+// them on one line writes them — a message, the changes on the timeline and an item's page,
+// the timeline's list of what needs attention (ADR 0060): a colon, then the notes parted by
+// commas. English and Russian share
 // that punctuation. A note holding a comma or a double quote is quoted, so that one note does
 // not read as two.
 func Noted(value string, notes []string) string {

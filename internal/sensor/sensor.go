@@ -19,8 +19,8 @@ type Measurement struct {
 	Value  float64
 	TS     time.Time
 	// Notes are short lines about this one value, such as what a count counts, shown
-	// verbatim where the value is shown with them (ADR 0060). They leave the node, so a
-	// sensor puts in one only what may travel to the hub and its channels.
+	// verbatim beside it on the surfaces ADR 0060 names. They leave the node, so a sensor
+	// puts in one only what may travel to the hub and its channels.
 	Notes []string
 }
 

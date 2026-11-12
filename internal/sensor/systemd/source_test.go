@@ -75,8 +75,8 @@ func TestParseResults(t *testing.T) {
 	}
 }
 
-// printing is a systemctl that answers list-units and show with the given text, and records
-// what show was asked.
+// printing is a source whose systemctl answers list-units and show with the given text, and
+// records what show was asked.
 func printing(list, show string, showErr error, asked *[]string) systemSource {
 	return systemSource{systemctl: func(_ context.Context, args ...string) ([]byte, error) {
 		if args[0] == "list-units" {

@@ -45,7 +45,7 @@ func TestATileListsTheNotesOfItsValues(t *testing.T) {
 func TestANoteBreaksInsideItsTile(t *testing.T) {
 	body := computer(t, []state.Subject{noted(plain("server-b", "systemd.failed_units", 1), strings.Repeat("x", 100))},
 		recent(bareRef("systemd.failed_units")), logbook{}, "")
-	containsAll(t, "style", body, ".tile-note { display: block; color: var(--muted);", "overflow-wrap: anywhere; }")
+	containsAll(t, "style", body, ".tile-note { display: block; color: var(--muted); font-size: 0.75rem; overflow-wrap: anywhere; }")
 }
 
 // spec: overview.md#computer-card — the card's head counts the failed units and shows no

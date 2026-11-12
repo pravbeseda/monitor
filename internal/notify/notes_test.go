@@ -39,6 +39,7 @@ func TestNotesFollowTheValue(t *testing.T) {
 		{"no notes", i18n.English, failedUnits(), " — 2"},
 		{"in Russian", i18n.Russian, failedUnits("a.service (exit-code)"), " — 2: a.service (exit-code)"},
 		{"a note holding a comma or a quote", i18n.English, failedUnits(`a, b`, `say "c"`), ` — 2: "a, b", "say \"c\""`},
+		{"quoted, its backslashes escaped and its spaces kept", i18n.English, failedUnits("a\\b, c\u00a0d"), ` — 2: "a\\b, c` + "\u00a0" + `d"`},
 	} {
 		if got := notify.Render(i18n.For(c.locale), c.m); !strings.HasSuffix(got, c.suffix) {
 			t.Errorf("%s: %q, want it to end in %q", c.name, got, c.suffix)

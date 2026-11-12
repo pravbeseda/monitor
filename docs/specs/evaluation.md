@@ -334,7 +334,7 @@ its notes, verbatim but for the quoting below.
 | a value whose metric id ends in `_bytes`, `_pct` or `_seconds` | rendered in that unit; any other metric is rendered as a plain number ([history.md](history.md#wire-format)) |
 | a value that came with notes `a.service (exit-code)` and `b.service (timeout)` | the value, a colon and the notes parted by commas: "2: a.service (exit-code), b.service (timeout)" |
 | a value that came with no notes | the value alone, no colon |
-| a note holding a comma or a double quote, `a, b` | quoted, `"a, b"`, its own double quotes and backslashes escaped, so that one note does not read as two |
+| a note holding a comma or a double quote, `a, b` | quoted, `"a, b"`, so that one note does not read as two: its double quotes and backslashes escaped, its printable characters, spaces among them, kept |
 | `locale: ru` with notes | the same colon and commas: the punctuation is the same in both languages, and a note is never translated |
 | a change recorded with notes, delivered on a later tick after the series' notes changed | the notes recorded with the change: they belong to the value that produced it |
 | a repeat of a standing `critical`, or a digest entry for a subject standing in `warning` with no transition of its own in the window | the notes of the value it stands on now |
@@ -459,9 +459,9 @@ whatever is already stored.
 ## Invariants
 
 - One state change produces exactly one event and at most one instant message — sent as
-  several parts when its text is longer than the channel takes; a subject
-  that stays in `warning` is listed in each daily digest, which is not a repeat of that
-  change but a statement of the current state.
+  several parts when its text is longer than the channel takes; a subject that stays in
+  `warning` is listed in each daily digest, which is not a repeat of that change but a
+  statement of the current state.
 - The tick is idempotent at a fixed instant: called twice with the same clock, the same
   stored data and the same thresholds, it changes nothing.
 - A message is never delivered for a transition that was not recorded first, so the log is
