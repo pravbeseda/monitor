@@ -31,7 +31,7 @@ func (f fake) Booted() bool { return f.booted }
 
 func (f fake) FailedUnits(context.Context) (int, error) { return f.failed, f.err }
 
-func (f fake) Failed(ctx context.Context) ([]systemd.Unit, error) {
+func (f fake) ListFailed(ctx context.Context) ([]systemd.Unit, error) {
 	if f.cancel != nil {
 		f.cancel()
 		return nil, ctx.Err()
@@ -135,7 +135,7 @@ func TestCollectNamesTheFirstTwentyUnits(t *testing.T) {
 		units = append(units, systemd.Unit{Name: fmt.Sprintf("unit-%02d.service", i), Result: "exit-code"})
 	}
 	value, notes, err := notesOf(t, fake{booted: true, failed: 25, units: units})
-	if err != nil || value != 25 || len(notes) != note.Most || notes[0] != "unit-01.service (exit-code)" || notes[19] != "unit-20.service (exit-code)" {
+	if err != nil || value != 25 || len(notes) != note.MaxCount || notes[0] != "unit-01.service (exit-code)" || notes[19] != "unit-20.service (exit-code)" {
 		t.Fatalf("got %v, %q, %v; want 25 and the first 20 by name", value, notes, err)
 	}
 }
@@ -145,9 +145,9 @@ func TestCollectNamesTheFirstTwentyUnits(t *testing.T) {
 func TestCollectCutsANameTooLongForANote(t *testing.T) {
 	long := strings.Repeat("x", 200) + ".service"
 	_, notes, _ := notesOf(t, fake{booted: true, failed: 1, units: []systemd.Unit{{Name: long, Result: "exit-code"}}})
-	if len(notes) != 1 || utf8.RuneCountInString(notes[0]) != note.Longest || !strings.HasSuffix(notes[0], "… (exit-code)") ||
+	if len(notes) != 1 || utf8.RuneCountInString(notes[0]) != note.MaxLength || !strings.HasSuffix(notes[0], "… (exit-code)") ||
 		!strings.HasPrefix(notes[0], "xxxx") {
-		t.Fatalf("notes = %q, want the name cut to a note of %d ending in … (exit-code)", notes, note.Longest)
+		t.Fatalf("notes = %q, want the name cut to a note of %d ending in … (exit-code)", notes, note.MaxLength)
 	}
 }
 

@@ -85,7 +85,7 @@ func reporting() stored {
 			Values: []storage.Value{
 				{Metric: "disk.free_bytes", Sensor: "disk", Labels: dataVolume, Value: 9e9, TS: collected.Add(-15 * time.Minute)},
 				{Metric: "disk.free_pct", Sensor: "disk", Labels: dataVolume, Value: 12, TS: collected.Add(-15 * time.Minute)},
-				{Metric: "load.avg_5m", Value: 3.1, TS: collected.Add(-5 * time.Minute), Notes: []string{"n-1"}},
+				{Metric: "load.avg_5m", Value: 3.1, TS: collected.Add(-5 * time.Minute), Notes: []string{"n-2", "n-1"}},
 			},
 		}},
 		levels: []storage.State{
@@ -147,7 +147,7 @@ func TestStateWireFormat(t *testing.T) {
 		`"watched":false,"level":null,"since":null,"stale":false,` +
 		`"unit":"percent","value":12,"ts":"2026-08-31T11:45:00.000Z","notes":[],"anomaly":null},` +
 		`{"node":"server-b","metric":"load.avg_5m","labels":{},"watched":false,"level":null,"since":null,` +
-		`"stale":false,"unit":"number","value":3.1,"ts":"2026-08-31T11:55:00.000Z","notes":["n-1"],` +
+		`"stale":false,"unit":"number","value":3.1,"ts":"2026-08-31T11:55:00.000Z","notes":["n-2","n-1"],` +
 		`"anomaly":{"norm":0.4,"low":0.1,"high":0.76,"score":7.5,"rank":1}}]}`
 	if got := strings.TrimSpace(rec.Body.String()); got != want {
 		t.Fatalf("body = %s\nwant   %s", got, want)
@@ -169,8 +169,9 @@ type subjectJSON struct {
 	Notes   []string
 }
 
-// spec: state.md#listing — a stale series still lists the notes its newest value came with:
-// they are what that value said.
+// spec: state.md#listing — a series lists the notes of its newest value in their order, and
+// a stale one still lists them: they are what that value said.
+// spec: state.md#listing — notes are no subjects: one subject per series, the counts unmoved.
 func TestAStaleSeriesKeepsItsNotes(t *testing.T) {
 	later := func() time.Time { return collected.Add(30 * 24 * time.Hour) }
 	body := decodeState(t, getState(t, reporting(), "/api/v1/state", later))
@@ -178,8 +179,12 @@ func TestAStaleSeriesKeepsItsNotes(t *testing.T) {
 		if one.Metric != "load.avg_5m" {
 			continue
 		}
-		if one.Stale == nil || !*one.Stale || len(one.Notes) != 1 || one.Notes[0] != "n-1" {
-			t.Fatalf("load.avg_5m = stale %v, notes %q; want stale with its note", one.Stale, one.Notes)
+		if one.Stale == nil || !*one.Stale || strings.Join(one.Notes, ",") != "n-2,n-1" {
+			t.Fatalf("load.avg_5m = stale %v, notes %q; want stale with its notes in their order", one.Stale, one.Notes)
+		}
+		if len(body.Subjects) != 4 || body.Watched != 1 || body.Unwatched != 2 {
+			t.Fatalf("%d subjects, %d watched, %d unwatched; want the silence and three series, notes counted nowhere",
+				len(body.Subjects), body.Watched, body.Unwatched)
 		}
 		return
 	}

@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"path/filepath"
 	"slices"
+	"strings"
 	"testing"
 	"time"
 )
@@ -131,8 +132,8 @@ const notesStep = 11
 // Replaying the step keeps every series, its sensor name included, and every event: the
 // tables are rebuilt by copying their rows.
 func TestReplayingTheNotesStepKeepsTheSeriesAndTheEvents(t *testing.T) {
-	if notesStep != len(migrations)-1 {
-		t.Fatalf("notesStep = %d is not the last of %d migrations", notesStep, len(migrations))
+	if !strings.Contains(migrations[notesStep], "events_next") {
+		t.Fatalf("migration %d is not the one that gives the series and the events their notes", notesStep+1)
 	}
 	path := filepath.Join(t.TempDir(), "monitor.db")
 	old, err := OpenSQLite(path)

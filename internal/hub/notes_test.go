@@ -45,7 +45,7 @@ func TestATileListsTheNotesOfItsValues(t *testing.T) {
 func TestANoteBreaksInsideItsTile(t *testing.T) {
 	body := computer(t, []state.Subject{noted(plain("server-b", "systemd.failed_units", 1), strings.Repeat("x", 100))},
 		recent(bareRef("systemd.failed_units")), logbook{}, "")
-	containsAll(t, "style", body, ".tile-note { display: block;", "overflow-wrap: anywhere;")
+	containsAll(t, "style", body, ".tile-note { display: block; color: var(--muted);", "overflow-wrap: anywhere; }")
 }
 
 // spec: overview.md#computer-card — the card's head counts the failed units and shows no
@@ -64,11 +64,15 @@ func TestTheCardHeadShowsNoNotes(t *testing.T) {
 // notes as a message writes them.
 func TestAChangeShowsTheNotesOfItsValue(t *testing.T) {
 	store := timelineStore(reportingNode("server-b"))
-	change := dataChange(-time.Hour, "ok", "critical", 3)
-	change.Notes = []string{"a.service (exit-code)", "b.service (timeout)"}
+	change := storage.Transition{
+		Subject: storage.Subject{Node: "server-b", Metric: "systemd.failed_units"},
+		At:      lastSeen.Add(-time.Hour), From: "ok", To: "critical", FromSince: lastSeen.Add(-2 * time.Hour),
+		Readings: map[string]float64{"systemd.failed_units": 2},
+		Notes:    []string{"a.service (exit-code)", "b.service (timeout)"},
+	}
 	store.events = []storage.Transition{change}
 	_, got := changesOf(showTimeline(t, store, "/timeline"))
-	if len(got) != 1 || !strings.HasSuffix(got[0], "3.0%: a.service (exit-code), b.service (timeout)") {
+	if len(got) != 1 || !strings.HasSuffix(got[0], "ok → critical 2: a.service (exit-code), b.service (timeout)") {
 		t.Fatalf("changes = %q, want the value then its notes", got)
 	}
 }

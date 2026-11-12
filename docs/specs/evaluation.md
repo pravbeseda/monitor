@@ -323,17 +323,18 @@ alike: the node, then the series' name ([metric names](metric-names.md#where)) �
 metric's declared name with a mount point as itself and every other label as the pair it
 is. `fs` and `removable` are left out — they decorate a volume rather than identify it. The
 value follows without its metric's name, the name having said what it measures, and then
-its notes, verbatim.
+its notes, verbatim but for the quoting below.
 
 | Configuration | Result |
 |---|---|
 | `channel: log` | one English log line per message; nothing is sent, so the default channel needs no secret |
-| `channel: telegram` | one message per notification to the configured chat |
+| `channel: telegram` | one message per notification to the configured chat, unless the text is longer than one message holds |
 | `channel: telegram`, a text longer than Telegram's 4 096 UTF-16 units — a digest of many entries, or one with long notes | sent as several messages in order, each as long as Telegram takes, parted between lines; a line longer than that alone is parted inside it |
+| `channel: telegram`, a part refused after earlier parts went out | the send fails, and the whole text goes again on a later tick: the earlier parts arrive twice, which beats the rest never arriving |
 | a value whose metric id ends in `_bytes`, `_pct` or `_seconds` | rendered in that unit; any other metric is rendered as a plain number ([history.md](history.md#wire-format)) |
 | a value that came with notes `a.service (exit-code)` and `b.service (timeout)` | the value, a colon and the notes parted by commas: "2: a.service (exit-code), b.service (timeout)" |
 | a value that came with no notes | the value alone, no colon |
-| a note holding a comma or a double quote, `a, b` | quoted, `"a, b"`, so that one note does not read as two |
+| a note holding a comma or a double quote, `a, b` | quoted, `"a, b"`, its own double quotes and backslashes escaped, so that one note does not read as two |
 | `locale: ru` with notes | the same colon and commas: the punctuation is the same in both languages, and a note is never translated |
 | a change recorded with notes, delivered on a later tick after the series' notes changed | the notes recorded with the change: they belong to the value that produced it |
 | a repeat of a standing `critical`, or a digest entry for a subject standing in `warning` with no transition of its own in the window | the notes of the value it stands on now |
@@ -457,7 +458,8 @@ whatever is already stored.
 
 ## Invariants
 
-- One state change produces exactly one event and at most one instant message; a subject
+- One state change produces exactly one event and at most one instant message — sent as
+  several parts when its text is longer than the channel takes; a subject
   that stays in `warning` is listed in each daily digest, which is not a repeat of that
   change but a statement of the current state.
 - The tick is idempotent at a fixed instant: called twice with the same clock, the same

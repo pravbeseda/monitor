@@ -83,7 +83,7 @@ One decision per file, each stating what was rejected and why. New records start
 | [0057](decisions/0057-sites-are-a-sortable-table.md) | The sites are one table, a row per site, sortable by any of its figures on the server | accepted |
 | [0058](decisions/0058-a-computers-page-is-tiles.md) | A computer's page is tiles, a line only where a trend says something: a volume over 10 days, the rest over a day | accepted |
 | [0059](decisions/0059-all-series-is-two-panes-and-settings-a-dialog.md) | All series is two panes, and a series' settings open in a dialog from any hub page | accepted |
-| [0060](decisions/0060-a-measurement-may-carry-notes.md) | A measurement may carry notes, kept with its series' newest value and the events it produces, never in history: the failed units a count names | accepted |
+| [0060](decisions/0060-a-measurement-may-carry-notes.md) | A measurement may carry notes, kept with its series' newest value and the events it produces, never in history: the failed units a count names | accepted, amends [0031](decisions/0031-a-table-of-series.md) |
 
 ## Behaviour specs
 

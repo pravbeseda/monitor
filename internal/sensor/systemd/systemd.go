@@ -22,8 +22,8 @@ type Source interface {
 	// Booted reports whether systemd booted this machine.
 	Booted() bool
 	FailedUnits(ctx context.Context) (int, error)
-	// Failed lists the failed units with the Result of each.
-	Failed(ctx context.Context) ([]Unit, error)
+	// ListFailed lists the failed units with the Result of each.
+	ListFailed(ctx context.Context) ([]Unit, error)
 }
 
 // Unit is one failed unit: its name, and its Result as systemd gives it, empty when it gives
@@ -71,12 +71,13 @@ func (s *Sensor) Collect(ctx context.Context) ([]sensor.Measurement, error) {
 	if failed == 0 {
 		return []sensor.Measurement{count}, nil
 	}
-	units, err := s.source.Failed(ctx)
+	units, err := s.source.ListFailed(ctx)
 	if err != nil {
+		err = fmt.Errorf("name failed units: %w", err)
 		if ctx.Err() != nil {
-			return nil, fmt.Errorf("name failed units: %w", err)
+			return nil, err
 		}
-		return []sensor.Measurement{count}, fmt.Errorf("name failed units: %w", err)
+		return []sensor.Measurement{count}, err
 	}
 	count.Notes = notes(units)
 	return []sensor.Measurement{count}, nil
@@ -88,7 +89,7 @@ func (s *Sensor) Collect(ctx context.Context) ([]sensor.Measurement, error) {
 func notes(units []Unit) []string {
 	sorted := slices.SortedFunc(slices.Values(units), func(a, b Unit) int { return strings.Compare(a.Name, b.Name) })
 	var out []string
-	for _, unit := range sorted[:min(len(sorted), note.Most)] {
+	for _, unit := range sorted[:min(len(sorted), note.MaxCount)] {
 		suffix := ""
 		if unit.Result != "" {
 			suffix = " (" + unit.Result + ")"
@@ -98,12 +99,12 @@ func notes(units []Unit) []string {
 	return out
 }
 
-// fit cuts name so that it and its suffix make a note no longer than note.Longest, the cut
+// fit cuts name so that it and its suffix make a note no longer than note.MaxLength, the cut
 // marked by an ellipsis.
 func fit(name, suffix string) string {
-	if utf8.RuneCountInString(name+suffix) <= note.Longest {
+	if utf8.RuneCountInString(name+suffix) <= note.MaxLength {
 		return name + suffix
 	}
-	keep := max(note.Longest-utf8.RuneCountInString(suffix)-1, 0)
+	keep := max(note.MaxLength-utf8.RuneCountInString(suffix)-1, 0)
 	return string([]rune(name)[:keep]) + "…" + suffix
 }

@@ -30,7 +30,7 @@ No metric carries a label: each is one series per node. The unit is the one the 
 | `memory` | `memory.available_pct` | the share of memory the system itself reports as available, rounded to two decimals |
 | `memory` | `memory.available_bytes` | that share of the total memory the system reports, in whole bytes |
 | `uptime` | `uptime.boot_seconds` | whole seconds from the boot time the system reports to the agent's clock, truncated |
-| `systemd` | `systemd.failed_units` | the number of units the system manager holds in the `failed` state — what `systemctl --failed` lists — with a note per failed unit |
+| `systemd` | `systemd.failed_units` | the number of units the system manager holds in the `failed` state — what `systemctl --failed` lists — with a note per failed unit, at most 20 |
 
 **Available memory is the system's own figure, never a formula of ours.** Free memory alone
 reads near zero on any machine that has been up an hour, because both systems fill idle
@@ -143,12 +143,12 @@ One row = one test. Anchors: `spec: host-sensors.md#<heading>`.
 - **In a container** the sensors report what the container's `/proc` shows — host-wide
   unless something like lxcfs virtualises it — and a systemd inside a system container
   counts the container's units. The monitor does not correct for either.
-- **A count above its number of notes** means the list was cut at 20, or that units failed
-  or recovered between the count and the list. Each is what systemd said when it was asked,
+- **A count that differs from its number of notes** means the list was cut at 20, or that
+  units failed or recovered between the count and the list. Each is what systemd said when it was asked,
   and the next collection reads both again.
 - **A unit that fails while the count stays where it was** — one recovering as another fails
   — changes the notes and not the value, so it moves no level and sends no message: the
-  threshold judges the count ([evaluation](evaluation.md#messages)). The page shows the new
+  threshold judges the count ([evaluation](evaluation.md#persistence-and-restart)). The page shows the new
   names at once.
 - **The two platforms' memory percentages are not the same judgement**: each is its own
   system's answer, and a threshold set on one machine's series says nothing about another's.

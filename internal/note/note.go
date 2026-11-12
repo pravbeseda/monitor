@@ -5,21 +5,21 @@ package note
 import "github.com/pravbeseda/monitor/internal/names"
 
 const (
-	// Most is how many notes one measurement keeps.
-	Most = 20
-	// Longest is the most characters — Unicode code points — a note may have.
-	Longest = 128
+	// MaxCount is how many notes one measurement keeps.
+	MaxCount = 20
+	// MaxLength is the most characters — Unicode code points — a note may have.
+	MaxLength = 128
 )
 
 // Keep is what a measurement keeps of the notes it came with: the usable ones, in their
-// order, at most Most of them; nil when none is left.
+// order, at most MaxCount of them; nil when none is left.
 func Keep(notes []string) []string {
 	var kept []string
 	for _, text := range notes {
-		if len(kept) == Most {
+		if len(kept) == MaxCount {
 			break
 		}
-		if names.Line(text, Longest) {
+		if names.ValidLine(text, MaxLength) {
 			kept = append(kept, text)
 		}
 	}

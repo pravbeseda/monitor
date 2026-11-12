@@ -18,9 +18,9 @@ type Measurement struct {
 	Labels map[string]string
 	Value  float64
 	TS     time.Time
-	// Notes are short lines about this one value, shown verbatim beside it wherever it is
-	// read: what a count counts, say (ADR 0060). They leave the node, so a sensor puts in
-	// one only what may travel to the hub and its channels.
+	// Notes are short lines about this one value, such as what a count counts, shown
+	// verbatim where the value is shown with them (ADR 0060). They leave the node, so a
+	// sensor puts in one only what may travel to the hub and its channels.
 	Notes []string
 }
 

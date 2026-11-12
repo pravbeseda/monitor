@@ -26,6 +26,8 @@ func failedUnits(notes ...string) evaluate.Message {
 
 // spec: evaluation.md#messages — the value, a colon and the notes parted by commas; with
 // none, the value alone; the punctuation is the same in Russian.
+// spec: metric-names.md#where — a delivered notification: the value after the dash, then
+// its notes.
 func TestNotesFollowTheValue(t *testing.T) {
 	for _, c := range []struct {
 		name   string
@@ -106,6 +108,49 @@ func TestTheTelegramChannelPartsALongText(t *testing.T) {
 					t.Errorf("%s: part %d holds %q, not a whole line", c.name, i, line)
 				}
 			}
+			// As long as Telegram takes: the next part's first line would not have fitted.
+			if i+1 < len(sent) {
+				next, _, _ := strings.Cut(sent[i+1], "\n")
+				if units := len(utf16.Encode([]rune(part + "\n" + next))); units <= 4096 {
+					t.Errorf("%s: part %d ends early: the next line fitted (%d units)", c.name, i, units)
+				}
+			}
 		}
+	}
+}
+
+// spec: evaluation.md#messages — a part refused after earlier parts went out fails the send,
+// and the whole text goes again: the earlier parts arrive twice.
+func TestARefusedPartFailsTheWholeSend(t *testing.T) {
+	var sent []string
+	refuse := true
+	api := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		raw, _ := io.ReadAll(r.Body)
+		var body struct{ Text string }
+		_ = json.Unmarshal(raw, &body)
+		if len(sent) == 1 && refuse {
+			refuse = false
+			w.WriteHeader(http.StatusTooManyRequests)
+			return
+		}
+		sent = append(sent, body.Text)
+		_, _ = w.Write([]byte(`{"ok":true}`))
+	}))
+	defer api.Close()
+
+	entries := make([]evaluate.Message, 200)
+	for i := range entries {
+		entries[i] = failedUnits("a.service (exit-code)")
+	}
+	channel := notify.Telegram{Token: "t", ChatID: "1", Locale: i18n.English, API: api.URL}
+	if err := channel.Digest(context.Background(), at, entries, 0); err == nil {
+		t.Fatal("a refused part reported success")
+	}
+	first := len(sent)
+	if err := channel.Digest(context.Background(), at, entries, 0); err != nil {
+		t.Fatalf("the second send: %v", err)
+	}
+	if first != 1 || len(sent) < 3 || sent[0] != sent[1] {
+		t.Fatalf("sent %d part(s) before the refusal and %d in all; want the first part again at the start of the retry", first, len(sent))
 	}
 }

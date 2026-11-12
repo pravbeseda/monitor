@@ -1,6 +1,8 @@
 package systemd
 
 import (
+	"context"
+	"errors"
 	"maps"
 	"os"
 	"path/filepath"
@@ -70,5 +72,46 @@ func TestParseResults(t *testing.T) {
 	}
 	if _, err := parseShow("Id=a.service\nnonsense\n"); err == nil {
 		t.Errorf("parseShow read a line that is not a property")
+	}
+}
+
+// printing is a systemctl that answers list-units and show with the given text, and records
+// what show was asked.
+func printing(list, show string, showErr error, asked *[]string) systemSource {
+	return systemSource{systemctl: func(_ context.Context, args ...string) ([]byte, error) {
+		if args[0] == "list-units" {
+			return []byte(list), nil
+		}
+		*asked = args
+		return []byte(show), showErr
+	}}
+}
+
+// spec: host-sensors.md#failed-units — each listed unit with its Result, whatever order show
+// prints them in, the root mount `-.mount` passed as a name and not as an option.
+func TestListFailedJoinsTheUnitsAndTheirResults(t *testing.T) {
+	var asked []string
+	source := printing("-.mount loaded failed failed Root Mount\nb.timer loaded failed failed B\n",
+		"Id=b.timer\nResult=timeout\n\nResult=exit-code\nId=-.mount\n", nil, &asked)
+	got, err := source.ListFailed(context.Background())
+	want := []Unit{{Name: "-.mount", Result: "exit-code"}, {Name: "b.timer", Result: "timeout"}}
+	if err != nil || !slices.Equal(got, want) {
+		t.Fatalf("ListFailed = %+v, %v; want %+v", got, err, want)
+	}
+	if !slices.Equal(asked[len(asked)-3:], []string{"--", "-.mount", "b.timer"}) {
+		t.Errorf("show was asked %q, want the names after --", asked)
+	}
+}
+
+// spec: host-sensors.md#failed-units — none listed: nothing shown, no error; show failing is
+// an error.
+func TestListFailedWithNoneOrABrokenShow(t *testing.T) {
+	var asked []string
+	if got, err := printing("", "", nil, &asked).ListFailed(context.Background()); err != nil || got != nil || asked != nil {
+		t.Errorf("none listed: %+v, %v, show asked %q; want nothing", got, err, asked)
+	}
+	broken := errors.New("exit status 1")
+	if _, err := printing("a.service loaded failed failed A\n", "", broken, &asked).ListFailed(context.Background()); !errors.Is(err, broken) {
+		t.Errorf("a failing show: %v, want its error", err)
 	}
 }

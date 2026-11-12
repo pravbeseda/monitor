@@ -111,7 +111,7 @@ func (a *Agent) Tick(ctx context.Context) error {
 	now := a.now()
 	a.buffer = append(a.buffer, a.collect(ctx, now)...)
 	a.trimBuffer()
-	newestNoted(a.buffer)
+	dropOlderNotes(a.buffer)
 
 	// An empty batch has to reach the hub as [] and not as null: a heartbeat carries no
 	// measurements, but it does carry the field.
@@ -182,9 +182,10 @@ func (a *Agent) collect(ctx context.Context, now time.Time) []api.Measurement {
 	return out
 }
 
-// newestNoted leaves notes on each series' newest value in the batch alone: the hub keeps no
-// other, and a batch kept for days would carry the same lines on every value (ADR 0060).
-func newestNoted(batch []api.Measurement) {
+// dropOlderNotes clears the notes of every value in the batch but each series' newest: the
+// hub keeps no other, and a batch kept for days would carry the same lines on every value
+// (ADR 0060).
+func dropOlderNotes(batch []api.Measurement) {
 	seen := map[string]bool{}
 	for i := len(batch) - 1; i >= 0; i-- {
 		key := seriesKey(batch[i])

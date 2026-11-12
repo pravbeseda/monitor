@@ -12,10 +12,16 @@ import (
 // systemSource asks the running system manager through systemctl.
 type systemSource struct {
 	runDir string
+	// systemctl runs systemctl with its arguments and returns what it printed.
+	systemctl func(ctx context.Context, args ...string) ([]byte, error)
 }
 
 // System returns the system manager of the machine the agent runs on.
-func System() Source { return systemSource{runDir: "/run/systemd/system"} }
+func System() Source {
+	return systemSource{runDir: "/run/systemd/system", systemctl: func(ctx context.Context, args ...string) ([]byte, error) {
+		return exec.CommandContext(ctx, "systemctl", args...).Output()
+	}}
+}
 
 func (s systemSource) Booted() bool {
 	info, err := os.Stat(s.runDir)
@@ -23,20 +29,19 @@ func (s systemSource) Booted() bool {
 }
 
 // FailedUnits reads the manager's own NFailedUnits property: one read, no unit listing.
-func (systemSource) FailedUnits(ctx context.Context) (int, error) {
-	out, err := exec.CommandContext(ctx, "systemctl", "show", "--property=NFailedUnits", "--value").Output()
+func (s systemSource) FailedUnits(ctx context.Context) (int, error) {
+	out, err := s.systemctl(ctx, "show", "--property=NFailedUnits", "--value")
 	if err != nil {
 		return 0, fmt.Errorf("systemctl show: %w", err)
 	}
 	return parse(string(out))
 }
 
-// Failed lists the failed units, then reads every one's Result in a single call: two reads
-// however many failed. `--plain`, `--no-legend` and `--full` keep the list to one unit per
+// ListFailed lists the failed units, then reads every one's Result in a single call: two
+// reads however many failed. `--plain`, `--no-legend` and `--full` keep the list to one unit per
 // line with its name in full, and `--` lets a name such as `-.mount` through as a name.
-func (systemSource) Failed(ctx context.Context) ([]Unit, error) {
-	out, err := exec.CommandContext(ctx, "systemctl", "list-units", "--state=failed",
-		"--plain", "--no-legend", "--full", "--no-pager").Output()
+func (s systemSource) ListFailed(ctx context.Context) ([]Unit, error) {
+	out, err := s.systemctl(ctx, "list-units", "--state=failed", "--plain", "--no-legend", "--full", "--no-pager")
 	if err != nil {
 		return nil, fmt.Errorf("systemctl list-units: %w", err)
 	}
@@ -44,8 +49,7 @@ func (systemSource) Failed(ctx context.Context) ([]Unit, error) {
 	if err != nil || len(names) == 0 {
 		return nil, err
 	}
-	out, err = exec.CommandContext(ctx, "systemctl",
-		append([]string{"show", "--property=Id,Result", "--"}, names...)...).Output()
+	out, err = s.systemctl(ctx, append([]string{"show", "--property=Id,Result", "--"}, names...)...)
 	if err != nil {
 		return nil, fmt.Errorf("systemctl show: %w", err)
 	}

@@ -1,6 +1,7 @@
 # 0060. A measurement may carry notes, kept with its series' newest value and its events, never in history
 
-- **Status:** accepted
+- **Status:** accepted; amends [0031](0031-a-table-of-series.md) — the series row also
+  carries the notes its newest value came with
 - **Date:** 2026-11-12
 - **Source:** issue #104; [host-sensors.md](../specs/host-sensors.md#failed-units) on why
   failed units are a count; [design note](../log/2026-11-12-failed-unit-names.md)
@@ -32,8 +33,9 @@ the count: these two are the two.
   true when the change was recorded, whether it goes out at once, is retried on a later tick
   or is listed in the digest.
 - **They are shown with the value they came with**: on the subject in the State API, after
-  the value in a message, on the timeline's changes and in its list of what needs
-  attention, and under the values of a tile on a computer's page. Other surfaces — a card,
+  the value in a message, on the changes of the timeline and of an item's page, in the
+  timeline's list of what needs attention, and under the values of a tile on a computer's
+  page. Other surfaces — a card,
   `/debug`, a history page — show the value alone until a need says otherwise.
 - **They are bounded at ingest**: at most 20 notes, each 1 to 128 characters with no
   control, format or line-separating character. What breaks a bound is dropped and the
@@ -53,9 +55,10 @@ the count: these two are the two.
 - Notes leave the node and reach every channel the hub delivers to, Telegram among them, so
   a sensor puts in a note only what may travel that far. A unit's name and its result may.
   Its journal is left out for now, see #107.
-- Twenty notes of 128 characters keep one notification inside Telegram's 4 096 characters,
-  but not a digest of several such entries: the Telegram channel parts a text it cannot send
-  as one message into several ([evaluation](../specs/evaluation.md#messages)).
+- Twenty notes of 128 plain characters keep one notification inside Telegram's 4 096
+  UTF-16 units, but not a digest of several such entries, nor notes of characters that
+  count twice there or need quoting: the Telegram channel parts a text it cannot send as one
+  message into several ([evaluation](../specs/evaluation.md#messages)).
 - A unit that fails while another recovers leaves the count where it was, so it moves no
   level and sends nothing; the page shows the new names at once. The threshold judges the
   count, and notes are judged by nothing.

@@ -185,9 +185,10 @@ func detail(p *i18n.Printer, m evaluate.Message) string {
 }
 
 // Noted is a rendered value followed by the notes it came with, as every surface that shows
-// them writes them (ADR 0060): a colon, then the notes parted by commas. The punctuation is
-// the same in every language, since a note is never translated, and a note holding a comma
-// or a double quote is quoted so that one note does not read as two.
+// them on one line writes them — a message, the timeline's changes, its list of what needs
+// attention (ADR 0060): a colon, then the notes parted by commas. English and Russian share
+// that punctuation. A note holding a comma or a double quote is quoted, so that one note does
+// not read as two.
 func Noted(value string, notes []string) string {
 	if len(notes) == 0 {
 		return value
@@ -195,7 +196,7 @@ func Noted(value string, notes []string) string {
 	written := make([]string, len(notes))
 	for i, text := range notes {
 		if strings.ContainsAny(text, `,"`) {
-			text = strconv.Quote(text)
+			text = strconv.QuoteToGraphic(text)
 		}
 		written[i] = text
 	}

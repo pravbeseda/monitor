@@ -193,6 +193,9 @@ Each line is an index into the ADR that owns it.
   is judged by — a direction and up to two values — is set on its page and
   stored with the data; a sensor may declare a default that seeds each series once. What
   an agent collects and how often stays configuration. → 0032, 0033, 0048, 0052
+- **A measurement may carry notes** — short verbatim lines about that one value, such as the
+  units a failed-units count counts — kept with its series' newest value and its events,
+  never in history, and judged by nothing. → 0060
 - **A sensor may group its family by a label**, and the item page draws each group as a
   panel: generic, or one of the skin's own for a family it knows. → 0051
 - **The semantic core is the single source of truth**; the State API carries semantics only,

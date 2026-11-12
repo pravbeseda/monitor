@@ -10,7 +10,7 @@ import (
 
 // spec: ingest.md#notes — what the hub cannot use is dropped alone, the rest kept in order.
 func TestKeepDropsWhatCannotBeUsed(t *testing.T) {
-	cyrillic := strings.Repeat("я", note.Longest)
+	cyrillic := strings.Repeat("я", note.MaxLength)
 	cases := []struct {
 		name  string
 		notes []string
@@ -36,10 +36,10 @@ func TestKeepDropsWhatCannotBeUsed(t *testing.T) {
 // spec: ingest.md#notes — the first 20 are kept, counted after unusable ones are dropped.
 func TestKeepTakesTheFirstTwentyUsable(t *testing.T) {
 	var notes []string
-	for i := range note.Most + 1 {
+	for i := range note.MaxCount + 1 {
 		notes = append(notes, string(rune('a'+i)))
 	}
-	if got := note.Keep(notes); !slices.Equal(got, notes[:note.Most]) {
+	if got := note.Keep(notes); !slices.Equal(got, notes[:note.MaxCount]) {
 		t.Errorf("21 notes: Keep = %q, want the first 20", got)
 	}
 	notes[1] = " "

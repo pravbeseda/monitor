@@ -232,7 +232,7 @@ var migrations = []string{
 	// event for the value that produced it (ADR 0060). Both tables are rebuilt by copying
 	// their rows rather than altered, so the step can be replayed as the series rebuild
 	// above can, and unlike that one it keeps every sensor name. A replay costs the notes
-	// already stored: a series gets them back from its next value.
+	// already stored: a series gets them back from its next value, the event log never.
 	`DROP TABLE IF EXISTS series_next;
 
 	CREATE TABLE series_next (
