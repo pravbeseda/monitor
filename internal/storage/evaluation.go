@@ -79,6 +79,8 @@ type Transition struct {
 	// Readings are the values that produced the change, keyed by metric id. A subject is
 	// one series, so this holds one entry; the shape outlives that.
 	Readings map[string]float64
+	// Notes are what that value came with (ADR 0060).
+	Notes []string
 	// ID orders the log. It is set on read and ignored on write.
 	ID int64
 }
@@ -264,6 +266,10 @@ func (s *SQLite) ApplyTransition(ctx context.Context, change Transition) (err er
 	if err != nil {
 		return fmt.Errorf("transition of %s: encode readings: %w", change.describe(), err)
 	}
+	notes, err := encodeNotes(change.Notes)
+	if err != nil {
+		return fmt.Errorf("transition of %s: %w", change.describe(), err)
+	}
 
 	tx, err := s.db.BeginTx(ctx, nil)
 	if err != nil {
@@ -282,11 +288,11 @@ func (s *SQLite) ApplyTransition(ctx context.Context, change Transition) (err er
 	// One subject changes level at most once per tick, so a second event at the same
 	// instant is a retry of the same one and is dropped rather than duplicated.
 	if _, err = tx.ExecContext(ctx, `
-		INSERT INTO events (at, node, metric, labels, from_level, to_level, from_since, readings)
-		VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+		INSERT INTO events (at, node, metric, labels, from_level, to_level, from_since, readings, notes)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
 		ON CONFLICT DO NOTHING`,
 		formatTime(change.At), change.Node, change.Metric, labels,
-		change.From, change.To, formatTime(change.FromSince), string(readings)); err != nil {
+		change.From, change.To, formatTime(change.FromSince), string(readings), notes); err != nil {
 		return fmt.Errorf("record transition of %s: %w", change.describe(), err)
 	}
 	if err = tx.Commit(); err != nil {
@@ -352,8 +358,8 @@ func newestEvents(ctx context.Context, from querier, owed []string) ([]Transitio
 		}
 	}
 	return readEvents(ctx, from, `
-		SELECT id, at, node, metric, labels, from_level, to_level, from_since, readings FROM (
-			SELECT id, at, node, metric, labels, from_level, to_level, from_since, readings,
+		SELECT id, at, node, metric, labels, from_level, to_level, from_since, readings, notes FROM (
+			SELECT id, at, node, metric, labels, from_level, to_level, from_since, readings, notes,
 			       -- One subject changes level at most once per instant, which the events
 			       -- table enforces; id breaks a tie that therefore cannot arise.
 			       ROW_NUMBER() OVER (PARTITION BY node, metric, labels ORDER BY at DESC, id DESC) AS recency
@@ -367,7 +373,7 @@ func newestEvents(ctx context.Context, from querier, owed []string) ([]Transitio
 // which is the window a digest covers.
 func (s *SQLite) EventsBetween(ctx context.Context, from, to time.Time) ([]Transition, error) {
 	return readEvents(ctx, s.db, `
-		SELECT id, at, node, metric, labels, from_level, to_level, from_since, readings
+		SELECT id, at, node, metric, labels, from_level, to_level, from_since, readings, notes
 		FROM events WHERE at > ? AND at <= ? ORDER BY at, id`,
 		formatTime(from), formatTime(to))
 }
@@ -385,7 +391,7 @@ func (s *SQLite) RecentEvents(ctx context.Context, nodes []string, limit int) ([
 	args = append(args, limit)
 	placeholders := strings.TrimSuffix(strings.Repeat("?, ", len(nodes)), ", ")
 	return readEvents(ctx, s.db, `
-		SELECT id, at, node, metric, labels, from_level, to_level, from_since, readings
+		SELECT id, at, node, metric, labels, from_level, to_level, from_since, readings, notes
 		FROM events WHERE node IN (`+placeholders+`) ORDER BY at DESC, id DESC LIMIT ?`, args...)
 }
 
@@ -399,9 +405,9 @@ func readEvents(ctx context.Context, from querier, query string, args ...any) ([
 	var out []Transition
 	for rows.Next() {
 		var event Transition
-		var at, labels, since, readings string
+		var at, labels, since, readings, notes string
 		if err := rows.Scan(&event.ID, &at, &event.Node, &event.Metric, &labels,
-			&event.From, &event.To, &since, &readings); err != nil {
+			&event.From, &event.To, &since, &readings, &notes); err != nil {
 			return nil, fmt.Errorf("read events: %w", err)
 		}
 		if event.At, err = parseTime(at); err != nil {
@@ -415,6 +421,9 @@ func readEvents(ctx context.Context, from querier, query string, args ...any) ([
 		}
 		if err := json.Unmarshal([]byte(readings), &event.Readings); err != nil {
 			return nil, fmt.Errorf("decode readings of %s: %w", event.Node, err)
+		}
+		if event.Notes, err = decodeNotes(notes); err != nil {
+			return nil, fmt.Errorf("event of %s: %w", event.Node, err)
 		}
 		out = append(out, event)
 	}

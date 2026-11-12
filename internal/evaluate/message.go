@@ -26,6 +26,8 @@ type Message struct {
 	// Readings are the values that produced the message, keyed by metric id. The silence
 	// subject has none: its input is hub receipt time.
 	Readings map[string]float64
+	// Notes are what the value behind Readings came with (ADR 0060).
+	Notes []string
 	// Since is when the subject entered the level it is leaving, which is how long a
 	// reader is told it had been there.
 	Since time.Time
@@ -75,12 +77,22 @@ func storedLevel(text, node, metric string) Level {
 	return found
 }
 
-// message is one notification about a subject. The subject's identity is always the same
-// three fields; what a message is about is the rest.
-func message(s Subject, from, to Level, readings map[string]float64, since, at time.Time) Message {
+// fromEvent is the message an event of the log carries: the change it recorded, with the
+// value that produced it and that value's notes.
+func fromEvent(s Subject, event storage.Transition) Message {
 	return Message{
 		Node: s.Node, Metric: s.Metric, Labels: s.Labels,
-		From: from, To: to, Readings: readings, Since: since, At: at,
+		From: storedLevel(event.From, s.Node, s.Metric), To: storedLevel(event.To, s.Node, s.Metric),
+		Readings: event.Readings, Notes: event.Notes, Since: event.FromSince, At: event.At,
+	}
+}
+
+// standing is the message about a subject that has not moved — a repeat or a digest entry —
+// with the value and the notes it stands on now.
+func standing(s Subject, at time.Time) Message {
+	return Message{
+		Node: s.Node, Metric: s.Metric, Labels: s.Labels,
+		From: s.Level, To: s.Level, Readings: s.Readings, Notes: s.Notes, Since: s.Since, At: at,
 	}
 }
 
@@ -97,15 +109,13 @@ func due(s Subject, newest storage.Transition, recorded bool, now time.Time) (Me
 	// subject rather than inheriting somebody else's undelivered news
 	// (docs/specs/evaluation.md#configuration-changes).
 	if recorded && instant(newest) && newest.At.After(s.LastNotifiedAt) && !newest.At.Before(s.Since) {
-		from := storedLevel(newest.From, s.Node, s.Metric)
-		to := storedLevel(newest.To, s.Node, s.Metric)
-		return message(s, from, to, newest.Readings, newest.FromSince, newest.At), true
+		return fromEvent(s, newest), true
 	}
 	if s.Frozen {
 		return Message{}, false
 	}
 	if s.Level == Critical && (s.LastNotifiedAt.IsZero() || now.Sub(s.LastNotifiedAt) >= repeatAfter) {
-		return message(s, s.Level, s.Level, s.Readings, s.Since, now), true
+		return standing(s, now), true
 	}
 	return Message{}, false
 }

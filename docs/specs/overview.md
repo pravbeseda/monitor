@@ -28,7 +28,8 @@
   [0055](../decisions/0055-a-computer-card-line-is-its-values.md),
   [0056](../decisions/0056-cards-in-a-section-are-ordered-by-name.md),
   [0057](../decisions/0057-sites-are-a-sortable-table.md),
-  [0058](../decisions/0058-a-computers-page-is-tiles.md)
+  [0058](../decisions/0058-a-computers-page-is-tiles.md),
+  [0060](../decisions/0060-a-measurement-may-carry-notes.md)
 
 ## Purpose
 
@@ -316,6 +317,10 @@ not muted.
   to a screen reader.
 - **A fresh unusual series** of a tile says its usual value under the values, as "now"
   writes it: the first of them in the order of its values, when several are.
+- **Notes** — the notes a tile's values came with
+  ([0060](../decisions/0060-a-measurement-may-carry-notes.md)) — stand under the values and
+  the usual value, muted, one to a line, verbatim, in the order of the values and then their
+  own, a stale value's included. A note too wide for its tile breaks inside it.
 - A tile shows no time of its own and no link to the thresholds' form: the page's head says
   when the item last reported, and its history page links to the form.
 
@@ -577,6 +582,7 @@ labelled `backup: borg`, `job: job-a`, reporting `backup.success_age_seconds`,
 | `systemd.failed_units` 2, unwatched and usual | "failed units: 2" in the head before the state's word, in the muted colour; no line for it |
 | `systemd.failed_units` 2 at `critical` | "failed units: 2" in the critical colour; no extra line for it |
 | `systemd.failed_units` 0 | nothing in the head |
+| `systemd.failed_units` 2 with notes | "failed units: 2" alone: the card shows no notes |
 | `systemd.failed_units` 2, stale | "failed units: 2" in the colour of no fresh data |
 | `systemd.failed_units` 0, watched and stale | "failed units: 0" in the colour of no fresh data; no line for it |
 | `systemd.failed_units` 0, unusual against a norm of 3 | "failed units: 0" in the unusual colour |
@@ -739,6 +745,12 @@ below is a service; a computer's page is [its own](#computer-page).
 | `load.avg_1m` alone | muted "1 min", reading "0.42", no line |
 | `uptime.boot_seconds` | a tile "Uptime" with its value, no line, the value linking with `window=24h` |
 | `systemd.failed_units` at 2 | a tile "Failed units" reading "2", no line |
+| `systemd.failed_units` at 2 with notes `a.service (exit-code)` and `b.service (timeout)` | "a.service (exit-code)" and "b.service (timeout)" under the "2", muted, one to a line |
+| `systemd.failed_units` at 0 with no notes | nothing under the "0" |
+| `systemd.failed_units` at 2 with notes, stale | the notes under the "2" still: they are what that value said |
+| `systemd.failed_units` at 2, unusual against a norm of 0, with notes | "usually 0", then the notes |
+| a note of 100 characters with no space, on a narrow screen | broken inside its tile; neither the tile nor the page grows wider |
+| `timemachine.backup_age_seconds` of one destination, its value with the note `n-1` | "n-1" under its value |
 | `memory.available_pct` labelled `{zone: a}` | a generic tile of its own, not the memory tile |
 | `timemachine.backup_age_seconds` of one destination | a generic tile named as its small chart would be, its value, its line over 24 hours |
 | `memory.available_pct` unusual, norm 50.0% | "usually 50.0%" on the memory tile |

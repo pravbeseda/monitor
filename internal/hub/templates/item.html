@@ -72,6 +72,7 @@
     .tile-more { color: var(--muted); font-size: 0.85rem; font-variant-numeric: tabular-nums; }
     .tile-values { font-size: 1.3rem; font-variant-numeric: tabular-nums; line-height: 1.2; }
     .tile-usual { color: var(--muted); font-size: 0.75rem; }
+    .tile-note { display: block; color: var(--muted); font-size: 0.75rem; overflow-wrap: anywhere; }
     svg.bar { display: block; width: 100%; height: 0.6rem; overflow: visible; }
     svg.bar .bar-track { fill: var(--rule); }
     svg.bar .bar-fill { fill: var(--link); }
@@ -172,6 +173,7 @@
   {{- if or .Of .Share }}<span class="tile-more">{{ with .Of }}<span class="tile-of">{{ . }}</span> · {{ end }}{{ with .Share }}<span class="tile-share">{{ template "figure" . }}</span>{{ end }}</span>{{ end }}
   {{- with .Bar }}<svg class="bar" viewBox="0 0 100 6" preserveAspectRatio="none" role="img" aria-label="{{ .Label }}"><rect class="bar-track" width="100" height="6"></rect><rect class="bar-fill{{ with .Class }} {{ . }}{{ end }}" width="{{ .Used }}" height="6"></rect>{{ range .Ticks }}<line class="bar-tick {{ .Class }}" x1="{{ .At }}" x2="{{ .At }}" y1="-2" y2="8"></line>{{ end }}</svg>{{ end }}
   {{- with .Usual }}<span class="tile-usual">{{ . }}</span>{{ end }}
+  {{- range .Notes }}<span class="tile-note">{{ . }}</span>{{ end }}
   {{- with .Line }}{{ template "spark" . }}{{ end }}
 </li>
 {{ end }}

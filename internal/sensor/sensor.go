@@ -18,6 +18,10 @@ type Measurement struct {
 	Labels map[string]string
 	Value  float64
 	TS     time.Time
+	// Notes are short lines about this one value, such as what a count counts, shown
+	// verbatim beside it on the surfaces ADR 0060 names. They leave the node, so a sensor
+	// puts in one only what may travel to the hub and its channels.
+	Notes []string
 }
 
 // Sensor takes one kind of reading. Name and Applicable make up the manifest the agent

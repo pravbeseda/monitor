@@ -114,14 +114,18 @@ func reference(text string) (string, int) {
 	return key, end + 1
 }
 
-// Valid reports whether a declared name may be kept: not empty, at most MaxLength
-// characters, and free of control, format and line-separating characters, which would let
-// a name break a message into lines or turn its text around.
-func Valid(name string) bool {
-	if strings.TrimSpace(name) == "" || !utf8.ValidString(name) || utf8.RuneCountInString(name) > MaxLength {
+// Valid reports whether a declared name may be kept: a valid line of at most MaxLength
+// characters.
+func Valid(name string) bool { return ValidLine(name, MaxLength) }
+
+// ValidLine reports whether text can be shown as one line of a page or a message: not white
+// space alone, at most maxLength characters, and free of control, format and line-separating
+// characters, which would let it break a message into lines or turn its text around.
+func ValidLine(text string, maxLength int) bool {
+	if strings.TrimSpace(text) == "" || !utf8.ValidString(text) || utf8.RuneCountInString(text) > maxLength {
 		return false
 	}
-	for _, r := range name {
+	for _, r := range text {
 		if unicode.IsControl(r) || unicode.In(r, unicode.Cf, unicode.Zl, unicode.Zp) {
 			return false
 		}

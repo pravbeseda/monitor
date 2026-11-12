@@ -111,6 +111,7 @@ func (a *Agent) Tick(ctx context.Context) error {
 	now := a.now()
 	a.buffer = append(a.buffer, a.collect(ctx, now)...)
 	a.trimBuffer()
+	dropOlderNotes(a.buffer)
 
 	// An empty batch has to reach the hub as [] and not as null: a heartbeat carries no
 	// measurements, but it does carry the field.
@@ -174,10 +175,42 @@ func (a *Agent) collect(ctx context.Context, now time.Time) []api.Measurement {
 				TS:     m.TS.UTC().Format(time.RFC3339),
 				Sensor: &name,
 				Node:   node,
+				Notes:  m.Notes,
 			})
 		}
 	}
 	return out
+}
+
+// dropOlderNotes clears the notes of every value in the batch but each series' newest: the
+// hub keeps no other, and a batch kept for days would carry the same lines on every value
+// (ADR 0060). Newest is by timestamp, as the hub judges it, and not by place in the batch: a
+// clock set back while a batch is kept adds an older value after a newer one. Timestamps
+// are RFC 3339 in UTC to the second, so they sort as strings; of two equal, the later kept.
+func dropOlderNotes(batch []api.Measurement) {
+	newest := map[string]int{}
+	for i, m := range batch {
+		key := seriesKey(m)
+		if at, seen := newest[key]; !seen || m.TS >= batch[at].TS {
+			newest[key] = i
+		}
+	}
+	for i, m := range batch {
+		if newest[seriesKey(m)] != i {
+			batch[i].Notes = nil
+		}
+	}
+}
+
+// seriesKey tells one series from another inside a batch. json.Marshal sorts a map's keys,
+// so equal labels always encode alike.
+func seriesKey(m api.Measurement) string {
+	labels, _ := json.Marshal(m.Labels)
+	node := ""
+	if m.Node != nil {
+		node = *m.Node
+	}
+	return node + "\x00" + m.Metric + "\x00" + string(labels)
 }
 
 // collectOne gives one sensor half a tick to answer. A collection stuck in a system call

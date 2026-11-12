@@ -1,7 +1,8 @@
 # 0031. Keep a table of series beside the measurements
 
 - **Status:** accepted; amended by [0033](0033-a-subject-is-a-series.md) — the series row
-  also carries the sensor name the newest measurement gave it
+  also carries the sensor name the newest measurement gave it — and by
+  [0060](0060-a-measurement-may-carry-notes.md), for the notes that measurement came with
 - **Date:** 2026-09-20
 - **Source:** [issue #15](https://github.com/pravbeseda/monitor/issues/15),
   [issue #45](https://github.com/pravbeseda/monitor/issues/45),

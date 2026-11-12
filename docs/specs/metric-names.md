@@ -206,7 +206,7 @@ page or message is written in:
 | the thresholds form | the series' name with filesystem and removable, above its node; the metric id on hover |
 | an item of the list of what needs attention | `node · ` the series' name |
 | a change on the timeline or the item page | the series' name |
-| a delivered notification or digest entry | `node · name: level (was …)` and the value alone after the dash: `laptop-a · Свободно /srv: критично (было предупреждение с 10:00) — 4,0 %` |
+| a delivered notification or digest entry | `node · name: level (was …)` and the value after the dash without its metric's name, then, when it came with notes, a colon and the notes ([evaluation](evaluation.md#messages)): `laptop-a · Свободно /srv: критично (было предупреждение с 10:00) — 4,0 %` |
 | a node's silence, delivered | as today, the node alone: `laptop-a: критично (…) — нет отчётов` |
 | the `log` channel's line of one notification | the same text in English; the metric id stays among the line's attributes |
 | the `log` channel's digest line | the entries' text in English; like today, no metric id per entry |

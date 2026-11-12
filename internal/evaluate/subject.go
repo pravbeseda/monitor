@@ -119,6 +119,9 @@ type Subject struct {
 	// Readings are the values that produced Level, keyed by metric id. A subject is one
 	// series, so this holds its own value alone; the silence subject has none.
 	Readings map[string]float64
+	// Notes are what the value behind Readings came with (ADR 0060); the silence subject
+	// has none.
+	Notes []string
 	// Frozen says the value behind the subject is stale, so it was not judged: it keeps
 	// its level and its Since, writes no event, sends no repeat, and is left out of the
 	// digest.
@@ -191,6 +194,7 @@ func seriesSubjects(target Target, node storage.NodeState, watched map[string]st
 		subject := Subject{
 			Subject:  storage.Subject{Node: target.Node, Metric: value.Metric, Labels: value.Labels},
 			Readings: map[string]float64{value.Metric: value.Value},
+			Notes:    value.Notes,
 			Frozen:   target.Frozen(value.Sensor, node.LastSeen, value.TS, now),
 		}
 		key, err := subject.Key()

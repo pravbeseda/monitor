@@ -163,6 +163,7 @@ fresh at every moment.
 |---|---|
 | a volume moving from `warning` to `critical` at 14:02 with 4% free | "14:02", a red dot, the node, the series named as "now" names it, "warning → critical" and its value formatted as `/debug` formats it |
 | a series recovering to `ok` | the same line with a green dot, ending "→ ok" and its value |
+| `systemd.failed_units` moving to `critical` with 2 and the notes `a.service (exit-code)`, `b.service (timeout)` | its value then the notes as a message writes them: "2: a.service (exit-code), b.service (timeout)" ([0060](../decisions/0060-a-measurement-may-carry-notes.md)) |
 | a series whose first evaluation found it `critical` | "ok → critical": evaluation records a first level as a change from `ok` |
 | a node falling silent at 09:10, its `silence_after` 15m | "09:10", a red dot, the node, "fell silent", "no report for 15.0 min" |
 | that node reporting again | a green dot, "reporting again" |

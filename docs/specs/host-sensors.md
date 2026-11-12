@@ -5,7 +5,8 @@
   `internal/sensor/systemd` (agent): what each reads, and the metric ids it reports
 - **Decisions:** [0003](../decisions/0003-sensors-are-modules.md),
   [0010](../decisions/0010-agent-configuration.md),
-  [0033](../decisions/0033-a-subject-is-a-series.md)
+  [0033](../decisions/0033-a-subject-is-a-series.md),
+  [0060](../decisions/0060-a-measurement-may-carry-notes.md)
 
 ## Purpose
 
@@ -29,7 +30,7 @@ No metric carries a label: each is one series per node. The unit is the one the 
 | `memory` | `memory.available_pct` | the share of memory the system itself reports as available, rounded to two decimals |
 | `memory` | `memory.available_bytes` | that share of the total memory the system reports, in whole bytes |
 | `uptime` | `uptime.boot_seconds` | whole seconds from the boot time the system reports to the agent's clock, truncated |
-| `systemd` | `systemd.failed_units` | the number of units the system manager holds in the `failed` state — what `systemctl --failed` lists |
+| `systemd` | `systemd.failed_units` | the number of units the system manager holds in the `failed` state — what `systemctl --failed` lists — with a note per failed unit, at most 20 |
 
 **Available memory is the system's own figure, never a formula of ours.** Free memory alone
 reads near zero on any machine that has been up an hour, because both systems fill idle
@@ -46,9 +47,17 @@ Linux the percentage is derived from the bytes. Activity Monitor's "memory used"
 used: it rests on app memory, which no public interface reports, and on a machine with a
 full compressor it reads a fraction of what the kernel considers free.
 
-**Failed units are a count, not a list.** A count is one series that a threshold of `above 0`
-turns into an alert; one series per unit would leave every unit that ever failed as a row of
-its own. Only the system manager is counted, never a user's `systemd --user` instance.
+**Failed units are a count, and the units are its notes.** A count is one series that a
+threshold of `above 0` turns into an alert. One series per unit would leave every unit that
+ever failed as a row of its own. Which units the count counts is carried as notes on its value
+([0060](../decisions/0060-a-measurement-may-carry-notes.md)). Each note is a unit's name and,
+in parentheses, the `Result` systemd gives it, both verbatim: `backup-a.service (exit-code)`.
+A unit whose `Result` is absent or empty is named alone. The notes are ordered by unit name,
+byte by byte, and are at most the 20 a measurement keeps ([ingest](ingest.md#notes)); a name
+too long for a note's 128 characters is cut to fit and ends in `…`, its result kept. The
+units are read only when the count is above zero, from systemd's list of failed units and
+their `Result` properties (`systemctl list-units --state=failed`, `systemctl show`). Only the
+system manager is counted, never a user's `systemd --user` instance.
 
 ## Behaviour
 
@@ -83,9 +92,18 @@ One row = one test. Anchors: `spec: host-sensors.md#<heading>`.
 
 | Machine state | Collected |
 |---|---|
-| no unit failed | `systemd.failed_units` 0, so a threshold has something to leave its level on |
+| no unit failed | `systemd.failed_units` 0 with no notes, so a threshold has something to leave its level on |
 | three units failed | `systemd.failed_units` 3 |
-| systemd does not answer before the collection is cancelled | no measurements and an error the agent logs |
+| `b.service` failed with `Result` `exit-code` and `a.timer` with `Result` `resources` | notes `a.timer (resources)`, `b.service (exit-code)`: by name |
+| `a.service` and `B.service` failed | `B.service` first: names are ordered byte by byte |
+| a failed unit whose `Result` is absent or empty | its note is its name alone |
+| the failed unit `-.mount`, the root mount, with `Result` `exit-code` | the note `-.mount (exit-code)` |
+| systemd reports the units' `Result` in another order than it listed them | the same notes, by name |
+| 25 units failed | `systemd.failed_units` 25 with the notes of the first 20 by name |
+| a failed unit whose name with its `Result` passes 128 characters | its name cut so that the note is 128 characters, ending in `…`, then ` (exit-code)` |
+| systemd counts one failed unit, then lists none | `systemd.failed_units` 1 with no notes, and no error |
+| systemd counts failed units, then the list or the results fail or print what cannot be read | `systemd.failed_units` with no notes, and an error the agent logs: the count stands without them |
+| systemd does not answer, for the count, the list or the results, before the collection is cancelled | no measurements and an error the agent logs |
 | the machine was not booted with systemd, and the sensor is enabled for it anyway | no measurements and no error: a sensor the configuration runs where it cannot apply stays quiet |
 
 ### Applicability
@@ -99,7 +117,7 @@ One row = one test. Anchors: `spec: host-sensors.md#<heading>`.
 ## Invariants
 
 - Collection is read-only and cheap: no process tree walked, nothing done per unit or per
-  process.
+  process. Naming the failed units costs a fixed number of reads, however many failed.
 - No sensor holds state between collections; each reports what the system says now.
 - A sensor that cannot read its value returns an error and no measurements, never a zero:
   a zero is a reading, and `0` failed units or `0` bytes available would be a false one.
@@ -125,6 +143,14 @@ One row = one test. Anchors: `spec: host-sensors.md#<heading>`.
 - **In a container** the sensors report what the container's `/proc` shows — host-wide
   unless something like lxcfs virtualises it — and a systemd inside a system container
   counts the container's units. The monitor does not correct for either.
+- **A count that differs from its number of notes** means the list was cut at 20, that units
+  failed or recovered between the count and the list, or — with an error logged — that the
+  units could not be read. Each is what systemd said when it was asked, and the next
+  collection reads both again.
+- **A unit that fails while the count stays where it was** — one recovering as another fails
+  — changes the notes and not the value, so it moves no level and sends no message: the
+  threshold judges the count ([evaluation](evaluation.md#persistence-and-restart)). The page
+  shows the new names at once.
 - **The two platforms' memory percentages are not the same judgement**: each is its own
   system's answer, and a threshold set on one machine's series says nothing about another's.
 
@@ -133,7 +159,8 @@ One row = one test. Anchors: `spec: host-sensors.md#<heading>`.
 - Backups → Time Machine's are [timemachine-sensor.md](timemachine-sensor.md)'s; a job's
   are [backup-sensor.md](backup-sensor.md)'s.
 - Per-process CPU or memory, swap, temperatures, network — later sensors, not these.
-- Which unit failed, and restarting it: the monitor observes, it does not operate.
+- Restarting a failed unit: the monitor observes, it does not operate.
+- Why a unit failed beyond its `Result`, read from its journal → #107.
 - Normalising load by core count: a derived series belongs to the semantic engine, not to a
   sensor.
 

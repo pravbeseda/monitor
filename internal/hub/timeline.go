@@ -373,7 +373,7 @@ func changeOf(printer *i18n.Printer, book names.Book, change storage.Transition,
 	from, _ := evaluate.ParseLevel(change.From)
 	out.Move = printer.T("level."+from.String()) + " → " + printer.T("level."+to.String())
 	if reading, found := change.Readings[change.Metric]; found {
-		out.Value = format(printer, change.Metric, reading)
+		out.Value = notify.Noted(format(printer, change.Metric, reading), change.Notes)
 	}
 	return out
 }

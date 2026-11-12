@@ -125,15 +125,13 @@ func (e *Evaluator) entries(ctx context.Context, subjects []Subject, since, now,
 		// last move was such a change has nothing left to report here — but it is still
 		// listed below if it is standing in warning now.
 		if event, changed := newest[key]; changed && !instant(event) {
-			from := storedLevel(event.From, subject.Node, subject.Metric)
-			to := storedLevel(event.To, subject.Node, subject.Metric)
-			out = append(out, message(subject, from, to, event.Readings, event.FromSince, event.At))
+			out = append(out, fromEvent(subject, event))
 			continue
 		}
 		// A stale reading says nothing about now, so a frozen subject is not listed as
 		// standing in warning.
 		if subject.Level == Warning && !subject.Frozen {
-			out = append(out, message(subject, Warning, Warning, subject.Readings, subject.Since, occurrence))
+			out = append(out, standing(subject, occurrence))
 		}
 	}
 	return out, nil

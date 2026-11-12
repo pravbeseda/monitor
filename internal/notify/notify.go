@@ -171,7 +171,8 @@ func RenderDigest(p *i18n.Printer, entries []evaluate.Message, unwatched int) st
 }
 
 // detail renders the value that produced a message, in the unit its metric id declares
-// (ADR 0033). The silence subject has no value at all and says so.
+// (ADR 0033), and the notes it came with. The silence subject has no value at all and says
+// so.
 func detail(p *i18n.Printer, m evaluate.Message) string {
 	if m.Metric == evaluate.SilenceMetric {
 		return p.T("notify.silent")
@@ -180,7 +181,27 @@ func detail(p *i18n.Printer, m evaluate.Message) string {
 	if !measured {
 		return ""
 	}
-	return Value(p, m.Metric, value)
+	return Noted(Value(p, m.Metric, value), m.Notes)
+}
+
+// Noted is a rendered value followed by the notes it came with, as every surface that shows
+// them on one line writes them — a message, the changes on the timeline and an item's page,
+// the timeline's list of what needs attention (ADR 0060): a colon, then the notes parted by
+// commas. English and Russian share
+// that punctuation. A note holding a comma or a double quote is quoted, so that one note does
+// not read as two.
+func Noted(value string, notes []string) string {
+	if len(notes) == 0 {
+		return value
+	}
+	written := make([]string, len(notes))
+	for i, text := range notes {
+		if strings.ContainsAny(text, `,"`) {
+			text = strconv.QuoteToGraphic(text)
+		}
+		written[i] = text
+	}
+	return value + ": " + strings.Join(written, ", ")
 }
 
 // Value renders one reading the way its metric id says to. It is exported because every
