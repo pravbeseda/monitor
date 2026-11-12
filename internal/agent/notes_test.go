@@ -52,3 +52,36 @@ func TestNotesRideOnlyTheNewestValueOfTheirSeries(t *testing.T) {
 		t.Errorf("a measurement with no notes posts %q", got[2].Notes)
 	}
 }
+
+// spec: agent.md#ticking — the newest value is the one collected latest by its timestamp, not
+// the one added to the batch last: a clock set back while a batch is kept adds an older one.
+func TestTheNewestValueIsTheLatestByItsTimestamp(t *testing.T) {
+	h, c := &hub{}, &clock{at: start}
+	h.answers = []answer{
+		{response: configure("v1", "5m", map[string]api.SensorConfig{"systemd": {Enabled: true, Interval: "5m"}})},
+		{err: api.StatusError{Status: 503}},
+		{},
+	}
+	newer := failing(2, "newer.service (exit-code)")
+	newer.TS = start.Add(time.Hour)
+	units := &stub{name: "systemd", measurements: []sensor.Measurement{newer}}
+	a := newAgent(t, h, c, units)
+
+	_ = a.Tick(context.Background()) // configuration
+	c.advance(5 * time.Minute)
+	_ = a.Tick(context.Background()) // refused: the batch is kept
+
+	units.measurements = []sensor.Measurement{failing(1, "older.service (exit-code)")}
+	c.advance(-2 * time.Hour)
+	if err := a.Tick(context.Background()); err != nil {
+		t.Fatalf("Tick: %v", err)
+	}
+	got := measurements(h.last())
+	if len(got) != 2 {
+		t.Fatalf("posted %+v, want the kept value and the late one", got)
+	}
+	if !slices.Equal(got[0].Notes, api.Notes{"newer.service (exit-code)"}) || got[1].Notes != nil {
+		t.Fatalf("notes = %q then %q; want the newest by timestamp to keep its own and the older none",
+			got[0].Notes, got[1].Notes)
+	}
+}

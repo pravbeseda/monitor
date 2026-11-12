@@ -184,15 +184,21 @@ func (a *Agent) collect(ctx context.Context, now time.Time) []api.Measurement {
 
 // dropOlderNotes clears the notes of every value in the batch but each series' newest: the
 // hub keeps no other, and a batch kept for days would carry the same lines on every value
-// (ADR 0060).
+// (ADR 0060). Newest is by timestamp, as the hub judges it, and not by place in the batch: a
+// clock set back while a batch is kept adds an older value after a newer one. Timestamps
+// are RFC 3339 in UTC to the second, so they sort as strings; of two equal, the later kept.
 func dropOlderNotes(batch []api.Measurement) {
-	seen := map[string]bool{}
-	for i := len(batch) - 1; i >= 0; i-- {
-		key := seriesKey(batch[i])
-		if seen[key] {
+	newest := map[string]int{}
+	for i, m := range batch {
+		key := seriesKey(m)
+		if at, seen := newest[key]; !seen || m.TS >= batch[at].TS {
+			newest[key] = i
+		}
+	}
+	for i, m := range batch {
+		if newest[seriesKey(m)] != i {
 			batch[i].Notes = nil
 		}
-		seen[key] = true
 	}
 }
 

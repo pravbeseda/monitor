@@ -64,6 +64,7 @@ One row = one test. Anchors: `spec: agent.md#<heading>`.
 | a sensor whose configuration entry names a `node` | tick | each of its measurements posts with that `node` ([site-traffic.md](site-traffic.md#the-file)) |
 | a sensor returns a measurement with notes | tick | it posts with those notes, in their order; one with none posts no `notes` |
 | a batch kept from earlier ticks holds older values of a series that now reports again | tick | only the series' newest value posts its notes: the hub keeps no other ([0060](../decisions/0060-a-measurement-may-carry-notes.md)) |
+| a clock set back while a batch is kept, so a value older than one kept is added after it | tick | the newest by its timestamp posts its notes, as the hub judges newest; the one added last posts none |
 | a sensor that does not answer within half the base tick | tick | its collection is abandoned and logged; the tick goes on without it |
 | a sensor's interval changes | next tick | it is measured from the sensor's last collection, not from the change |
 | the node slept through all or part of a sensor's interval | the first tick that starts once the interval has passed by the clock | it collects: the time asleep counts toward the interval |
