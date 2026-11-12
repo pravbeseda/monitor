@@ -283,6 +283,7 @@ func (e *Evaluator) record(ctx context.Context, subject Subject, now time.Time) 
 		Direction: string(subject.Direction),
 		FromSince: subject.Since,
 		Readings:  subject.Readings,
+		Notes:     subject.Notes,
 	}
 	if err := e.store.ApplyTransition(ctx, change); err != nil {
 		return nil, err

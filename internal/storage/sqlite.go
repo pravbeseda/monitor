@@ -227,6 +227,54 @@ var migrations = []string{
 		labels TEXT NOT NULL,
 		PRIMARY KEY (metric, node, labels)
 	) WITHOUT ROWID;`,
+
+	// A measurement may carry notes, which the series keeps for its newest value and an
+	// event for the value that produced it (ADR 0060). Both tables are rebuilt by copying
+	// their rows rather than altered, so the step can be replayed as the series rebuild
+	// above can, and unlike that one it keeps every sensor name. A replay costs the notes
+	// already stored: a series gets them back from its next value.
+	`DROP TABLE IF EXISTS series_next;
+
+	CREATE TABLE series_next (
+		metric  TEXT NOT NULL,
+		node    TEXT NOT NULL,
+		labels  TEXT NOT NULL,
+		last_ts TEXT NOT NULL,
+		sensor  TEXT NOT NULL DEFAULT '',
+		notes   TEXT NOT NULL DEFAULT '[]',
+		PRIMARY KEY (metric, node, labels)
+	) WITHOUT ROWID;
+
+	INSERT INTO series_next (metric, node, labels, last_ts, sensor)
+	SELECT metric, node, labels, last_ts, sensor FROM series;
+
+	DROP TABLE series;
+	ALTER TABLE series_next RENAME TO series;
+
+	DROP TABLE IF EXISTS events_next;
+
+	CREATE TABLE events_next (
+		id         INTEGER PRIMARY KEY,
+		at         TEXT NOT NULL,
+		node       TEXT NOT NULL,
+		metric     TEXT NOT NULL,
+		labels     TEXT NOT NULL,
+		from_level TEXT NOT NULL,
+		to_level   TEXT NOT NULL,
+		from_since TEXT NOT NULL,
+		readings   TEXT NOT NULL,
+		notes      TEXT NOT NULL DEFAULT '[]',
+		UNIQUE (node, metric, labels, at)
+	);
+
+	INSERT INTO events_next (id, at, node, metric, labels, from_level, to_level, from_since, readings)
+	SELECT id, at, node, metric, labels, from_level, to_level, from_since, readings FROM events;
+
+	DROP TABLE events;
+	ALTER TABLE events_next RENAME TO events;
+
+	CREATE INDEX events_at ON events (at);
+	CREATE INDEX events_subject ON events (node, metric, labels, at DESC);`,
 }
 
 // querier is what a database handle and a transaction both offer, so one read runs either
@@ -364,8 +412,11 @@ func saveIngest(ctx context.Context, tx *sql.Tx, in Ingest, node []any) (err err
 				}
 			}
 		}
-		var labels string
+		var labels, notes string
 		if labels, err = encodeLabels(m.Labels); err != nil {
+			return fmt.Errorf("measurement %s of %s: %w", m.Metric, owner, err)
+		}
+		if notes, err = encodeNotes(m.Notes); err != nil {
 			return fmt.Errorf("measurement %s of %s: %w", m.Metric, owner, err)
 		}
 		_, err = tx.ExecContext(ctx, `
@@ -379,15 +430,17 @@ func saveIngest(ctx context.Context, tx *sql.Tx, in Ingest, node []any) (err err
 		// The series carries the newest timestamp it holds, and only ever forwards: a
 		// measurement arriving late is stored, but it is not what the series last
 		// reported (ADR 0031).
-		// The sensor follows the newest value, not the latest request: a measurement
-		// arriving late does not rename the series (docs/specs/ingest.md#storage).
+		// The sensor and the notes follow the newest value, not the latest request: a
+		// measurement arriving late neither renames the series nor speaks for it
+		// (docs/specs/ingest.md#storage, docs/specs/ingest.md#notes).
 		_, err = tx.ExecContext(ctx, `
-			INSERT INTO series (metric, node, labels, last_ts, sensor)
-			VALUES (?, ?, ?, ?, ?)
+			INSERT INTO series (metric, node, labels, last_ts, sensor, notes)
+			VALUES (?, ?, ?, ?, ?, ?)
 			ON CONFLICT (metric, node, labels) DO UPDATE SET
 				sensor  = CASE WHEN excluded.last_ts > last_ts THEN excluded.sensor ELSE sensor END,
+				notes   = CASE WHEN excluded.last_ts > last_ts THEN excluded.notes ELSE notes END,
 				last_ts = MAX(last_ts, excluded.last_ts)`,
-			m.Metric, owner, labels, formatTime(m.TS), m.Sensor)
+			m.Metric, owner, labels, formatTime(m.TS), m.Sensor, notes)
 		if err != nil {
 			return fmt.Errorf("save series %s of %s: %w", m.Metric, owner, err)
 		}
@@ -549,7 +602,7 @@ func nodeStates(ctx context.Context, from querier) (map[string]*NodeState, []str
 
 const latestValuesQuery = `
 	SELECT series.node, series.metric, series.labels, series.last_ts, series.sensor,
-	       measurements.value
+	       series.notes, measurements.value
 	FROM series
 	-- CROSS fixes the order: the series are the small side and must drive the join, or
 	-- SQLite is free to scan every measurement instead (ADR 0031).
@@ -571,9 +624,9 @@ func attachLatestValues(ctx context.Context, from querier, states map[string]*No
 	defer func() { _ = rows.Close() }()
 
 	for rows.Next() {
-		var node, metric, labels, ts string
+		var node, metric, labels, ts, notes string
 		var value Value
-		if err := rows.Scan(&node, &metric, &labels, &ts, &value.Sensor, &value.Value); err != nil {
+		if err := rows.Scan(&node, &metric, &labels, &ts, &value.Sensor, &notes, &value.Value); err != nil {
 			return fmt.Errorf("read measurements: %w", err)
 		}
 		state, known := states[node]
@@ -583,6 +636,9 @@ func attachLatestValues(ctx context.Context, from querier, states map[string]*No
 		value.Metric = metric
 		if err := json.Unmarshal([]byte(labels), &value.Labels); err != nil {
 			return fmt.Errorf("node %s: decode labels: %w", node, err)
+		}
+		if value.Notes, err = decodeNotes(notes); err != nil {
+			return fmt.Errorf("node %s: %w", node, err)
 		}
 		if value.TS, err = parseTime(ts); err != nil {
 			return fmt.Errorf("node %s: %w", node, err)
@@ -613,6 +669,30 @@ func parseTime(s string) (time.Time, error) {
 		return time.Time{}, fmt.Errorf("parse timestamp %q: %w", s, err)
 	}
 	return t, nil
+}
+
+// encodeNotes stores a value's notes as a JSON list, none as an empty one.
+func encodeNotes(notes []string) (string, error) {
+	if len(notes) == 0 {
+		return "[]", nil
+	}
+	b, err := json.Marshal(notes)
+	if err != nil {
+		return "", fmt.Errorf("encode notes: %w", err)
+	}
+	return string(b), nil
+}
+
+// decodeNotes reads what encodeNotes stored; an empty list reads as none.
+func decodeNotes(stored string) ([]string, error) {
+	var notes []string
+	if err := json.Unmarshal([]byte(stored), &notes); err != nil {
+		return nil, fmt.Errorf("decode notes: %w", err)
+	}
+	if len(notes) == 0 {
+		return nil, nil
+	}
+	return notes, nil
 }
 
 // encodeLabels is the uniqueness key's label part: json.Marshal sorts map keys, so the

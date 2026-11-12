@@ -8,7 +8,9 @@ import (
 	"fmt"
 	"net/http"
 	"net/url"
+	"strings"
 	"time"
+	"unicode/utf16"
 
 	"github.com/pravbeseda/monitor/internal/evaluate"
 	"github.com/pravbeseda/monitor/internal/i18n"
@@ -17,6 +19,10 @@ import (
 // telegramAPI is the Bot API root. The token goes in the path, which is why no error and
 // no log line here ever prints a URL (ADR 0007 rule 4).
 const telegramAPI = "https://api.telegram.org"
+
+// telegramLimit is the most text one message may hold, in UTF-16 code units: Telegram
+// counts that way, so a character outside the Basic Multilingual Plane weighs two.
+const telegramLimit = 4096
 
 // telegramTimeout bounds one send. The evaluator abandons a channel that outlasts its own
 // deadline anyway; this is what keeps a socket from being held until then.
@@ -45,7 +51,65 @@ func (t Telegram) Digest(ctx context.Context, _ time.Time, entries []evaluate.Me
 	return t.send(ctx, RenderDigest(i18n.For(t.Locale), entries, unwatched))
 }
 
+// send delivers text as one message, or, past what one may hold, as several in order. A
+// part that fails fails the send, so the whole text is sent again later: a reader may see
+// the first parts twice, which beats never seeing the rest.
 func (t Telegram) send(ctx context.Context, text string) error {
+	for _, part := range parts(text, telegramLimit) {
+		if err := t.sendOne(ctx, part); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+// parts cuts text into pieces of at most limit UTF-16 code units: whole lines while they fit,
+// and a line longer than limit alone cut inside it, never inside a character.
+func parts(text string, limit int) []string {
+	var out, part []string
+	size := 0
+	for _, line := range strings.Split(text, "\n") {
+		units := utf16Units(line)
+		if len(part) > 0 && size+1+units > limit {
+			out = append(out, strings.Join(part, "\n"))
+			part, size = nil, 0
+		}
+		for units > limit {
+			head, rest := cutUnits(line, limit)
+			out = append(out, head)
+			line, units = rest, utf16Units(rest)
+		}
+		if len(part) > 0 {
+			size++
+		}
+		part = append(part, line)
+		size += units
+	}
+	return append(out, strings.Join(part, "\n"))
+}
+
+// cutUnits splits text after the last whole character that keeps the head within limit
+// UTF-16 code units.
+func cutUnits(text string, limit int) (string, string) {
+	units := 0
+	for i, r := range text {
+		units += utf16.RuneLen(r)
+		if units > limit {
+			return text[:i], text[i:]
+		}
+	}
+	return text, ""
+}
+
+func utf16Units(text string) int {
+	units := 0
+	for _, r := range text {
+		units += utf16.RuneLen(r)
+	}
+	return units
+}
+
+func (t Telegram) sendOne(ctx context.Context, text string) error {
 	body, err := json.Marshal(struct {
 		ChatID string `json:"chat_id"`
 		Text   string `json:"text"`

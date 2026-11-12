@@ -85,7 +85,7 @@ func reporting() stored {
 			Values: []storage.Value{
 				{Metric: "disk.free_bytes", Sensor: "disk", Labels: dataVolume, Value: 9e9, TS: collected.Add(-15 * time.Minute)},
 				{Metric: "disk.free_pct", Sensor: "disk", Labels: dataVolume, Value: 12, TS: collected.Add(-15 * time.Minute)},
-				{Metric: "load.avg_5m", Value: 3.1, TS: collected.Add(-5 * time.Minute)},
+				{Metric: "load.avg_5m", Value: 3.1, TS: collected.Add(-5 * time.Minute), Notes: []string{"n-1"}},
 			},
 		}},
 		levels: []storage.State{
@@ -139,15 +139,15 @@ func TestStateWireFormat(t *testing.T) {
 		`"last_seen":"2026-08-31T11:59:00.000Z","level":"warning","watched":1,"unwatched":2}],` +
 		`"subjects":[` +
 		`{"node":"server-b","metric":"silence","labels":{},"watched":true,"level":"ok",` +
-		`"since":"2026-08-01T12:00:00.000Z","stale":false,"unit":null,"value":null,"ts":null,"anomaly":null},` +
+		`"since":"2026-08-01T12:00:00.000Z","stale":false,"unit":null,"value":null,"ts":null,"notes":[],"anomaly":null},` +
 		`{"node":"server-b","metric":"disk.free_bytes","labels":{"fs":"ext4","mount":"/data","removable":"false"},` +
 		`"watched":true,"level":"warning","since":"2026-08-30T22:00:00.000Z","stale":false,` +
-		`"unit":"bytes","value":9000000000,"ts":"2026-08-31T11:45:00.000Z","anomaly":null},` +
+		`"unit":"bytes","value":9000000000,"ts":"2026-08-31T11:45:00.000Z","notes":[],"anomaly":null},` +
 		`{"node":"server-b","metric":"disk.free_pct","labels":{"fs":"ext4","mount":"/data","removable":"false"},` +
 		`"watched":false,"level":null,"since":null,"stale":false,` +
-		`"unit":"percent","value":12,"ts":"2026-08-31T11:45:00.000Z","anomaly":null},` +
+		`"unit":"percent","value":12,"ts":"2026-08-31T11:45:00.000Z","notes":[],"anomaly":null},` +
 		`{"node":"server-b","metric":"load.avg_5m","labels":{},"watched":false,"level":null,"since":null,` +
-		`"stale":false,"unit":"number","value":3.1,"ts":"2026-08-31T11:55:00.000Z",` +
+		`"stale":false,"unit":"number","value":3.1,"ts":"2026-08-31T11:55:00.000Z","notes":["n-1"],` +
 		`"anomaly":{"norm":0.4,"low":0.1,"high":0.76,"score":7.5,"rank":1}}]}`
 	if got := strings.TrimSpace(rec.Body.String()); got != want {
 		t.Fatalf("body = %s\nwant   %s", got, want)
@@ -166,6 +166,24 @@ type subjectJSON struct {
 	Unit    *string
 	Value   *float64
 	TS      *string `json:"ts"`
+	Notes   []string
+}
+
+// spec: state.md#listing — a stale series still lists the notes its newest value came with:
+// they are what that value said.
+func TestAStaleSeriesKeepsItsNotes(t *testing.T) {
+	later := func() time.Time { return collected.Add(30 * 24 * time.Hour) }
+	body := decodeState(t, getState(t, reporting(), "/api/v1/state", later))
+	for _, one := range body.Subjects {
+		if one.Metric != "load.avg_5m" {
+			continue
+		}
+		if one.Stale == nil || !*one.Stale || len(one.Notes) != 1 || one.Notes[0] != "n-1" {
+			t.Fatalf("load.avg_5m = stale %v, notes %q; want stale with its note", one.Stale, one.Notes)
+		}
+		return
+	}
+	t.Fatalf("no load.avg_5m among %+v", body.Subjects)
 }
 
 type stateBody struct {

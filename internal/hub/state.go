@@ -45,6 +45,7 @@ type subjectJSON struct {
 	Unit    *history.Unit     `json:"unit"`
 	Value   *float64          `json:"value"`
 	TS      *string           `json:"ts"`
+	Notes   []string          `json:"notes"`
 	Anomaly *anomalyJSON      `json:"anomaly"`
 }
 
@@ -146,6 +147,8 @@ func encodeState(current state.State) stateJSON {
 			Watched: subject.Watched,
 			Level:   levelJSON(subject.Level),
 			Stale:   subject.Stale,
+			// A list is never null on the wire (docs/specs/state.md#wire-format).
+			Notes: append([]string{}, subject.Notes...),
 		}
 		if subject.Level != nil {
 			since := stamp(subject.Since)

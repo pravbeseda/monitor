@@ -77,6 +77,23 @@ type Measurement struct {
 	// node, for a site the requesting node hosts (ADR 0045). A pointer tells it absent from
 	// empty, which is refused.
 	Node *string `json:"node,omitempty"`
+	// Notes are short lines about this one value (ADR 0060).
+	Notes Notes `json:"notes,omitempty"`
+}
+
+// Notes are a measurement's notes on the wire. A field that is not a list of strings reads
+// as none rather than as an error: a note never costs the value it came with
+// (docs/specs/ingest.md#notes).
+type Notes []string
+
+// UnmarshalJSON reads a list of strings, and anything else as no notes.
+func (n *Notes) UnmarshalJSON(data []byte) error {
+	var list []string
+	if json.Unmarshal(data, &list) != nil {
+		list = nil
+	}
+	*n = list
+	return nil
 }
 
 // Response carries the configuration only when the agent's version differs from the

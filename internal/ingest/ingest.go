@@ -20,6 +20,7 @@ import (
 	"github.com/pravbeseda/monitor/internal/config"
 	"github.com/pravbeseda/monitor/internal/i18n"
 	"github.com/pravbeseda/monitor/internal/names"
+	"github.com/pravbeseda/monitor/internal/note"
 	"github.com/pravbeseda/monitor/internal/storage"
 )
 
@@ -347,7 +348,10 @@ func validateMeasurement(m api.Measurement, sent time.Time) (storage.Measurement
 			return storage.Measurement{}, err
 		}
 	}
-	return storage.Measurement{Node: node, Metric: m.Metric, Sensor: sensor, Labels: m.Labels, Value: *m.Value, TS: collected}, nil
+	return storage.Measurement{
+		Node: node, Metric: m.Metric, Sensor: sensor, Labels: m.Labels, Value: *m.Value, TS: collected,
+		Notes: note.Keep(m.Notes),
+	}, nil
 }
 
 func timestamp(key, value string) (time.Time, error) {

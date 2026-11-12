@@ -59,6 +59,8 @@ type tileView struct {
 	Bar    *barView
 	Line   *chart
 	Usual  string
+	// Notes are what the values came with, in their order (ADR 0060).
+	Notes []string
 }
 
 // barView is a share used, scaled to 100, with the thresholds' ticks on the same scale.
@@ -142,7 +144,7 @@ func (t tiler) tile(ctx context.Context, kind tileKind, group []state.Subject) (
 	s := group[0]
 	out.Name = t.it.chartName(t.printer, s)
 	out.Values = []figureView{t.figure(s, history.DefaultWindow)}
-	out.Usual = usual(t.printer, group)
+	out.Usual, out.Notes = usual(t.printer, group), s.Notes
 	if kind == tileSingle {
 		return out, nil
 	}
@@ -168,7 +170,7 @@ func (t tiler) space(ctx context.Context, out *tileView, group []state.Subject, 
 			out.Values = []figureView{figure}
 		}
 	}
-	out.Usual = usual(t.printer, shown)
+	out.Usual, out.Notes = usual(t.printer, shown), notesOf(shown)
 	if !hasShare {
 		return nil
 	}
@@ -214,7 +216,7 @@ func (t tiler) load(ctx context.Context, out *tileView, group []state.Subject) e
 		}
 	}
 	out.Aside = fmt.Sprintf(t.printer.T("tile.minutes"), strings.Join(minutes, " · "))
-	out.Usual = usual(t.printer, shown)
+	out.Usual, out.Notes = usual(t.printer, shown), notesOf(shown)
 	if fifteen, found := pick(group, "load.avg_15m"); found {
 		return t.line(ctx, out, fifteen, history.DefaultWindow)
 	}
@@ -255,6 +257,15 @@ func usual(printer *i18n.Printer, series []state.Subject) string {
 		}
 	}
 	return ""
+}
+
+// notesOf is the notes of a tile's values, in the order of its values.
+func notesOf(series []state.Subject) []string {
+	var out []string
+	for _, s := range series {
+		out = append(out, s.Notes...)
+	}
+	return out
 }
 
 func pick(group []state.Subject, metric string) (state.Subject, bool) {

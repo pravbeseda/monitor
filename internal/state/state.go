@@ -64,6 +64,8 @@ type Subject struct {
 	Unit  history.Unit
 	Value *float64
 	TS    time.Time
+	// Notes are what the newest reading came with (ADR 0060).
+	Notes []string
 	// Anomaly is how unlike its norm the newest value is, judged against the anomaly the
 	// record holds open, nil when the subject carries none: stale, excluded, without a
 	// norm, or a node's silence (docs/specs/anomaly.md).
@@ -162,7 +164,7 @@ func Build(targets func(node string) (evaluate.Target, bool), snap storage.Snaps
 			if !judged {
 				one.Stale = staleOf(target, known, evaluate.Heard(reported.LastSeen, snap.Outages, now), value, now)
 			}
-			one.Unit, one.Value, one.TS = history.UnitOf(value.Metric), &value.Value, value.TS
+			one.Unit, one.Value, one.TS, one.Notes = history.UnitOf(value.Metric), &value.Value, value.TS, value.Notes
 			if _, isExcluded := excluded[key]; !isExcluded && !one.Stale {
 				if norm, ok := norms[key]; ok {
 					found := norm.Judge(value.Value, held[key])

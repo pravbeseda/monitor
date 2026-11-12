@@ -111,6 +111,7 @@ func (a *Agent) Tick(ctx context.Context) error {
 	now := a.now()
 	a.buffer = append(a.buffer, a.collect(ctx, now)...)
 	a.trimBuffer()
+	newestNoted(a.buffer)
 
 	// An empty batch has to reach the hub as [] and not as null: a heartbeat carries no
 	// measurements, but it does carry the field.
@@ -174,10 +175,35 @@ func (a *Agent) collect(ctx context.Context, now time.Time) []api.Measurement {
 				TS:     m.TS.UTC().Format(time.RFC3339),
 				Sensor: &name,
 				Node:   node,
+				Notes:  m.Notes,
 			})
 		}
 	}
 	return out
+}
+
+// newestNoted leaves notes on each series' newest value in the batch alone: the hub keeps no
+// other, and a batch kept for days would carry the same lines on every value (ADR 0060).
+func newestNoted(batch []api.Measurement) {
+	seen := map[string]bool{}
+	for i := len(batch) - 1; i >= 0; i-- {
+		key := seriesKey(batch[i])
+		if seen[key] {
+			batch[i].Notes = nil
+		}
+		seen[key] = true
+	}
+}
+
+// seriesKey tells one series from another inside a batch. json.Marshal sorts a map's keys,
+// so equal labels always encode alike.
+func seriesKey(m api.Measurement) string {
+	labels, _ := json.Marshal(m.Labels)
+	node := ""
+	if m.Node != nil {
+		node = *m.Node
+	}
+	return node + "\x00" + m.Metric + "\x00" + string(labels)
 }
 
 // collectOne gives one sensor half a tick to answer. A collection stuck in a system call

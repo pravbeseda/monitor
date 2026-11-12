@@ -22,6 +22,8 @@ type Measurement struct {
 	Labels map[string]string
 	Value  float64
 	TS     time.Time
+	// Notes are the lines the value came with, already bounded by ingest (ADR 0060).
+	Notes []string
 }
 
 // SensorStatus is one line of an agent's manifest: a sensor the build contains and
@@ -87,6 +89,8 @@ type Value struct {
 	Labels map[string]string
 	Value  float64
 	TS     time.Time
+	// Notes are what the value came with (ADR 0060); nil when it came with none.
+	Notes []string
 }
 
 // Storage is what ingest and the history pages need of persistence (ADR 0005): SQLite
