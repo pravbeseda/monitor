@@ -102,6 +102,7 @@ the English catalogue's; every one of them has its Russian.
 | a laptop asleep inside its `silence_after`, every series stale | no item |
 | a node still reporting whose every series is stale — its sensors all failing | no item; `/debug` marks each series |
 | a volume at `critical` | an item naming the node, the metric and the mount point, with the newest value, the level's word and since when it holds |
+| `systemd.failed_units` at `critical` with 2 and the notes `a.service (exit-code)`, `b.service (timeout)` | its value then the notes as a message writes them: "2: a.service (exit-code), b.service (timeout)" ([0060](../decisions/0060-a-measurement-may-carry-notes.md)) |
 | a series at `critical` that also ranks | one item, the level's, with the usual value beside it |
 | a watched series at `ok` that ranks | an anomaly item with the newest value and the usual value, in the unit of the series |
 | an unwatched series that ranks, labelled `{queue: payments}` | an anomaly item naming it `queue=payments` |

@@ -19,7 +19,8 @@
   [0032](../decisions/0032-thresholds-are-set-in-the-interface.md),
   [0033](../decisions/0033-a-subject-is-a-series.md),
   [0034](../decisions/0034-a-series-without-a-sensor-still-ages.md),
-  [0042](../decisions/0042-an-anomalys-start-and-end-are-recorded.md)
+  [0042](../decisions/0042-an-anomalys-start-and-end-are-recorded.md),
+  [0060](../decisions/0060-a-measurement-may-carry-notes.md)
 
 ## Purpose
 
@@ -312,20 +313,31 @@ a failed send is retried rather than lost.
 
 Every message carries the same fields, so a channel formats rather than decides: the node,
 the metric id, the subject's labels, the level it left and the level it reached, the value
-that produced it, and how long the subject has been in the level it left (`since`). A
-digest carries a list of those, one entry per subject.
+that produced it and the notes that came with that value
+([0060](../decisions/0060-a-measurement-may-carry-notes.md)), and how long the subject has
+been in the level it left (`since`). A digest carries a list of those, one entry per
+subject.
 
 What a channel writes names the series, or two subjects of one metric on one node read
 alike: the node, then the series' name ([metric names](metric-names.md#where)) — its
 metric's declared name with a mount point as itself and every other label as the pair it
 is. `fs` and `removable` are left out — they decorate a volume rather than identify it. The
-value follows alone, the name having said what it measures.
+value follows without its metric's name, the name having said what it measures, and then
+its notes, verbatim.
 
 | Configuration | Result |
 |---|---|
 | `channel: log` | one English log line per message; nothing is sent, so the default channel needs no secret |
 | `channel: telegram` | one message per notification to the configured chat |
+| `channel: telegram`, a text longer than Telegram's 4 096 UTF-16 units — a digest of many entries, or one with long notes | sent as several messages in order, each as long as Telegram takes, parted between lines; a line longer than that alone is parted inside it |
 | a value whose metric id ends in `_bytes`, `_pct` or `_seconds` | rendered in that unit; any other metric is rendered as a plain number ([history.md](history.md#wire-format)) |
+| a value that came with notes `a.service (exit-code)` and `b.service (timeout)` | the value, a colon and the notes parted by commas: "2: a.service (exit-code), b.service (timeout)" |
+| a value that came with no notes | the value alone, no colon |
+| a note holding a comma or a double quote, `a, b` | quoted, `"a, b"`, so that one note does not read as two |
+| `locale: ru` with notes | the same colon and commas: the punctuation is the same in both languages, and a note is never translated |
+| a change recorded with notes, delivered on a later tick after the series' notes changed | the notes recorded with the change: they belong to the value that produced it |
+| a repeat of a standing `critical`, or a digest entry for a subject standing in `warning` with no transition of its own in the window | the notes of the value it stands on now |
+| a node's silence | no notes: it has no value |
 | two subjects of one metric on one node, differing only by a label | two messages a reader can tell apart: each names its own labels |
 | a volume's subject | named by its mount point; `fs` and `removable` are not in the text |
 | a label whose value is empty, `mount` included | named like any other: an empty value is part of what tells one series from another |
@@ -355,7 +367,7 @@ occurrence, because that is the day it speaks for. On a database that has never 
 | a subject that returned from `warning` to `ok` inside the window | listed as the recovery it was: it touched no critical, so nothing delivered it ([Notifications](#notifications)) |
 | a subject whose move into `warning` was overtaken by `critical` inside the window | not listed: its last move was delivered instantly, and it is not standing in `warning` |
 | a database that has never digested | no digest over history: `last_digest_at` starts at the hub's first start time |
-| a subject both transitioned to `warning` and is still in `warning` | listed once |
+| a subject both transitioned to `warning` and is still in `warning` | listed once, with the value and the notes of its transition |
 | a warning transition written by the same tick that sends the digest | included: a transition recorded by a tick falls inside that tick's digest window |
 | no warning transition since the last digest and no subject in `warning` | no message: silence while all is well, and the window still closes at that tick |
 | a subject is in `critical` and nothing is in `warning` | no digest: the critical was reported instantly |
@@ -379,6 +391,7 @@ occurrence, because that is the day it speaks for. On a database that has never 
 |---|---|
 | a level changes | one event is appended to the log and the subject's level and `since` change with it; a reader never sees one without the other, and `since` is the instant of the change |
 | the level does not change | no event, `since` untouched; only `last_notified_at` may move |
+| the value and the level unchanged, the notes changed — `a.service` recovered as `b.service` failed | no event and no message: notes are judged by no threshold |
 | a subject's first evaluation, level `ok` | the subject appears with `since` = that instant; no event: nothing changed |
 | a subject's first evaluation, level `warning` or `critical` | the subject appears, plus one event whose previous level is `ok` |
 | a level change that is delivered instantly | the event is recorded before the message goes out: a hub that dies in between delivers on a later tick, and no message is ever sent for an event that was not recorded |
@@ -397,7 +410,7 @@ occurrence, because that is the day it speaks for. On a database that has never 
 `since` and `last_notified_at` above are concepts, not columns. What must survive a
 restart: each subject's configuration and level, when it reached it, and when it was last
 notified about; an append-only log of transitions carrying the value that produced each
-one, which is the event stream skins subscribe to
+one and that value's notes, which is the event stream skins subscribe to
 ([0001](../decisions/0001-semantic-core-and-skins.md)); and how far the digest window has
 closed, which is the hub's first start time until a tick crosses `digest.at` and that
 tick's own time afterwards — silence closes the window as a delivered message does, a

@@ -140,7 +140,7 @@ Each subject of `/api/v1/state` carries `anomaly`, an object or `null`:
 ```json
 { "node": "server-b", "metric": "load.avg_5m", "labels": {},
   "watched": false, "level": null, "since": null, "stale": false,
-  "unit": "number", "value": 3.1, "ts": "2026-09-23T09:55:00.000Z",
+  "unit": "number", "value": 3.1, "ts": "2026-09-23T09:55:00.000Z", "notes": [],
   "anomaly": { "norm": 0.4, "low": 0.1, "high": 0.76, "score": 7.5, "rank": 1 } }
 ```
 

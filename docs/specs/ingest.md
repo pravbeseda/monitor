@@ -10,7 +10,8 @@
   [0028](../decisions/0028-agents-follow-a-target-the-hub-serves.md),
   [0033](../decisions/0033-a-subject-is-a-series.md),
   [0034](../decisions/0034-a-series-without-a-sensor-still-ages.md),
-  [0045](../decisions/0045-sites-are-a-node-their-hosts-report-for.md)
+  [0045](../decisions/0045-sites-are-a-node-their-hosts-report-for.md),
+  [0060](../decisions/0060-a-measurement-may-carry-notes.md)
 
 ## Purpose
 
@@ -48,7 +49,9 @@ Authorization: Bearer <per-node token>
     { "metric": "disk.free_bytes", "labels": {"mount": "/", "fs": "apfs", "removable": "false"},
       "sensor": "disk", "value": 123456789 },
     { "metric": "disk.free_pct",   "labels": {"mount": "/", "fs": "apfs", "removable": "false"},
-      "sensor": "disk", "value": 34.2, "ts": "2026-08-28T09:55:00Z" }
+      "sensor": "disk", "value": 34.2, "ts": "2026-08-28T09:55:00Z" },
+    { "metric": "systemd.failed_units", "labels": {}, "sensor": "systemd", "value": 1,
+      "notes": ["backup-a.service (exit-code)"] }
   ]
 }
 ```
@@ -81,6 +84,16 @@ Authorization: Bearer <per-node token>
   the requesting node does not host is dropped
   ([site-traffic.md](site-traffic.md#ingest)).
   The sites node is seen when one of its measurements is stored, never by the request itself.
+- a measurement's `notes` — optional — are short lines about that one value, such as the
+  units a failed-unit count counts. The hub keeps them with the series' newest value only,
+  and a newer value replaces them, notes or none
+  ([0060](../decisions/0060-a-measurement-may-carry-notes.md)). A note is 1 to 128
+  characters — Unicode code points — not made of white space alone, and holds no control,
+  format or line-separating character (Unicode Cc, Cf, Zl, Zp); it is kept verbatim, its
+  spaces included. Notes the hub cannot use are dropped first, then the first 20 of the rest
+  are kept. A note never costs its measurement: what the hub cannot use is dropped and the
+  measurement stored without it, since the value is what a threshold works on
+  ([notes](#notes)).
 - `metric` ids match `[a-z0-9_.]+`, and a `sensor` name matches the same pattern; `value`
   is a finite JSON number; `labels` is a flat string-to-string map.
 - Unknown JSON fields are ignored, so an older hub accepts a newer agent's request.
@@ -159,6 +172,24 @@ One row = one test. Anchors: `spec: ingest.md#<heading>`.
 | `sensor` naming a sensor the node does not run, or one its `manifest` does not list | 200 | stored: ingest checks the name's shape, never its meaning |
 | measurement identical to a stored one (same node, metric, labels, ts to the millisecond) | 200 | duplicate silently skipped |
 | `manifest` differs from the stored one | 200 | stored manifest replaced |
+
+### Notes
+
+| Request | Response | Side effect |
+|---|---|---|
+| a measurement with notes `b.service (exit-code)`, `a.service (timeout)` | 200 | stored; the series' newest value carries those two notes, in that order |
+| the series' next value, newer, with no notes | 200 | stored; the series carries no notes: notes never outlive their value |
+| a value older than the series' newest, with notes | 200 | stored; the series keeps the newest value's notes |
+| a measurement identical to a stored one but for its notes | 200 | skipped as a duplicate; the notes stored first stay |
+| the hub restarts | — | the series' newest value still carries its notes |
+| `notes` `null` or `[]` | 200 | stored with no notes |
+| `notes` that is not a list of strings — `["a.service", 1]` among them | 200 | the measurement stored with no notes |
+| a note that is empty or white space alone, or holds a control, format or line-separating character | 200 | that note dropped, the others kept in their order |
+| a note of 128 Cyrillic letters (256 bytes), and one of 129 | 200 | the first kept, the second dropped: a character is a code point |
+| a note with a space before and after its text | 200 | kept as it came, spaces included |
+| two identical notes | 200 | both kept, in their order: the hub never reads what a note says |
+| 21 notes | 200 | the first 20 kept |
+| 21 notes, the second blank | 200 | the first and the third to the twenty-first kept: unusable notes are dropped before the first 20 are taken |
 
 ### Configuration delivery
 

@@ -7,7 +7,8 @@
   [0003](../decisions/0003-sensors-are-modules.md),
   [0007](../decisions/0007-public-repository.md),
   [0010](../decisions/0010-agent-configuration.md),
-  [0020](../decisions/0020-agent-reads-its-environment-file.md)
+  [0020](../decisions/0020-agent-reads-its-environment-file.md),
+  [0060](../decisions/0060-a-measurement-may-carry-notes.md)
 
 ## Purpose
 
@@ -61,6 +62,8 @@ One row = one test. Anchors: `spec: agent.md#<heading>`.
 | a sensor returns an error | tick | the error is logged, the other sensors still post |
 | a sensor returns measurements and an error — one of the things it reads failed | tick | the error is logged and the measurements post |
 | a sensor whose configuration entry names a `node` | tick | each of its measurements posts with that `node` ([site-traffic.md](site-traffic.md#the-file)) |
+| a sensor returns a measurement with notes | tick | it posts with those notes, in their order; one with none posts no `notes` |
+| a batch kept from earlier ticks holds older values of a series that now reports again | tick | only the series' newest value posts its notes: the hub keeps no other ([0060](../decisions/0060-a-measurement-may-carry-notes.md)) |
 | a sensor that does not answer within half the base tick | tick | its collection is abandoned and logged; the tick goes on without it |
 | a sensor's interval changes | next tick | it is measured from the sensor's last collection, not from the change |
 | the node slept through all or part of a sensor's interval | the first tick that starts once the interval has passed by the clock | it collects: the time asleep counts toward the interval |

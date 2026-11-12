@@ -21,7 +21,8 @@
   [0036](../decisions/0036-an-anomaly-is-a-value-outside-its-weeks-band.md),
   [0042](../decisions/0042-an-anomalys-start-and-end-are-recorded.md),
   [0053](../decisions/0053-a-computer-card-is-lines-on-a-shared-scale.md),
-  [0059](../decisions/0059-all-series-is-two-panes-and-settings-a-dialog.md)
+  [0059](../decisions/0059-all-series-is-two-panes-and-settings-a-dialog.md),
+  [0060](../decisions/0060-a-measurement-may-carry-notes.md)
 
 ## Purpose
 
@@ -111,23 +112,27 @@ GET /api/v1/state
   "subjects": [
     { "node": "server-b", "metric": "silence", "labels": {}, "watched": true,
       "level": "ok", "since": "2026-09-01T08:00:00.000Z", "stale": false,
-      "unit": null, "value": null, "ts": null, "anomaly": null },
+      "unit": null, "value": null, "ts": null, "notes": [], "anomaly": null },
     { "node": "server-b", "metric": "disk.free_bytes",
       "labels": { "mount": "/data", "fs": "ext4", "removable": "false" },
       "watched": true, "level": "warning", "since": "2026-09-18T22:10:00.000Z",
       "stale": false, "unit": "bytes", "value": 9000000000,
-      "ts": "2026-09-19T09:45:00.000Z",
+      "ts": "2026-09-19T09:45:00.000Z", "notes": [],
       "anomaly": { "norm": 11000000000, "low": 8800000000, "high": 12000000000,
                    "score": -0.91, "rank": null } },
     { "node": "server-b", "metric": "disk.free_pct",
       "labels": { "mount": "/data", "fs": "ext4", "removable": "false" },
       "watched": false, "level": null, "since": null, "stale": false,
-      "unit": "percent", "value": 12, "ts": "2026-09-19T09:45:00.000Z",
+      "unit": "percent", "value": 12, "ts": "2026-09-19T09:45:00.000Z", "notes": [],
       "anomaly": { "norm": 14, "low": 11.5, "high": 15, "score": -0.8, "rank": null } },
     { "node": "server-b", "metric": "load.avg_5m", "labels": {}, "watched": false,
       "level": null, "since": null, "stale": false, "unit": "number",
-      "value": 3.1, "ts": "2026-09-19T09:55:00.000Z",
-      "anomaly": { "norm": 0.4, "low": 0.1, "high": 0.76, "score": 7.5, "rank": 1 } }
+      "value": 3.1, "ts": "2026-09-19T09:55:00.000Z", "notes": [],
+      "anomaly": { "norm": 0.4, "low": 0.1, "high": 0.76, "score": 7.5, "rank": 1 } },
+    { "node": "server-b", "metric": "systemd.failed_units", "labels": {}, "watched": false,
+      "level": null, "since": null, "stale": false,
+      "unit": "number", "value": 1, "ts": "2026-09-19T09:50:00.000Z",
+      "notes": ["backup-a.service (exit-code)"], "anomaly": null }
   ]
 }
 ```
@@ -140,6 +145,9 @@ level or a unit it does not know as opaque. Lists and label maps are never `null
 empty. `anomaly` is an object or `null`, shaped and computed as
 [anomaly.md](anomaly.md#wire-format) says. The silence subject carries no value of its own — `unit`, `value` and `ts` are
 `null` — because its input is the node's last-seen time, which `nodes` already states.
+`notes` are the notes the newest value came with, verbatim and in their order
+([0060](../decisions/0060-a-measurement-may-carry-notes.md)): empty when it came with none,
+and always for the silence subject.
 `watched` and `unwatched` count that node's series, and at the top level every node's; a
 silence subject is watched and counted in neither. `node` names a node today; a subject that belongs to
 none, which manual input will bring, will carry `node: null` and have no entry in `nodes`
@@ -177,6 +185,9 @@ One row = one test. Anchors: `spec: state.md#<heading>`.
 | a hub where nothing is watched | `watched: 0` at the top level and on every node |
 | a sensor the node resolves as `enabled: false` | its series listed, `stale: true`, keeping whatever level evaluation stored before |
 | a series with no labels | `labels: {}` |
+| a series whose newest value came with notes | `notes` lists them in their order; a series whose newest value came with none has `notes: []`, whatever an earlier value carried |
+| a stale series whose newest value came with notes | `notes` still lists them: they are what that value said |
+| a series whose values named different units over time | one subject, the series': no subject for a note, and no note counted among `watched` or `unwatched` |
 | `last_seen` of a node | when the hub last accepted a request from it, not any time an agent stamped; for a service node, when it last stored a measurement, or when the hub first recorded it if it never has ([services.md](services.md)); for the sites node, when it last stored a measurement ([site-traffic.md](site-traffic.md#ingest)) |
 | `agent_version` of a node that never reported one | `null` |
 
